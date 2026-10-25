@@ -1,0 +1,1 @@
+import {PageHeading} from "@/components/ui";export default function Page(){return <><PageHeading eyebrow="Help & support" description="Koe cannot monitor, assess danger, contact anyone, or guarantee a connection.">Human support, at your pace.</PageHeading><p>If there is immediate danger, use your local emergency service or go to a nearby emergency department, if you can.</p></>;}
