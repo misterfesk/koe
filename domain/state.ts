@@ -51,3 +51,5 @@ case "deleteData":return {...initialState(),providerEnabled:false,memoryConsent:
 }}
 export function makeSmaller(title:string){return ("A smaller part of: "+title).slice(0,240);}
 export function suggestions(s:State){const approved=!s.temporary&&s.memoryConsent?s.memories.map(m=>m.text):[];return [...approved.map(text=>"Make a little room for: "+text),s.energy==="low"?"Pause somewhere comfortable for one minute":"Read one page of something you enjoy","Put a glass of water within reach","Open a curtain, if that suits your space"];}
+
+export function currentReport(step:Step|undefined){return step?.reports.filter(r=>r.version===step.version).at(-1);}
