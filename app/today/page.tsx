@@ -1,1 +1,1 @@
-import {PageHeading,ActionLink} from "@/components/ui";export default function Page(){return <><PageHeading eyebrow="Today" description="Your pace, your choice.">One thing at a time.</PageHeading><ActionLink href="/review">Explore this build</ActionLink></>;}
+import {Today} from "@/features/steps/today";export default function Page(){return <Today/>;}
