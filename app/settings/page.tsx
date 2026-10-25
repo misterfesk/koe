@@ -1,0 +1,1 @@
+import {SettingsIndex} from "@/features/settings";export default function Page(){return <SettingsIndex/>;}
