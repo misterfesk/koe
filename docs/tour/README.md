@@ -1,6 +1,6 @@
 # Screenshot tour
 
-Generated explicitly with `npm.cmd run tour` at app candidate `d0ac012`; populated synthetic state, desktop 1440px and mobile 390px. Final G2 may regenerate affected screens.
+Generated explicitly with `npm.cmd run tour` at app candidate `d0ac012`; populated synthetic state, desktop 1440px and mobile 390px. G2 reviewed the unchanged visible app; subsequent favicon/build-gating fixes do not change these screens.
 
 | Surface | Desktop | Mobile |
 |---|---|---|

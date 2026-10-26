@@ -21,6 +21,8 @@ Open http://127.0.0.1:3100/review for the feature index, or `/` for the introduc
 
 `check` = read-only formatting check, ESLint (zero warnings), strict TypeScript, Vitest and Next production build. `test:e2e` starts/stops its own production server at 3200 (`PW_PORT` overrides), with 1440px desktop and 390px mobile Chromium projects. The suite includes all five keyboard journeys, axe on all routes, 320px/200% text, draft recovery, exports, deletion, storage and network checks. Every browser spec uses the shared outside-request/page/console-error guard; expected document 404s alone are exempted.
 
+`npm.cmd run test:review-disabled` builds with the review flag off, scans every browser chunk for review controls, and restores the normal review build. Both dev and production use webpack so the exclusion alias is consistent. It is an explicit extra check, not part of routine formatting.
+
 `npm.cmd run tour` explicitly regenerates `docs/tour/*.png` from populated synthetic journeys at both sizes. It starts/stops a separate production server at 3400. Ordinary check/test commands never rewrite the screenshot tour. `npm.cmd run format` explicitly formats source.
 
 Pinned stack: Next 16.4.3, React/React DOM 19.3.1, TypeScript 6.0.3, Zod 4.6.7, Vitest 5.0.5, Playwright 1.64.1, axe Playwright 4.14.0, ESLint 9.39.5, Prettier 3.9.10. Full pins are in package-lock.json. Self-hosted Sora, Space Grotesk and IBM Plex Sans retain their licenses in public/fonts.
