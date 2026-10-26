@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 import { resolve } from "node:path";
 const config: NextConfig = {
   poweredByHeader: false,
+  // PGlite loads its WebAssembly Postgres from disk at runtime; bundling breaks it.
+  serverExternalPackages: ["@electric-sql/pglite"],
   webpack(configuration) {
     // Exclude the explorer module from the client graph, rather than hiding it
     // after it has already been downloaded. The same flag gates preview JSX.
