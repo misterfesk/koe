@@ -23,6 +23,9 @@ function MemoryCard({ card }: { card: Memory }) {
   const [editing, setEditing] = useDraft(prefix + "editing");
   const [text, setText] = useDraft(prefix + "text", card.text);
   const [error, setError] = useState("");
+  const linkedSteps = state.steps.filter(
+    (step) => step.sourceMemoryId === card.id,
+  );
 
   function save(event: FormEvent) {
     event.preventDefault();
@@ -86,11 +89,23 @@ function MemoryCard({ card }: { card: Memory }) {
           label="Delete card"
           question="Delete this memory card?"
           detail={
-            state.steps.some((step) => step.sourceMemoryId === card.id)
-              ? "Ideas will stop using it and any reminder preview linked to it is cancelled. Steps you already chose from it stay in Steps; remove them there if you want."
+            linkedSteps.length
+              ? "Ideas will stop using it and any reminder preview linked to it is cancelled. Steps you chose from it stay unless you tick the box."
               : "Ideas will stop using it. This cannot be undone."
           }
-          onConfirm={() => {
+          extra={
+            linkedSteps.length
+              ? "Also remove " +
+                linkedSteps.length +
+                (linkedSteps.length === 1 ? " step" : " steps") +
+                " chosen from this card"
+              : undefined
+          }
+          onConfirm={(removeSteps) => {
+            if (removeSteps)
+              linkedSteps.forEach((step) =>
+                dispatch({ type: "deleteStep", id: step.id }),
+              );
             dispatch({ type: "memoryDelete", id: card.id });
             dispatch({ type: "clearDraft", prefix });
             requestAnimationFrame(() =>

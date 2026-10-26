@@ -170,19 +170,22 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty">{children}</div>;
 }
 
-/** Two-step delete for the user's own words: asks first, and "Keep it" returns focus to the opener. */
+/** Two-step delete for the user's own words: asks first, and "Keep it" returns focus to the opener. `extra` adds an opt-in, unchecked by default. */
 export function ConfirmDelete({
   label,
   question,
   detail,
+  extra,
   onConfirm,
 }: {
   label: string;
   question: string;
   detail?: ReactNode;
-  onConfirm: () => void;
+  extra?: string;
+  onConfirm: (extraChecked: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [extraChecked, setExtraChecked] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
   const prompt = useRef<HTMLParagraphElement>(null);
   const wasOpen = useRef(false);
@@ -208,14 +211,28 @@ export function ConfirmDelete({
         <strong>{question}</strong>
         {detail ? <> {detail}</> : null}
       </p>
+      {extra ? (
+        <Toggle
+          label={extra}
+          checked={extraChecked}
+          onChange={setExtraChecked}
+        />
+      ) : null}
       <div className="actions">
-        <button type="button" className="danger" onClick={onConfirm}>
+        <button
+          type="button"
+          className="danger"
+          onClick={() => onConfirm(extraChecked)}
+        >
           {"Yes, " + label.toLowerCase()}
         </button>
         <button
           type="button"
           className="secondary"
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setExtraChecked(false);
+            setOpen(false);
+          }}
         >
           Keep it
         </button>

@@ -162,7 +162,8 @@ export function JournalPage() {
     setRecordedAt(state.clock);
     setError("");
     setStatus(
-      "Your reported energy and note are in this session timeline. Nothing was added to memory. Edit energy or wording to add a different note.",
+      tone(state.appearance.tone, "reflected", energy as Energy).message +
+        " Your reported energy and note are in this session timeline. Nothing was added to memory. Edit energy or wording to add a different note.",
     );
     requestAnimationFrame(() =>
       document.getElementById("journal-status")?.focus(),
@@ -174,7 +175,7 @@ export function JournalPage() {
       <PageHeading
         eyebrow="Reflect · energy & journal"
         description={
-          tone(state.appearance.tone, "reflection", state.energy).message
+          tone(state.appearance.tone, "journal", state.energy).message
         }
       >
         A note, if it helps.

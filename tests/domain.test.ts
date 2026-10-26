@@ -97,10 +97,15 @@ describe("session and step lifecycle", () => {
     expect(makeSmaller("Read a book")).toContain("Read a book"));
 });
 describe("tone policy", () => {
-  it.each(["help", "reflection", "setback"] as const)(
-    "stays calm in %s",
-    (context) =>
-      expect(tone("expressive", context, "steady").mode).toBe("calm"),
+  it.each([
+    "help",
+    "reflection",
+    "conversation",
+    "journal",
+    "review",
+    "setback",
+  ] as const)("stays calm in %s", (context) =>
+    expect(tone("expressive", context, "steady").mode).toBe("calm"),
   );
   it("respects low energy and plain setting", () => {
     expect(tone("expressive", "chosen", "low").mode).toBe("calm");
@@ -108,4 +113,15 @@ describe("tone policy", () => {
   });
   it("is warm after choosing", () =>
     expect(tone("expressive", "chosen", "steady").message).toContain("yours"));
+  it("is warm when a reflection is finished, but calm on a low-energy day", () => {
+    expect(tone("expressive", "reflected", "steady").mode).toBe("expressive");
+    expect(tone("expressive", "reflected", "low").mode).toBe("calm");
+    expect(tone("calm", "reflected", "steady").mode).toBe("calm");
+  });
+  it("gives each reflection surface its own calm line", () => {
+    const lines = (
+      ["reflection", "conversation", "journal", "review"] as const
+    ).map((context) => tone("expressive", context, "steady").message);
+    expect(new Set(lines).size).toBe(lines.length);
+  });
 });

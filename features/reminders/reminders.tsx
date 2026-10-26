@@ -1,5 +1,6 @@
 "use client";
 
+import { CoachingPaused } from "@/components/coaching-paused";
 import { useMemo, useState, type FormEvent } from "react";
 import { z } from "zod";
 import { useDraft, useSession } from "@/components/session";
@@ -185,6 +186,8 @@ export function ReminderSettings() {
     setFeedback("Virtual time updated. No notifications will be sent.");
   }
 
+  if (state.scenario === "coaching paused")
+    return <CoachingPaused eyebrow="Reminder preview · review scenario" />;
   return (
     <>
       <PageHeading

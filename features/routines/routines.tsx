@@ -1,5 +1,6 @@
 "use client";
 
+import { CoachingPaused } from "@/components/coaching-paused";
 import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useDraft, useSession } from "@/components/session";
@@ -151,6 +152,8 @@ export function Routines() {
     router.push("/steps/" + id);
   }
 
+  if (state.scenario === "coaching paused")
+    return <CoachingPaused eyebrow="Routines · review scenario" />;
   return (
     <>
       <PageHeading

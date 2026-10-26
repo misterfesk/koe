@@ -1,5 +1,6 @@
 "use client";
 
+import { CoachingPaused } from "@/components/coaching-paused";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -96,12 +97,14 @@ export function WeeklyReview() {
       );
   }
 
+  if (state.scenario === "coaching paused")
+    return <CoachingPaused eyebrow="Weekly review · review scenario" />;
   return (
     <>
       <PageHeading
         eyebrow="Reflect · optional weekly review"
         description={
-          tone(state.appearance.tone, "reflection", state.energy).message
+          tone(state.appearance.tone, "review", state.energy).message
         }
       >
         A check-in that can change the plan.

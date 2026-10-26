@@ -1,4 +1,5 @@
 "use client";
+import { CoachingPaused } from "@/components/coaching-paused";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -28,19 +29,9 @@ export function Today() {
       ? "chosen"
       : "welcome";
   const voice = tone(state.appearance.tone, context, state.energy);
+  const offline = !state.providerEnabled && !active;
   if (state.scenario === "coaching paused")
-    return (
-      <>
-        <PageHeading eyebrow="Review-only scenario">
-          Ordinary coaching is paused.
-        </PageHeading>
-        <Notice>
-          UX preview; not a validated safety response. No real input was
-          assessed.
-        </Notice>
-        <ActionLink href="/help">Open Help & support</ActionLink>
-      </>
-    );
+    return <CoachingPaused eyebrow="Review-only scenario" />;
   return (
     <>
       <PageHeading
@@ -79,31 +70,42 @@ export function Today() {
         <section className="dark-panel">
           <div className={styles.topline}>
             <span className="eyebrow">
-              {active ? "Your chosen step" : "One optional idea"}
+              {active
+                ? "Your chosen step"
+                : offline
+                  ? "Suggestions offline"
+                  : "One optional idea"}
             </span>
             <span className={styles.orbit} aria-hidden="true">
               ◌
             </span>
           </div>
-          <h2 className={styles.actionTitle}>{active?.title ?? suggestion}</h2>
+          <h2 className={styles.actionTitle}>
+            {offline
+              ? "Suggestions are offline right now."
+              : (active?.title ?? suggestion)}
+          </h2>
           <p>
-            {active
-              ? latest
-                ? "You reported: " +
-                  latest.outcome +
-                  ". Any change is your choice."
-                : "Choosing is a beginning. You can tell us what happened whenever you want."
-              : state.energy === "low"
-                ? "Rest counts as a choice. Nothing here needs to be earned."
-                : "A little time with something you enjoy. No result to aim for."}
+            {offline
+              ? "You can write your own step, or stop here. Help works without them."
+              : active
+                ? latest
+                  ? "You reported: " +
+                    latest.outcome +
+                    ". Any change is your choice."
+                  : "Choosing is a beginning. You can tell us what happened whenever you want."
+                : state.energy === "low"
+                  ? "Rest counts as a choice. Nothing here needs to be earned."
+                  : "A little time with something you enjoy. No result to aim for."}
           </p>
-          {!state.providerEnabled && !active ? (
+          {offline ? (
             <>
-              <p>
-                Scripted suggestions are offline. Your drafts and Help are still
-                available.
-              </p>
-              <ActionLink href="/steps/new">Write my own step</ActionLink>
+              <div className="actions">
+                <ActionLink href="/steps/new">Write my own step</ActionLink>
+                <ActionLink href="/help" secondary>
+                  Help & support
+                </ActionLink>
+              </div>
             </>
           ) : (
             <>

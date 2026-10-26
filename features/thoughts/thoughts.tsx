@@ -1,5 +1,6 @@
 "use client";
 
+import { CoachingPaused } from "@/components/coaching-paused";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDraft, useSession } from "@/components/session";
@@ -89,16 +90,10 @@ export function Thoughts() {
 
   if (state.scenario === "coaching paused")
     return (
-      <>
-        <PageHeading eyebrow="Thought reflection · review scenario">
-          Ordinary coaching is paused.
-        </PageHeading>
-        <Notice>
-          UX preview; not a validated safety response. No real input was
-          assessed. Your draft stays in this session.
-        </Notice>
-        <ActionLink href="/help">Open Help & support</ActionLink>
-      </>
+      <CoachingPaused
+        eyebrow="Thought reflection · review scenario"
+        note="Your draft stays in this session."
+      />
     );
 
   return (
@@ -152,6 +147,7 @@ export function Thoughts() {
         </div>
         {savedAt && (
           <Notice id="thoughts-saved">
+            {tone(state.appearance.tone, "reflected", state.energy).message}{" "}
             Reflection finished at {savedAt.slice(0, 16).replace("T", " ")}{" "}
             virtual time. Your words stay in this session only and nothing has
             been added to memory. You can stop here.

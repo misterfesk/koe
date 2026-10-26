@@ -1,5 +1,6 @@
 "use client";
 
+import { CoachingPaused } from "@/components/coaching-paused";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useDraft, useSession } from "@/components/session";
@@ -40,7 +41,7 @@ export function Conversation() {
   const [error, setError] = useState("");
   const choosing = useRef(false);
   const chosen = state.steps.find((value) => value.id === chosenId);
-  const voice = tone(state.appearance.tone, "reflection", state.energy);
+  const voice = tone(state.appearance.tone, "conversation", state.energy);
   const ideaMemory = state.memories.find(
     (memory) => memory.id === option?.sourceMemoryId,
   );
@@ -90,18 +91,7 @@ export function Conversation() {
   }
 
   if (state.scenario === "coaching paused")
-    return (
-      <>
-        <PageHeading eyebrow="Scripted conversation · review scenario">
-          Ordinary coaching is paused.
-        </PageHeading>
-        <Notice>
-          UX preview; not a validated safety response. No real input was
-          assessed.
-        </Notice>
-        <ActionLink href="/help">Open Help & support</ActionLink>
-      </>
-    );
+    return <CoachingPaused eyebrow="Scripted conversation · review scenario" />;
 
   if (!state.providerEnabled)
     return (
