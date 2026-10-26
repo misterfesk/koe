@@ -10,6 +10,12 @@ export type Report = {
   experience: string;
   at: string;
 };
+export type PlanVersion = {
+  version: number;
+  title: string;
+  prediction: string;
+  at: string;
+};
 export type Step = {
   id: string;
   title: string;
@@ -20,6 +26,8 @@ export type Step = {
   proposal?: string;
   paused: boolean;
   routine?: boolean;
+  sourceMemoryId?: string;
+  versions?: PlanVersion[];
 };
 export type Memory = { id: string; text: string; source: string; at: string };
 export type Journal = { id: string; text: string; energy: Energy; at: string };
@@ -171,6 +179,7 @@ export type Action =
       area: string;
       prediction: string;
       routine?: boolean;
+      sourceMemoryId?: string;
     }
   | { type: "active"; id: string }
   | { type: "decline" }
@@ -214,7 +223,9 @@ export function reducer(s: State, a: Action): State {
       return {
         ...s,
         drafts: Object.fromEntries(
-          Object.entries(s.drafts).filter(([k]) => !k.startsWith(a.prefix)),
+          Object.entries(s.drafts).filter(([k]) =>
+            a.prefix.endsWith(".") ? !k.startsWith(a.prefix) : k !== a.prefix,
+          ),
         ),
       };
     case "energy":
@@ -222,6 +233,7 @@ export function reducer(s: State, a: Action): State {
     case "profile":
       return { ...s, ...a.value };
     case "choose": {
+      if (a.sourceMemoryId && !canRetrieveMemory(s, a.sourceMemoryId)) return s;
       const parsed = stepInput.safeParse(a);
       if (!parsed.success) return s;
       const id = "step-" + (s.sequence + 1);
@@ -239,6 +251,15 @@ export function reducer(s: State, a: Action): State {
             reports: [],
             paused: false,
             routine: a.routine,
+            sourceMemoryId: a.sourceMemoryId,
+            versions: [
+              {
+                version: 1,
+                title: parsed.data.title,
+                prediction: parsed.data.prediction,
+                at: s.clock,
+              },
+            ],
           },
         ],
         notice: "Step chosen.",
@@ -310,6 +331,22 @@ export function reducer(s: State, a: Action): State {
                 proposal: undefined,
                 version: p.version + 1,
                 prediction: "",
+                versions: [
+                  ...(p.versions ?? [
+                    {
+                      version: p.version,
+                      title: p.title,
+                      prediction: p.prediction,
+                      at: s.clock,
+                    },
+                  ]),
+                  {
+                    version: p.version + 1,
+                    title: p.proposal,
+                    prediction: "",
+                    at: s.clock,
+                  },
+                ],
               }
             : p,
         ),
@@ -343,11 +380,34 @@ export function reducer(s: State, a: Action): State {
         ),
       };
     case "memoryDelete":
-      return { ...s, memories: s.memories.filter((m) => m.id !== a.id) };
+      return {
+        ...s,
+        memories: s.memories.filter((m) => m.id !== a.id),
+        reminders: s.steps.some(
+          (p) => p.id === s.reminders.targetId && p.sourceMemoryId === a.id,
+        )
+          ? { ...s.reminders, enabled: false, targetId: "" }
+          : s.reminders,
+      };
     case "temporary":
-      return { ...s, temporary: a.value };
+      return {
+        ...s,
+        temporary: a.value,
+        reminders:
+          a.value && hasMemoryReminder(s)
+            ? { ...s.reminders, enabled: false, targetId: "" }
+            : s.reminders,
+      };
     case "memoryConsent":
-      return { ...s, memoryConsent: a.value, temporary: !a.value };
+      return {
+        ...s,
+        memoryConsent: a.value,
+        temporary: !a.value,
+        reminders:
+          !a.value && hasMemoryReminder(s)
+            ? { ...s.reminders, enabled: false, targetId: "" }
+            : s.reminders,
+      };
     case "journalAdd":
       return {
         ...s,
@@ -394,17 +454,62 @@ export function reducer(s: State, a: Action): State {
 export function makeSmaller(title: string) {
   return ("A smaller part of: " + title).slice(0, 240);
 }
-export function suggestions(s: State) {
-  const approved =
-    !s.temporary && s.memoryConsent ? s.memories.map((m) => m.text) : [];
-  return [
-    ...approved.map((text) => "Make a little room for: " + text),
+export function canRetrieveMemory(s: State, id: string) {
+  return s.memoryConsent && !s.temporary && s.memories.some((m) => m.id === id);
+}
+function hasMemoryReminder(s: State) {
+  return s.steps.some(
+    (p) => p.id === s.reminders.targetId && !!p.sourceMemoryId,
+  );
+}
+export type Suggestion = {
+  title: string;
+  area: string;
+  sourceMemoryId?: string;
+};
+export function getSuggestionOptions(s: State): Suggestion[] {
+  const approved = s.memories
+    .filter((m) => canRetrieveMemory(s, m.id))
+    .map((m) => ({
+      title: ("Make a little room for: " + m.text).slice(0, 240),
+      area: s.goal === "Connection" ? "Connection" : "Enjoyment",
+      sourceMemoryId: m.id,
+    }));
+  const area =
+    s.energy === "low"
+      ? "Rest"
+      : ["Rest", "Connection", "Care access", "Everyday care"].includes(s.goal)
+        ? s.goal
+        : "Enjoyment";
+  const title =
     s.energy === "low"
       ? "Pause somewhere comfortable for one minute"
-      : "Read one page of something you enjoy",
-    "Put a glass of water within reach",
-    "Open a curtain, if that suits your space",
+      : area === "Connection"
+        ? "Draft a short hello to someone you consider safe"
+        : area === "Care access"
+          ? "Write one question about care access"
+          : area === "Everyday care"
+            ? "Put a glass of water within reach"
+            : area === "Rest"
+              ? "Rest somewhere comfortable for a minute"
+              : "Read one page of something you enjoy";
+  return [
+    ...approved,
+    { title, area },
+    { title: "Put a glass of water within reach", area: "Everyday care" },
+    {
+      title: "Open a curtain, if that suits your space",
+      area: "Everyday care",
+    },
   ];
+}
+export function suggestions(s: State) {
+  return getSuggestionOptions(s).map((x) => x.title);
+}
+export function hasPlannerDraft(s: State) {
+  return Object.entries(s.drafts).some(
+    ([key, value]) => key.startsWith("step.") && value.trim() !== "",
+  );
 }
 
 export function currentReport(step: Step | undefined) {

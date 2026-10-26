@@ -3,17 +3,28 @@ import { useState, useRef, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, useDraft } from "@/components/session";
 import { PageHeading, Field, Select, ActionLink } from "@/components/ui";
-import { stepInput, makeSmaller } from "@/domain/state";
+import { stepInput, makeSmaller, canRetrieveMemory } from "@/domain/state";
 export function Planner() {
   const { state, dispatch } = useSession();
   const [title, setTitle] = useDraft("step.title");
   const [area, setArea] = useDraft("step.area", "Enjoyment");
   const [prediction, setPrediction] = useDraft("step.prediction");
+  const [sourceId, setSourceId] = useDraft("step.sourceMemoryId");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const router = useRouter();
   const submitted = useRef(false);
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (sourceId && !canRetrieveMemory(state, sourceId)) {
+      setErrors({
+        title:
+          "The original memory is no longer approved. Edit a separate step, or discard this draft.",
+      });
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
+      );
+      return;
+    }
     const result = stepInput.safeParse({ title, area, prediction });
     if (!result.success) {
       const fields: Record<string, string> = {};
@@ -29,7 +40,11 @@ export function Planner() {
     if (submitted.current) return;
     submitted.current = true;
     const id = "step-" + (state.sequence + 1);
-    dispatch({ type: "choose", ...result.data });
+    dispatch({
+      type: "choose",
+      ...result.data,
+      sourceMemoryId: sourceId || undefined,
+    });
     dispatch({ type: "clearDraft", prefix: "step." });
     router.push("/steps/" + id);
   }
@@ -57,7 +72,10 @@ export function Planner() {
         <Field
           label="Your step"
           value={title}
-          onChange={setTitle}
+          onChange={(value) => {
+            setTitle(value);
+            setSourceId("");
+          }}
           maxLength={240}
           error={errors.title}
           hint="Fictional examples only. Keep it specific and adjustable."

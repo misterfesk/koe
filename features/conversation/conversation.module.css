@@ -1,0 +1,39 @@
+.exchange {
+  max-width: 720px;
+}
+.intro {
+  padding: 18px 0;
+}
+.fixture {
+  border-left: 3px solid var(--wine);
+  padding: 18px 22px;
+  background: var(--surface);
+  margin: 20px 0 28px;
+}
+.fixture p:last-child,
+.userWords p:last-child {
+  margin: 0;
+}
+.userWords {
+  margin: 24px 0;
+  padding: 18px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+}
+.currentIdea {
+  font-family: var(--font-heading);
+  font-size: 28px;
+  line-height: 1.35;
+  padding: 22px 0;
+  border-block: 1px solid var(--line);
+}
+@media (max-width: 500px) {
+  .fixture,
+  .userWords {
+    padding: 18px 16px;
+  }
+  .currentIdea {
+    font-size: 24px;
+  }
+}

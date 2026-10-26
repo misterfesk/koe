@@ -1,16 +1,24 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/session";
 import { PageHeading, ActionLink, Notice } from "@/components/ui";
-import { suggestions, makeSmaller, currentReport } from "@/domain/state";
+import {
+  getSuggestionOptions,
+  makeSmaller,
+  currentReport,
+  hasPlannerDraft,
+} from "@/domain/state";
 import { tone } from "@/domain/tone";
 import styles from "./steps.module.css";
 export function Today() {
   const { state, dispatch } = useSession();
   const router = useRouter();
+  const [handoffBlocked, setHandoffBlocked] = useState(false);
   const active = state.steps.find((s) => s.id === state.activeId && !s.paused);
-  const suggestion = suggestions(state)[0];
+  const option = getSuggestionOptions(state)[0];
+  const suggestion = option.title;
   const latest = currentReport(active);
   const context = latest
     ? latest.outcome === "Done"
@@ -110,8 +118,9 @@ export function Today() {
                       dispatch({
                         type: "choose",
                         title: suggestion,
-                        area: "Enjoyment",
+                        area: option.area,
                         prediction: "",
+                        sourceMemoryId: option.sourceMemoryId,
                       });
                     }}
                   >
@@ -123,11 +132,26 @@ export function Today() {
                 <button
                   className="secondary"
                   onClick={() => {
+                    if (hasPlannerDraft(state)) {
+                      setHandoffBlocked(true);
+                      return;
+                    }
                     dispatch({
                       type: "draft",
                       key: "step.title",
                       value: makeSmaller(active?.title ?? suggestion),
                     });
+                    dispatch({
+                      type: "draft",
+                      key: "step.area",
+                      value: active?.area ?? option.area,
+                    });
+                    if (!active && option.sourceMemoryId)
+                      dispatch({
+                        type: "draft",
+                        key: "step.sourceMemoryId",
+                        value: option.sourceMemoryId,
+                      });
                     router.push("/steps/new");
                   }}
                 >
@@ -146,6 +170,13 @@ export function Today() {
             </>
           )}
         </section>
+      )}
+      {handoffBlocked && (
+        <Notice>
+          A planner draft is already in progress.{" "}
+          <Link href="/steps/new">Inspect existing draft</Link> before starting
+          another.
+        </Notice>
       )}
       <div className={styles.below}>
         <p>

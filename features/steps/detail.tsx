@@ -136,6 +136,30 @@ export function StepDetail({ id }: { id: string }) {
           }
         </Notice>
       )}
+      {p.versions?.some(
+        (v) =>
+          v.version !== p.version &&
+          !p.reports.some((r) => r.version === v.version),
+      ) && (
+        <details>
+          <summary>Earlier versions without a report</summary>
+          <ul className="rows">
+            {p.versions
+              .filter(
+                (v) =>
+                  v.version !== p.version &&
+                  !p.reports.some((r) => r.version === v.version),
+              )
+              .map((v) => (
+                <li key={v.version}>
+                  <p className="meta">Version {v.version} - outcome unknown</p>
+                  <h3>{v.title}</h3>
+                  {v.prediction && <p>{v.prediction}</p>}
+                </li>
+              ))}
+          </ul>
+        </details>
+      )}
       {p.reports.length > 0 && (
         <section className={styles.history} aria-label="Faithful step history">
           <h2>What you tried & reported</h2>

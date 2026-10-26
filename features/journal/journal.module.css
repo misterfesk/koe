@@ -1,0 +1,48 @@
+.composer {
+  max-width: 720px;
+}
+.timeline {
+  margin-top: 48px;
+  padding-top: 30px;
+  border-top: 1px solid var(--line-strong);
+}
+.timelineHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.timelineHead h2 {
+  margin: 0;
+}
+.entry {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 28px;
+}
+.date p {
+  margin-bottom: 8px;
+}
+.body {
+  min-width: 0;
+}
+.text {
+  white-space: pre-wrap;
+}
+.text:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+@media (max-width: 700px) {
+  .entry {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .date {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+}
