@@ -75,3 +75,21 @@ it("keeps earlier unreported plan versions and predictions", () => {
   ]);
   expect(s.steps[0].reports).toEqual([]);
 });
+it("restoring memory consent keeps the user's own temporary-mode choice", () => {
+  let s = reducer(initialState(), { type: "temporary", value: true });
+  s = reducer(s, { type: "memoryConsent", value: false });
+  expect(s.temporary).toBe(true);
+  s = reducer(s, { type: "memoryConsent", value: true });
+  expect(s.temporary).toBe(true);
+  expect(
+    reducer(s, {
+      type: "memoryAdd",
+      text: "Books",
+      source: "Explicit approval",
+    }).memories,
+  ).toHaveLength(0);
+});
+it("revoking memory consent always forces temporary mode", () => {
+  const s = reducer(initialState(), { type: "memoryConsent", value: false });
+  expect(s.temporary).toBe(true);
+});

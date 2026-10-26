@@ -9,6 +9,8 @@ import {
   Notice,
   PageHeading,
   Select,
+  focusFirstInvalid,
+  ConfirmDelete,
 } from "@/components/ui";
 import { journalActions, journalText } from "@/domain/reflection";
 import type { Journal } from "@/domain/state";
@@ -39,9 +41,7 @@ function JournalEntry({ note }: { note: Journal }) {
     const result = journalText.safeParse(text);
     if (!result.success) {
       setError(result.error.issues[0].message);
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(event);
       return;
     }
     dispatch({ type: "journalEdit", id: note.id, text: result.data });
@@ -109,9 +109,11 @@ function JournalEntry({ note }: { note: Journal }) {
               Edit note
             </button>
           )}
-          <button
-            className="text danger"
-            onClick={() => {
+          <ConfirmDelete
+            label="Delete note"
+            question="Delete this note?"
+            detail="This cannot be undone."
+            onConfirm={() => {
               dispatch({ type: "journalDelete", id: note.id });
               dispatch({ type: "clearDraft", prefix });
               dispatch({
@@ -122,9 +124,7 @@ function JournalEntry({ note }: { note: Journal }) {
                 document.getElementById("journal-timeline")?.focus(),
               );
             }}
-          >
-            Delete note
-          </button>
+          />
         </div>
         <MemoryApproval
           prefix={"journal.memory." + note.id}
@@ -154,9 +154,7 @@ export function JournalPage() {
         return;
       }
       setError(result.error);
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(event);
       return;
     }
     recording.current = state.clock;

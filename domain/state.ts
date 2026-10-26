@@ -402,7 +402,8 @@ export function reducer(s: State, a: Action): State {
       return {
         ...s,
         memoryConsent: a.value,
-        temporary: !a.value,
+        // Revoking consent forces temporary mode; restoring consent keeps the user's own temporary choice.
+        temporary: a.value ? s.temporary : true,
         reminders:
           !a.value && hasMemoryReminder(s)
             ? { ...s.reminders, enabled: false, targetId: "" }

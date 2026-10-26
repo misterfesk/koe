@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+
+// PW_PORT lets parallel runs (e.g. a reviewer and the builder) use separate servers.
+const port = Number(process.env.PW_PORT ?? 3200);
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
@@ -7,7 +10,7 @@ export default defineConfig({
   workers: 4,
   timeout: 45000,
   expect: { timeout: 7000 },
-  use: { baseURL: "http://127.0.0.1:3200", trace: "retain-on-failure" },
+  use: { baseURL: "http://127.0.0.1:" + port, trace: "retain-on-failure" },
   projects: [
     {
       name: "desktop",
@@ -28,8 +31,9 @@ export default defineConfig({
   ],
   webServer: {
     command:
-      "node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3200",
-    url: "http://127.0.0.1:3200",
+      "node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port " +
+      port,
+    url: "http://127.0.0.1:" + port,
     reuseExistingServer: false,
     timeout: 60000,
   },

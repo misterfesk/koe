@@ -1,9 +1,15 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useDraft, useSession } from "@/components/session";
-import { ActionLink, Field, Notice, PageHeading } from "@/components/ui";
+import {
+  ActionLink,
+  Field,
+  Notice,
+  PageHeading,
+  focusFirstInvalid,
+} from "@/components/ui";
 import {
   conversationOption,
   conversationWords,
@@ -35,15 +41,24 @@ export function Conversation() {
   const choosing = useRef(false);
   const chosen = state.steps.find((value) => value.id === chosenId);
   const voice = tone(state.appearance.tone, "reflection", state.energy);
+  const ideaMemory = state.memories.find(
+    (memory) => memory.id === option?.sourceMemoryId,
+  );
+  const exchangeRef = useRef<HTMLDivElement>(null);
+  const shownStage = useRef(stage);
+  useEffect(() => {
+    // Move focus to the new content when the stage changes, not on first render.
+    if (shownStage.current === stage) return;
+    shownStage.current = stage;
+    exchangeRef.current?.focus();
+  }, [stage]);
 
   function continueScript(event: FormEvent) {
     event.preventDefault();
     const parsed = conversationWords.safeParse(words);
     if (!parsed.success) {
       setError(parsed.error.issues[0].message);
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(event);
       return;
     }
     setError("");
@@ -62,9 +77,7 @@ export function Conversation() {
     );
     if (!result.ok) {
       setError(result.error);
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(event);
       return;
     }
     if (choosing.current) return;
@@ -134,7 +147,7 @@ export function Conversation() {
           Scripted preview. No live AI reads or responds to your words.
         </strong>
       </p>
-      <div className={styles.exchange}>
+      <div className={styles.exchange} ref={exchangeRef} tabIndex={-1}>
         {stage === "intro" ? (
           <section className={styles.intro}>
             <p>
@@ -272,6 +285,10 @@ export function Conversation() {
                 <div className="actions">
                   <button
                     onClick={() => {
+                      // Copy the idea into the editable draft once; later idea changes never overwrite it.
+                      const shown = conversationOption(state, true);
+                      setStep(shown?.title ?? "");
+                      setSourceMemoryId(shown?.sourceMemoryId ?? "");
                       setConsent("yes");
                       setStage("suggestion");
                     }}
@@ -301,11 +318,19 @@ export function Conversation() {
                 >
                   {idea ?? "No idea is available without your permission."}
                 </p>
-                <p className="hint">
-                  This is a fresh fixture idea. Approved memory is used only
-                  while permission is on and temporary mode is off. An edited
-                  step draft below remains your own wording.
+                <p className="hint" data-testid="idea-provenance">
+                  {ideaMemory
+                    ? "Based on a memory card you approved: “" +
+                      ideaMemory.text +
+                      "”. Delete that card and ideas stop using it."
+                    : "A fixed example from the script. It does not use your memory."}
                 </p>
+                {!chosen && idea && step !== idea && (
+                  <p className="hint">
+                    Your draft below differs from this idea. It stays as you
+                    left it unless you replace it.
+                  </p>
+                )}
                 {chosen ? (
                   <div className="panel">
                     <p>
@@ -348,7 +373,7 @@ export function Conversation() {
                           }
                         }}
                       >
-                        Use current idea
+                        Replace draft with this idea
                       </button>
                       <button
                         type="button"

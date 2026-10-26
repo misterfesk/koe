@@ -23,7 +23,7 @@
 }
 .currentIdea {
   font-family: var(--font-heading);
-  font-size: 28px;
+  font-size: 1.75rem;
   line-height: 1.35;
   padding: 22px 0;
   border-block: 1px solid var(--line);
@@ -34,6 +34,6 @@
     padding: 18px 16px;
   }
   .currentIdea {
-    font-size: 24px;
+    font-size: 1.5rem;
   }
 }

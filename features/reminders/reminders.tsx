@@ -58,6 +58,10 @@ export function ReminderSettings() {
     "reminder.config.target",
     current.targetId || state.activeId,
   );
+  // A drafted target can be deleted elsewhere; never apply a step that no longer exists.
+  const liveTargetId = state.steps.some((step) => step.id === targetId)
+    ? targetId
+    : "";
   const [timezone, setTimezone] = useDraft(
     "reminder.config.timezone",
     current.timezone,
@@ -125,7 +129,7 @@ export function ReminderSettings() {
     const result = reminderInput.safeParse({
       ...current,
       enabled: enabled === "true",
-      targetId,
+      targetId: liveTargetId,
       timezone,
       hour: Number(hour),
       quietStart: Number(quietStart),
@@ -198,7 +202,7 @@ export function ReminderSettings() {
           />
           <Select
             label="Step to follow up"
-            value={targetId}
+            value={liveTargetId}
             onChange={setTargetId}
             error={errors.targetId}
             options={[

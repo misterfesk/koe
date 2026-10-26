@@ -7,12 +7,12 @@
   margin-bottom: 16px;
 }
 .orbit {
-  font-size: 42px;
+  font-size: 2.625rem;
   color: var(--rose);
   line-height: 1;
 }
 .actionTitle {
-  font-size: clamp(30px, 4vw, 48px);
+  font-size: clamp(1.875rem, 4vw, 3rem);
   max-width: 650px;
   margin: 24px 0;
   letter-spacing: -0.04em;
@@ -26,7 +26,7 @@
 }
 .alternatives button,
 .alternatives a {
-  font-size: 14px;
+  font-size: 0.875rem;
   padding: 10px 14px;
 }
 .below {
@@ -43,7 +43,7 @@
   padding: 36px 0;
 }
 .mark {
-  font-size: 64px;
+  font-size: 4rem;
   display: block;
   margin-bottom: 24px;
 }
@@ -63,7 +63,7 @@
   overflow-wrap: anywhere;
 }
 .history dt {
-  font-size: 12px;
+  font-size: 0.875rem;
   color: var(--secondary);
   margin-top: 12px;
 }
@@ -74,7 +74,7 @@
 }
 @media (max-width: 600px) {
   .actionTitle {
-    font-size: 32px;
+    font-size: 2rem;
   }
   .below {
     align-items: flex-start;

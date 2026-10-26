@@ -2,7 +2,13 @@
 import { useState, useRef, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, useDraft } from "@/components/session";
-import { PageHeading, Field, Select, ActionLink } from "@/components/ui";
+import {
+  PageHeading,
+  Field,
+  Select,
+  ActionLink,
+  focusFirstInvalid,
+} from "@/components/ui";
 import { stepInput, makeSmaller, canRetrieveMemory } from "@/domain/state";
 export function Planner() {
   const { state, dispatch } = useSession();
@@ -20,9 +26,7 @@ export function Planner() {
         title:
           "The original memory is no longer approved. Edit a separate step, or discard this draft.",
       });
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(e);
       return;
     }
     const result = stepInput.safeParse({ title, area, prediction });
@@ -32,9 +36,7 @@ export function Planner() {
         (i) => (fields[String(i.path[0])] = i.message),
       );
       setErrors(fields);
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(e);
       return;
     }
     if (submitted.current) return;

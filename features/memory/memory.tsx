@@ -9,6 +9,8 @@ import {
   Notice,
   PageHeading,
   Toggle,
+  focusFirstInvalid,
+  ConfirmDelete,
 } from "@/components/ui";
 import { approveMemory, memoryText } from "@/domain/reflection";
 import type { Memory } from "@/domain/state";
@@ -16,7 +18,7 @@ import { downloadJson } from "@/services/export";
 import styles from "./memory.module.css";
 
 function MemoryCard({ card }: { card: Memory }) {
-  const { dispatch } = useSession();
+  const { state, dispatch } = useSession();
   const prefix = "memory.card." + card.id + ".";
   const [editing, setEditing] = useDraft(prefix + "editing");
   const [text, setText] = useDraft(prefix + "text", card.text);
@@ -27,9 +29,7 @@ function MemoryCard({ card }: { card: Memory }) {
     const parsed = memoryText.safeParse(text);
     if (!parsed.success) {
       setError(parsed.error.issues[0].message);
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(event);
       return;
     }
     dispatch({ type: "memoryEdit", id: card.id, text: parsed.data });
@@ -82,18 +82,22 @@ function MemoryCard({ card }: { card: Memory }) {
             Edit card
           </button>
         )}
-        <button
-          className="text danger"
-          onClick={() => {
+        <ConfirmDelete
+          label="Delete card"
+          question="Delete this memory card?"
+          detail={
+            state.steps.some((step) => step.sourceMemoryId === card.id)
+              ? "Ideas will stop using it and any reminder preview linked to it is cancelled. Steps you already chose from it stay in Steps; remove them there if you want."
+              : "Ideas will stop using it. This cannot be undone."
+          }
+          onConfirm={() => {
             dispatch({ type: "memoryDelete", id: card.id });
             dispatch({ type: "clearDraft", prefix });
             requestAnimationFrame(() =>
               document.getElementById("approved-cards")?.focus(),
             );
           }}
-        >
-          Delete card
-        </button>
+        />
       </div>
     </li>
   );
@@ -116,9 +120,7 @@ export function MemoryPage() {
     );
     if (!result.ok) {
       setError(result.error);
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(event);
       return;
     }
     setReceiptId("memory-" + (state.sequence + 1));

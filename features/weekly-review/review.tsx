@@ -11,6 +11,7 @@ import {
   Notice,
   PageHeading,
   Select,
+  focusFirstInvalid,
 } from "@/components/ui";
 import { currentReport, makeSmaller } from "@/domain/state";
 import { reviewActions } from "@/domain/review";
@@ -46,6 +47,8 @@ export function WeeklyReview() {
   function submit(e: FormEvent) {
     e.preventDefault();
     if (!target) return;
+    // A repeat submit of the just-applied (now cleared) form is a no-op, not a validation error.
+    if (result && !choice && !functionNote && !effort && !helpfulness) return;
     const parsed = reviewInput.safeParse({
       functionNote,
       effort,
@@ -63,21 +66,13 @@ export function WeeklyReview() {
           ]),
         ),
       );
-      requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLElement>('main [aria-invalid="true"]')
-          ?.focus(),
-      );
+      focusFirstInvalid(e);
       return;
     }
     const change = reviewActions(target, parsed.data.choice, adjustment);
     if (!change.ok) {
       setErrors({ adjustment: change.message });
-      requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLElement>('main [aria-invalid="true"]')
-          ?.focus(),
-      );
+      focusFirstInvalid(e);
       return;
     }
     setErrors({});

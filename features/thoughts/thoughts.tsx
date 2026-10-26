@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDraft, useSession } from "@/components/session";
-import { ActionLink, Field, Notice, PageHeading } from "@/components/ui";
+import {
+  ActionLink,
+  Field,
+  Notice,
+  PageHeading,
+  focusFirstInvalid,
+} from "@/components/ui";
 import { prepareReflectionStep, thoughtInput } from "@/domain/reflection";
 import { hasPlannerDraft } from "@/domain/state";
 import { tone } from "@/domain/tone";
@@ -49,6 +55,8 @@ export function Thoughts() {
   const [step, setStep] = useDraft("thoughts.step");
   const [stepError, setStepError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const promptRef = useRef<HTMLDivElement>(null);
+  const stepRef = useRef<HTMLElement>(null);
   const index = Math.max(0, Math.min(3, Number(stage) || 0));
   const prompt = prompts[index];
   const values = { situation, thought, feeling, alternative };
@@ -60,7 +68,7 @@ export function Thoughts() {
   };
   const plannerDraftExists = hasPlannerDraft(state);
 
-  function save() {
+  function finish() {
     const result = thoughtInput.safeParse(values);
     if (!result.success) {
       const next: Record<string, string> = {};
@@ -69,9 +77,7 @@ export function Thoughts() {
       setErrors(next);
       const first = prompts.findIndex((item) => next[item.key]);
       if (first >= 0) setStage(String(first));
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(promptRef.current);
       return;
     }
     setErrors({});
@@ -106,15 +112,17 @@ export function Thoughts() {
         {prompt.title}
       </PageHeading>
       <div className={styles.document}>
-        <Field
-          label={prompt.label}
-          value={values[prompt.key]}
-          onChange={setters[prompt.key]}
-          multiline
-          maxLength={1000}
-          error={errors[prompt.key]}
-          hint={prompt.hint}
-        />
+        <div ref={promptRef}>
+          <Field
+            label={prompt.label}
+            value={values[prompt.key]}
+            onChange={setters[prompt.key]}
+            multiline
+            maxLength={1000}
+            error={errors[prompt.key]}
+            hint={prompt.hint}
+          />
+        </div>
         <div className="actions">
           {index > 0 && (
             <button
@@ -137,17 +145,16 @@ export function Thoughts() {
               </button>
             </>
           )}
-          <button className={index < 3 ? "secondary" : ""} onClick={save}>
-            Save session draft
-          </button>
+          {index === 3 && <button onClick={finish}>Finish reflection</button>}
           <ActionLink href="/reflect" secondary>
-            Keep draft & leave
+            {index === 3 ? "Leave without finishing" : "Keep draft & leave"}
           </ActionLink>
         </div>
         {savedAt && (
           <Notice id="thoughts-saved">
-            Session draft kept at {savedAt.slice(0, 16).replace("T", " ")}{" "}
-            virtual time. Nothing has been added to memory.
+            Reflection finished at {savedAt.slice(0, 16).replace("T", " ")}{" "}
+            virtual time. Your words stay in this session only and nothing has
+            been added to memory. You can stop here.
           </Notice>
         )}
         <details className={styles.notes} open={index === 3}>
@@ -162,7 +169,7 @@ export function Thoughts() {
           </dl>
         </details>
         {index === 3 && (
-          <section className={styles.next}>
+          <section className={styles.next} ref={stepRef}>
             <h2>Any next step is optional.</h2>
             <p>
               A safe, ordinary action can go to the planner for you to review
@@ -186,11 +193,7 @@ export function Thoughts() {
                   );
                   if (!result.ok) {
                     setStepError(result.error);
-                    requestAnimationFrame(() =>
-                      document
-                        .querySelector<HTMLElement>('[aria-invalid="true"]')
-                        ?.focus(),
-                    );
+                    focusFirstInvalid(stepRef.current);
                     return;
                   }
                   for (const action of result.actions) dispatch(action);

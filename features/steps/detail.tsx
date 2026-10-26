@@ -7,6 +7,7 @@ import {
   Select,
   ActionLink,
   Notice,
+  focusFirstInvalid,
 } from "@/components/ui";
 import { makeSmaller, currentReport, type Outcome } from "@/domain/state";
 import { tone } from "@/domain/tone";
@@ -55,9 +56,7 @@ export function StepDetail({ id }: { id: string }) {
       )
     ) {
       setReportError("Choose an outcome, or leave without reporting.");
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(e);
       return;
     }
     setReportError("");
@@ -235,11 +234,7 @@ export function StepDetail({ id }: { id: string }) {
                 e.preventDefault();
                 if (!adjust.trim()) {
                   setError("Write an adjustment, or keep your original step.");
-                  requestAnimationFrame(() =>
-                    document
-                      .querySelector<HTMLElement>('[aria-invalid="true"]')
-                      ?.focus(),
-                  );
+                  focusFirstInvalid(e);
                   return;
                 }
                 setError("");

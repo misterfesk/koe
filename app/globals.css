@@ -36,7 +36,7 @@ html {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-body);
-  font-size: 16px;
+  font-size: 100%;
 }
 body {
   margin: 0;
@@ -117,7 +117,7 @@ h3 {
   letter-spacing: -0.035em;
 }
 h1 {
-  font-size: clamp(30px, 4vw, 46px);
+  font-size: clamp(1.875rem, 4vw, 2.875rem);
   margin: 8px 0 16px;
   max-width: 850px;
 }
@@ -125,11 +125,11 @@ h1:focus {
   outline: none;
 }
 h2 {
-  font-size: 26px;
+  font-size: 1.625rem;
   margin: 0 0 16px;
 }
 h3 {
-  font-size: 21px;
+  font-size: 1.3125rem;
 }
 p {
   line-height: 1.65;
@@ -156,12 +156,12 @@ pre {
 .eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  font-size: 11px;
+  font-size: 0.875rem;
   color: var(--secondary);
   margin: 0 0 16px;
 }
 .lede {
-  font-size: 18px;
+  font-size: 1.125rem;
   color: var(--secondary);
   max-width: 620px;
 }
@@ -238,7 +238,7 @@ pre {
 }
 .hint,
 .meta {
-  font-size: 13px;
+  font-size: 0.875rem;
   color: var(--secondary);
 }
 .field .hint {
@@ -252,7 +252,7 @@ pre {
   padding: 14px 18px;
   border-left: 3px solid var(--wine);
   background: #e8dcd4;
-  font-size: 14px;
+  font-size: 0.875rem;
   margin: 20px 0;
   white-space: pre-wrap;
 }
@@ -285,7 +285,7 @@ pre {
   border-bottom: 1px solid var(--line);
 }
 .rows h2 {
-  font-size: 23px;
+  font-size: 1.4375rem;
 }
 .rows h3 {
   margin: 0 0 10px;
@@ -297,7 +297,7 @@ pre {
   text-decoration: underline;
 }
 .kicker {
-  font-size: 12px;
+  font-size: 0.875rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -306,7 +306,7 @@ pre {
   border: 1px solid var(--line-strong);
   border-radius: 20px;
   padding: 5px 12px;
-  font-size: 12px;
+  font-size: 0.875rem;
 }
 .prose {
   max-width: 700px;
@@ -333,7 +333,7 @@ pre {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 th,
 td {
@@ -402,10 +402,10 @@ details {
     flex-grow: 1;
   }
   h2 {
-    font-size: 24px;
+    font-size: 1.5rem;
   }
   table {
-    font-size: 12px;
+    font-size: 0.875rem;
   }
   th,
   td {

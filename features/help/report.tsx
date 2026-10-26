@@ -2,7 +2,13 @@
 import { useState, type FormEvent } from "react";
 import { z } from "zod";
 import { useDraft } from "@/components/session";
-import { PageHeading, Field, Notice, ActionLink } from "@/components/ui";
+import {
+  PageHeading,
+  Field,
+  Notice,
+  ActionLink,
+  focusFirstInvalid,
+} from "@/components/ui";
 import { downloadJson } from "@/services/export";
 const schema = z
   .string()
@@ -18,9 +24,7 @@ export function ReportPreview() {
     const parsed = schema.safeParse(text);
     if (!parsed.success) {
       setError(parsed.error.issues[0].message);
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(e);
       return;
     }
     setError("");

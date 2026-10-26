@@ -12,16 +12,16 @@
 }
 .wordmark {
   font-family: var(--font-brand);
-  font-size: 36px;
+  font-size: 2.25rem;
   font-weight: 600;
   text-decoration: none;
-  letter-spacing: -2px;
+  letter-spacing: -0.055em;
 }
 .wordmark span {
   color: var(--wine);
 }
 .label {
-  font-size: 11px;
+  font-size: 0.875rem;
   letter-spacing: 0.14em;
   color: var(--secondary);
 }
@@ -31,7 +31,7 @@
   border-radius: 30px;
   padding: 10px 20px;
   text-decoration: none;
-  font-size: 14px;
+  font-size: 0.875rem;
   display: flex;
   gap: 20px;
   align-items: center;
@@ -59,18 +59,18 @@
   padding: 10px 12px;
   text-decoration: none;
   border-radius: 6px;
-  font-size: 16px;
+  font-size: 1rem;
 }
 .nav a[aria-current="page"] {
   background: var(--coffee);
   color: var(--cream);
 }
 .index {
-  font-size: 10px;
+  font-size: 0.875rem;
   color: inherit;
 }
 .nav .explorer {
-  font-size: 13px;
+  font-size: 0.875rem;
   margin-top: 44px;
   justify-content: space-between;
 }
@@ -87,7 +87,7 @@
   justify-content: space-between;
   gap: 20px;
   color: var(--secondary);
-  font-size: 12px;
+  font-size: 0.875rem;
 }
 .footer div {
   display: flex;
@@ -107,8 +107,8 @@
     gap: 16px;
   }
   .label {
-    font-size: 9px;
-    max-width: 120px;
+    font-size: 0.875rem;
+    max-width: min(100%, 7.5rem);
   }
   .layout {
     display: block;
@@ -122,7 +122,7 @@
     border-bottom: 1px solid var(--line);
   }
   .nav a {
-    font-size: 14px;
+    font-size: 0.875rem;
     gap: 6px;
     padding: 8px 12px;
     min-height: 44px;
@@ -132,7 +132,7 @@
   }
   .nav .explorer {
     margin: 0;
-    font-size: 12px;
+    font-size: 0.875rem;
   }
   .main {
     padding: 32px 24px 48px;
@@ -148,13 +148,13 @@
     gap: 10px;
   }
   .wordmark {
-    font-size: 30px;
+    font-size: 1.875rem;
   }
   .label {
-    max-width: 100px;
+    max-width: min(100%, 6.25rem);
   }
   .help {
-    font-size: 12px;
+    font-size: 0.875rem;
     padding: 8px 12px;
     gap: 8px;
   }
@@ -171,4 +171,17 @@
     padding: 20px 16px;
     flex-wrap: wrap;
   }
+}
+/* Chrome labels wrap between words or items, never inside a word. */
+.header,
+.header *,
+.nav,
+.nav *,
+.footer,
+.footer * {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.footer div {
+  flex-wrap: wrap;
 }

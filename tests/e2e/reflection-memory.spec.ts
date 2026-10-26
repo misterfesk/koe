@@ -120,6 +120,12 @@ test("S4 conversation consent, explicit memory, plan and fresh deletion-aware id
     .click();
   await page.getByRole("button", { name: "Delete card", exact: true }).click();
   await expect(
+    page.getByRole("group", { name: "Delete this memory card?" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Yes, delete card", exact: true })
+    .click();
+  await expect(
     page.getByRole("heading", {
       name: "Reading a fictional line",
       exact: true,
@@ -157,11 +163,14 @@ test("S4 thought draft, temporary memory permission, journal edit/delete/export 
     .getByRole("button", { name: "Skip this prompt", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Save session draft", exact: true })
+    .getByRole("button", { name: "Finish reflection", exact: true })
     .click();
   await expect(
-    page.getByRole("status").filter({ hasText: "Session draft kept" }),
+    page.getByRole("status").filter({ hasText: "Reflection finished" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Reflection finished" }),
+  ).toBeFocused();
   await page
     .getByLabel("An optional step in your words")
     .fill("Read a fictional timetable");
@@ -238,6 +247,12 @@ test("S4 thought draft, temporary memory permission, journal edit/delete/export 
     energy: "low",
   });
   await page.getByRole("button", { name: "Delete note", exact: true }).click();
+  await expect(
+    page.getByRole("group", { name: "Delete this note?" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Yes, delete note", exact: true })
+    .click();
   await expect(
     page.getByText("No notes yet. Nothing needs to be tracked.", {
       exact: true,

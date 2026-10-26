@@ -10,6 +10,7 @@ import {
   Notice,
   PageHeading,
   Select,
+  focusFirstInvalid,
 } from "@/components/ui";
 import { stepInput, type Step } from "@/domain/state";
 import { tone } from "@/domain/tone";
@@ -45,11 +46,7 @@ function RoutineEditor({ step }: { step: Step }) {
     });
     if (!parsed.success) {
       setError(parsed.error.issues[0].message);
-      requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLElement>('main [aria-invalid="true"]')
-          ?.focus(),
-      );
+      focusFirstInvalid(e);
       return;
     }
     setError("");
@@ -143,11 +140,7 @@ export function Routines() {
     });
     if (!parsed.success) {
       setError(parsed.error.issues[0].message);
-      requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLElement>('main [aria-invalid="true"]')
-          ?.focus(),
-      );
+      focusFirstInvalid(e);
       return;
     }
     if (submitted.current) return;

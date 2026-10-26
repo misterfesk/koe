@@ -1,6 +1,24 @@
 "use client";
 import Link from "next/link";
-import { useId, useRef, useEffect, type ReactNode } from "react";
+import {
+  useId,
+  useRef,
+  useEffect,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+/** After a failed submit, focus the first invalid field within the form (or element) that failed, never another form's stale error. */
+export function focusFirstInvalid(source: FormEvent | Element | null) {
+  const scope =
+    source && "currentTarget" in source
+      ? (source.currentTarget as Element | null)
+      : source;
+  requestAnimationFrame(() =>
+    scope?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
+  );
+}
+
 export function PageHeading({
   eyebrow,
   children,
@@ -150,4 +168,58 @@ export function ActionLink({
 }
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty">{children}</div>;
+}
+
+/** Two-step delete for the user's own words: asks first, and "Keep it" returns focus to the opener. */
+export function ConfirmDelete({
+  label,
+  question,
+  detail,
+  onConfirm,
+}: {
+  label: string;
+  question: string;
+  detail?: ReactNode;
+  onConfirm: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const opener = useRef<HTMLButtonElement>(null);
+  const prompt = useRef<HTMLParagraphElement>(null);
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open) prompt.current?.focus();
+    else if (wasOpen.current) opener.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
+  if (!open)
+    return (
+      <button
+        ref={opener}
+        type="button"
+        className="text danger"
+        onClick={() => setOpen(true)}
+      >
+        {label}
+      </button>
+    );
+  return (
+    <div className="panel" role="group" aria-label={question}>
+      <p ref={prompt} tabIndex={-1}>
+        <strong>{question}</strong>
+        {detail ? <> {detail}</> : null}
+      </p>
+      <div className="actions">
+        <button type="button" className="danger" onClick={onConfirm}>
+          {"Yes, " + label.toLowerCase()}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => setOpen(false)}
+        >
+          Keep it
+        </button>
+      </div>
+    </div>
+  );
 }

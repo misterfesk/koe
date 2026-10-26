@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useDraft, useSession } from "@/components/session";
-import { Field, Notice } from "@/components/ui";
+import { Field, Notice, focusFirstInvalid } from "@/components/ui";
 import { approveMemory } from "@/domain/reflection";
 
 export function MemoryApproval({
@@ -24,9 +24,7 @@ export function MemoryApproval({
     const result = approveMemory(state, text, source);
     if (!result.ok) {
       setError(result.error);
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(),
-      );
+      focusFirstInvalid(event);
       return;
     }
     setReceiptId("memory-" + (state.sequence + 1));

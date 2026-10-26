@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { test, expect } from "./guards";
 import AxeBuilder from "@axe-core/playwright";
 
 async function weekly(page: Page) {
