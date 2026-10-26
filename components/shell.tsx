@@ -3,7 +3,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode } from "react";
 import { useSession } from "./session";
-import { REVIEW_ENABLED } from "@/fixtures/review";
 import styles from "./shell.module.css";
 import { Mascot } from "./mascot";
 const nav = [
@@ -54,7 +53,7 @@ export function Shell({ children }: { children: ReactNode }) {
               {label}
             </Link>
           ))}
-          {REVIEW_ENABLED && (
+          {process.env.NEXT_PUBLIC_REVIEW_TOOLS !== "false" && (
             <Link className={styles.explorer} href="/review">
               Review explorer
             </Link>

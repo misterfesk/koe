@@ -1,5 +1,4 @@
 import { PageHeading, ActionLink } from "@/components/ui";
-import { REVIEW_ENABLED } from "@/fixtures/review";
 import styles from "./landing.module.css";
 export default function Page() {
   return (
@@ -18,7 +17,7 @@ export default function Page() {
             <ActionLink href="/onboarding">
               Try the fictional demo <span aria-hidden="true">→</span>
             </ActionLink>
-            {REVIEW_ENABLED && (
+            {process.env.NEXT_PUBLIC_REVIEW_TOOLS !== "false" && (
               <ActionLink href="/review" secondary>
                 Open the review explorer
               </ActionLink>

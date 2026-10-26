@@ -19,7 +19,6 @@ import {
 } from "@/domain/reflection";
 import { canRetrieveMemory } from "@/domain/state";
 import { tone } from "@/domain/tone";
-import { REVIEW_ENABLED } from "@/fixtures/review";
 import { MemoryApproval } from "@/features/memory/approval";
 import styles from "./conversation.module.css";
 
@@ -175,7 +174,7 @@ export function Conversation() {
             />
             <div className="actions">
               <button>Continue the script</button>
-              {REVIEW_ENABLED && (
+              {process.env.NEXT_PUBLIC_REVIEW_TOOLS !== "false" && (
                 <button
                   className="secondary"
                   type="button"
@@ -299,7 +298,7 @@ export function Conversation() {
                   >
                     No, stop here
                   </button>
-                  {REVIEW_ENABLED && (
+                  {process.env.NEXT_PUBLIC_REVIEW_TOOLS !== "false" && (
                     <button className="text" onClick={() => setStage("error")}>
                       Preview an error (review)
                     </button>

@@ -1,6 +1,20 @@
 import type { NextConfig } from "next";
+import { resolve } from "node:path";
 const config: NextConfig = {
   poweredByHeader: false,
+  webpack(configuration) {
+    // Exclude the explorer module from the client graph, rather than hiding it
+    // after it has already been downloaded. The same flag gates preview JSX.
+    if (process.env.NEXT_PUBLIC_REVIEW_TOOLS === "false") {
+      const disabled = resolve(process.cwd(), "features/review/disabled.tsx");
+      const explorer = resolve(process.cwd(), "features/review/explorer.tsx");
+      // Next's client-reference entries import the resolved absolute path.
+      configuration.resolve.alias["@/features/review/explorer"] = disabled;
+      configuration.resolve.alias[explorer] = disabled;
+      configuration.resolve.alias[explorer.replaceAll("\\", "/")] = disabled;
+    }
+    return configuration;
+  },
   devIndicators: false,
   async headers() {
     return [

@@ -102,6 +102,7 @@ test("S5 preserves drafts through Help and confirms replacement of an edited sum
     .fill("Original words");
   await page.getByLabel("Editable factual summary").fill("My edited words");
   await page.getByRole("link", { name: "Help & support", exact: true }).click();
+  await expect(page).toHaveURL(/\/help$/);
   await page.goBack();
   await expect(page.getByLabel("Original notes", { exact: true })).toHaveValue(
     "Original words",
