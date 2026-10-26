@@ -1,1 +1,19 @@
-import {PageHeading,ActionLink} from "@/components/ui";export default function NotFound(){return <><PageHeading eyebrow="404 · Page not found" description="This address doesn't lead to a Koe page.">A different way back.</PageHeading><div className="actions"><ActionLink href="/today">Go to Today</ActionLink><ActionLink href="/help" secondary>Help & support</ActionLink></div></>;}
+import { PageHeading, ActionLink } from "@/components/ui";
+export default function NotFound() {
+  return (
+    <>
+      <PageHeading
+        eyebrow="404 · Page not found"
+        description="This address doesn't lead to a Koe page."
+      >
+        A different way back.
+      </PageHeading>
+      <div className="actions">
+        <ActionLink href="/today">Go to Today</ActionLink>
+        <ActionLink href="/help" secondary>
+          Help & support
+        </ActionLink>
+      </div>
+    </>
+  );
+}

@@ -1,1 +1,12 @@
-"use client";import {PageHeading} from "@/components/ui";export default function ErrorPage({reset}:{reset:()=>void}){return <><PageHeading description="Your session stays here while you retry.">This page needs another try.</PageHeading><button onClick={reset}>Try again</button></>;}
+"use client";
+import { PageHeading } from "@/components/ui";
+export default function ErrorPage({ reset }: { reset: () => void }) {
+  return (
+    <>
+      <PageHeading description="Your session stays here while you retry.">
+        This page needs another try.
+      </PageHeading>
+      <button onClick={reset}>Try again</button>
+    </>
+  );
+}

@@ -1,3 +1,25 @@
-import type {Metadata} from "next";import {SessionProvider} from "@/components/session";import {Shell} from "@/components/shell";import "./globals.css";
-export const metadata:Metadata={title:{default:"Koe · A little room",template:"%s · Koe"},description:"A private, fictional-data review of small steps, reflection, and human connection.",robots:{index:false,follow:false}};
-export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en"><body><SessionProvider><Shell>{children}</Shell></SessionProvider></body></html>;}
+import type { Metadata } from "next";
+import { SessionProvider } from "@/components/session";
+import { Shell } from "@/components/shell";
+import "./globals.css";
+export const metadata: Metadata = {
+  title: { default: "Koe · A little room", template: "%s · Koe" },
+  description:
+    "A private, fictional-data review of small steps, reflection, and human connection.",
+  robots: { index: false, follow: false },
+};
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <SessionProvider>
+          <Shell>{children}</Shell>
+        </SessionProvider>
+      </body>
+    </html>
+  );
+}

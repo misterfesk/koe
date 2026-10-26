@@ -1,1 +1,18 @@
-:root{--canvas:#F2EBE4;--coffee:#382D29;--cream:#FFF5EC;--rose:#DEBDC8;--rose-ink:#35252F;--ink:#403329;--secondary:#6D5C51;--line:#D3C4B8;--line-strong:#947B6A;--wine:#774B5D;--focus:#774B5D;--surface:#FCF8F3;--font-brand:"Sora",sans-serif;--font-heading:"Space Grotesk",sans-serif;--font-body:"IBM Plex Sans",sans-serif;--radius:10px}
+:root {
+  --canvas: #f2ebe4;
+  --coffee: #382d29;
+  --cream: #fff5ec;
+  --rose: #debdc8;
+  --rose-ink: #35252f;
+  --ink: #403329;
+  --secondary: #6d5c51;
+  --line: #d3c4b8;
+  --line-strong: #947b6a;
+  --wine: #774b5d;
+  --focus: #774b5d;
+  --surface: #fcf8f3;
+  --font-brand: "Sora", sans-serif;
+  --font-heading: "Space Grotesk", sans-serif;
+  --font-body: "IBM Plex Sans", sans-serif;
+  --radius: 10px;
+}

@@ -1,1 +1,3 @@
-export default function Loading(){return <p role="status">Opening this page…</p>;}
+export default function Loading() {
+  return <p role="status">Opening this page…</p>;
+}

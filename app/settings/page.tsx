@@ -1,1 +1,4 @@
-import {SettingsIndex} from "@/features/settings";export default function Page(){return <SettingsIndex/>;}
+import { SettingsIndex } from "@/features/settings";
+export default function Page() {
+  return <SettingsIndex />;
+}
