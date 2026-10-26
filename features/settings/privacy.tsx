@@ -9,29 +9,25 @@ export function PrivacyControls() {
   return (
     <>
       <PageHeading
-        eyebrow="Settings · privacy"
-        description="Inspect, export or clear this fictional session. No account or backend store exists in this build."
+        eyebrow="Settings"
+        description="Everything here lives in this browser tab. Export it, delete it, or turn suggestions off."
       >
-        Your data, in view.
+        Your data
       </PageHeading>
       <div className="prose">
         <p>
-          Free text and choices live in React memory in this tab. They are not
-          written to local storage, session storage, cookies or a database.
-          Reloading starts a new session.
-        </p>
-        <p>
-          No live provider receives text. No advertising, analytics or session
-          replay runs here. Exported files and copied text leave the app under
-          your control; deleting this session cannot erase those copies.
+          What you type is not saved to browser storage, cookies or a server,
+          and reloading clears it. No AI provider, advertising or analytics
+          receives it. Files you export and text you copy are yours; deleting
+          this session can&apos;t erase them.
         </p>
         <Toggle
-          label="Enable scripted suggestions"
+          label="Suggestions on"
           checked={state.providerEnabled}
           onChange={(value) => dispatch({ type: "provider", value })}
         />
         <Toggle
-          label="Temporary mode (no memory creation or retrieval)"
+          label="Temporary mode: don't keep or use memory cards"
           checked={state.temporary}
           onChange={(value) => dispatch({ type: "temporary", value })}
         />
@@ -44,7 +40,7 @@ export function PrivacyControls() {
               })
             }
           >
-            Export session JSON
+            Export session (JSON)
           </button>
           <button
             className="secondary"
@@ -56,18 +52,18 @@ export function PrivacyControls() {
               );
             }}
           >
-            Review deletion
+            Delete session data
           </button>
         </div>
         {confirm && (
           <section className="panel" aria-label="Confirm deletion">
             <h2 id="deletion-heading" tabIndex={-1}>
-              Clear everything in this session?
+              Delete everything in this session?
             </h2>
             <p>
-              This removes steps, drafts, notes, approved memory and reminder
-              previews. Help stays available. Export first if you want a
-              fictional copy.
+              This deletes your steps, drafts, notes, memory cards and reminder
+              previews, and turns suggestions off. Help & support stays
+              available. Export first if you want a copy.
             </p>
             <div className="actions">
               <button
@@ -80,7 +76,7 @@ export function PrivacyControls() {
                   );
                 }}
               >
-                Delete this session
+                Yes, delete everything
               </button>
               <button
                 className="secondary"
@@ -91,7 +87,7 @@ export function PrivacyControls() {
                   );
                 }}
               >
-                Cancel deletion
+                Keep it
               </button>
             </div>
           </section>
@@ -99,8 +95,8 @@ export function PrivacyControls() {
         {state.notice && <Notice id="privacy-feedback">{state.notice}</Notice>}
         <hr className="divider" />
         <p className="hint">
-          Reset below discards this session and restores the empty fictional
-          demo with scripted suggestions enabled.
+          Starting over clears this session and brings back the demo with
+          suggestions on.
         </p>
         <button
           className="secondary"
@@ -109,20 +105,19 @@ export function PrivacyControls() {
             setConfirm(false);
           }}
         >
-          Reset fictional demo
+          Start over
         </button>
         <div className="actions">
           <ActionLink href="/settings/memory" secondary>
-            Inspect memory
+            Memory
           </ActionLink>
           <ActionLink href="/help/report" secondary>
-            Report preview
+            Report a problem
           </ActionLink>
         </div>
         <p className="meta">
-          A real product would need verified provider, retention, deletion,
-          security and incident processes. This review build does not establish
-          those guarantees.
+          A real service would need verified retention, deletion, security and
+          incident processes. This build doesn&apos;t provide them.
         </p>
       </div>
     </>

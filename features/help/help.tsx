@@ -21,7 +21,7 @@ export function Help() {
   const { state, dispatch } = useSession();
   const [message, setMessage] = useDraft(
     "help.message",
-    "Fictional draft: I could use some company. Are you able to talk?",
+    "I could use some company. Are you able to talk?",
   );
   const [status, setStatus] = useDraft("help.status");
   const resource = helpResources.find((r) => r.region === state.region);
@@ -29,14 +29,13 @@ export function Help() {
     <>
       <PageHeading
         eyebrow="Help & support"
-        description="Koe cannot monitor, assess danger, contact anyone, or guarantee a connection."
+        description="If you are in immediate danger, call your local emergency number or go to the nearest emergency department, if you can."
       >
         {tone(state.appearance.tone, "help", state.energy).message}
       </PageHeading>
       {!state.providerEnabled && (
         <Notice>
-          Scripted suggestions are offline. These locally bundled resources
-          remain available.
+          Suggestions are off. Everything on this page still works.
         </Notice>
       )}
       {state.scenario === "coaching paused" && (
@@ -46,9 +45,8 @@ export function Help() {
         </Notice>
       )}
       <p className="prose">
-        If there is immediate danger, use your local emergency service or go to
-        a nearby emergency department, if you can. This page is not a staffed
-        service.
+        Koe can&apos;t check on you, assess danger or contact anyone. This page
+        is not a staffed service. It points you to people who are.
       </p>
       <div className="split">
         <section>
@@ -88,21 +86,20 @@ export function Help() {
             <div className="panel">
               <h2>No verified resource listed yet.</h2>
               <p>
-                Check official local health services, a nearby hospital or a
-                community support service for current options. No number is
-                guessed here.
+                Try official local health services, a nearby hospital or a
+                community support service. Koe doesn&apos;t guess numbers.
               </p>
             </div>
           )}
         </section>
         <section>
-          <h2>A message you control.</h2>
+          <h2>Message someone you trust</h2>
           <p>
-            A prepared message is not a sent message. Copy it only if there is
-            someone you consider safe to contact.
+            Edit the words, copy them, and send them yourself to someone you
+            feel safe with. Koe sends nothing.
           </p>
           <Field
-            label="Prepared message"
+            label="Your message"
             multiline
             value={message}
             onChange={(value) => {
@@ -120,33 +117,30 @@ export function Help() {
                   setStatus("Copied. Nothing was sent.");
                 } catch {
                   setStatus(
-                    "Clipboard unavailable. Select and copy the prepared text manually. Nothing was sent.",
+                    "Copying didn't work here. Select the text and copy it yourself. Nothing was sent.",
                   );
                 }
               }}
             >
-              Copy prepared message
+              Copy message
             </button>
           </div>
           <button
             className="text"
             onClick={() =>
               setStatus(
-                "You reported a connection. Koe did not verify it or contact anyone.",
+                "Noted that you reached someone. Koe didn't contact anyone or check this.",
               )
             }
           >
-            I connected with someone (fictional report)
+            I reached someone
           </button>
           {status && <Notice>{status}</Notice>}
         </section>
       </div>
       <div className="actions">
-        <ActionLink href="/settings/privacy" secondary>
-          Privacy & session data
-        </ActionLink>
         <ActionLink href="/help/report" secondary>
-          Report a problem (preview)
+          Report a problem
         </ActionLink>
         <ActionLink href="/today" secondary>
           Back to Today

@@ -18,6 +18,7 @@ import {
 } from "@/domain/reflection";
 import { canRetrieveMemory } from "@/domain/state";
 import { tone } from "@/domain/tone";
+import { REVIEW_ENABLED } from "@/fixtures/review";
 import { MemoryApproval } from "@/features/memory/approval";
 import styles from "./conversation.module.css";
 
@@ -97,24 +98,23 @@ export function Conversation() {
     return (
       <>
         <PageHeading
-          eyebrow="Scripted conversation · offline preview"
-          description="Your session draft remains here. Help works independently of this script."
+          eyebrow="Scripted conversation · offline"
+          description="Your draft is kept. Help & support works without the script."
         >
           This preview is offline.
         </PageHeading>
         <p>
-          No live AI is involved. Restoring the preview enables only the local
-          script.
+          Turning it back on runs the local script only. There is no live AI.
         </p>
         <div className="actions">
           <button onClick={() => dispatch({ type: "provider", value: true })}>
-            Restore preview
+            Turn the script back on
           </button>
           <ActionLink href="/help" secondary>
             Help & support
           </ActionLink>
           <ActionLink href="/reflect" secondary>
-            Leave with draft
+            Keep draft & leave
           </ActionLink>
         </div>
       </>
@@ -129,8 +129,8 @@ export function Conversation() {
         {stage === "cancelled" || stage === "closed"
           ? "You can leave it here."
           : stage === "error"
-            ? "A pause in the preview."
-            : "An exchange with room to pause."}
+            ? "The script stopped."
+            : "Talk it through"}
       </PageHeading>
       <p className="notice">
         <strong>
@@ -141,15 +141,15 @@ export function Conversation() {
         {stage === "intro" ? (
           <section className={styles.intro}>
             <p>
-              A short, fixed exchange to review the interaction. It does not
-              assess, interpret or treat what you write. Use fictional words
-              only.
+              It runs the same way whatever you write, and it doesn&apos;t
+              assess or interpret your words.
             </p>
             <p>
-              You decide whether to see an idea, keep a memory card, or leave.
+              You decide whether to see a suggestion, keep a memory card, or
+              stop.
             </p>
             <div className="actions">
-              <button onClick={() => setStage("talk")}>Start the script</button>
+              <button onClick={() => setStage("talk")}>Start</button>
               <ActionLink href="/reflect" secondary>
                 Not now
               </ActionLink>
@@ -165,7 +165,7 @@ export function Conversation() {
               </p>
             </div>
             <Field
-              label="Your fictional words (optional)"
+              label="Your words"
               value={words}
               onChange={setWords}
               multiline
@@ -173,17 +173,19 @@ export function Conversation() {
               error={error}
             />
             <div className="actions">
-              <button>Continue scripted exchange</button>
-              <button
-                className="secondary"
-                type="button"
-                onClick={() => {
-                  setError("");
-                  setStage("error");
-                }}
-              >
-                Preview interruption
-              </button>
+              <button>Continue the script</button>
+              {REVIEW_ENABLED && (
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => {
+                    setError("");
+                    setStage("error");
+                  }}
+                >
+                  Preview an error (review)
+                </button>
+              )}
               <button
                 className="text"
                 type="button"
@@ -192,15 +194,15 @@ export function Conversation() {
                   setStage("cancelled");
                 }}
               >
-                Cancel exchange
+                Stop here
               </button>
             </div>
           </form>
         ) : stage === "error" ? (
           <section>
             <Notice>
-              Error-state preview. The script was interrupted; your draft is
-              still in this session. Nothing was sent or processed.
+              Error preview: the script stopped. Your draft is kept, and nothing
+              was sent or processed.
             </Notice>
             <div className="actions">
               <button
@@ -209,7 +211,7 @@ export function Conversation() {
                   setStage("talk");
                 }}
               >
-                Retry the script
+                Try again
               </button>
               <button
                 className="secondary"
@@ -218,7 +220,7 @@ export function Conversation() {
                   setStage("cancelled");
                 }}
               >
-                Cancel exchange
+                Stop here
               </button>
               <ActionLink href="/help" secondary>
                 Help & support
@@ -228,12 +230,12 @@ export function Conversation() {
         ) : stage === "cancelled" || stage === "closed" ? (
           <section>
             <p>
-              No action or reminder is required. Your draft stays here unless
-              you discard it or reset the session.
+              Nothing was added to your steps. Your draft is kept until you
+              discard it.
             </p>
             <div className="actions">
               <button className="secondary" onClick={() => setStage("talk")}>
-                Resume the script
+                Pick up where you left off
               </button>
               <ActionLink href="/reflect" secondary>
                 Back to Reflect
@@ -245,7 +247,7 @@ export function Conversation() {
                   setError("");
                 }}
               >
-                Discard conversation draft
+                Discard draft
               </button>
             </div>
             <MemoryApproval
@@ -256,8 +258,8 @@ export function Conversation() {
         ) : (
           <section>
             <div className={styles.userWords}>
-              <p className="eyebrow">Your fictional words</p>
-              <p>{lastWords || "You chose not to add words."}</p>
+              <p className="eyebrow">You wrote</p>
+              <p>{lastWords || "You didn't add any words."}</p>
             </div>
             <div className={styles.fixture}>
               <p className="eyebrow">
@@ -270,8 +272,8 @@ export function Conversation() {
             </div>
             {stage === "permission" ? (
               <>
-                <h2>Would an idea be useful?</h2>
-                <p>Nothing is added to your plan unless you choose it.</p>
+                <h2>Would a suggestion help?</h2>
+                <p>Nothing goes on Today unless you choose it.</p>
                 <div className="actions">
                   <button
                     onClick={() => {
@@ -283,7 +285,7 @@ export function Conversation() {
                       setStage("suggestion");
                     }}
                   >
-                    Yes, show an idea
+                    Yes, show a suggestion
                   </button>
                   <button
                     className="secondary"
@@ -292,49 +294,50 @@ export function Conversation() {
                       setStage("closed");
                     }}
                   >
-                    No, leave it here
+                    No, stop here
                   </button>
-                  <button className="text" onClick={() => setStage("error")}>
-                    Preview interruption
-                  </button>
+                  {REVIEW_ENABLED && (
+                    <button className="text" onClick={() => setStage("error")}>
+                      Preview an error (review)
+                    </button>
+                  )}
                 </div>
               </>
             ) : (
               <>
-                <h2>One optional idea.</h2>
+                <h2>A suggestion</h2>
                 <p
                   data-testid="current-script-idea"
                   className={styles.currentIdea}
                 >
-                  {idea ?? "No idea is available without your permission."}
+                  {idea ?? "No suggestion without your permission."}
                 </p>
                 <p className="hint" data-testid="idea-provenance">
                   {ideaMemory
-                    ? "Based on a memory card you approved: “" +
+                    ? "Based on your memory card “" +
                       ideaMemory.text +
-                      "”. Delete that card and ideas stop using it."
-                    : "A fixed example from the script. It does not use your memory."}
+                      "”. Delete the card and suggestions stop using it."
+                    : "A fixed example from the script. It doesn't use your memory cards."}
                 </p>
                 {!chosen && idea && step !== idea && (
                   <p className="hint">
-                    Your draft below differs from this idea. It stays as you
-                    left it unless you replace it.
+                    Your edited version below is kept unless you replace it.
                   </p>
                 )}
                 {chosen ? (
                   <div className="panel">
                     <p>
-                      Your chosen step is in the plan. Choosing is not reporting
-                      it complete.
+                      It&apos;s on Today. You can say how it went after you try
+                      it.
                     </p>
                     <ActionLink href={"/steps/" + chosen.id} secondary>
-                      Open chosen step
+                      Open step
                     </ActionLink>
                   </div>
                 ) : (
                   <form onSubmit={chooseStep} noValidate>
                     <Field
-                      label="Step idea (editable)"
+                      label="Your step"
                       value={step}
                       onChange={(value) => {
                         setStep(value);
@@ -363,7 +366,7 @@ export function Conversation() {
                           }
                         }}
                       >
-                        Replace draft with this idea
+                        Use the suggestion as written
                       </button>
                       <button
                         type="button"
@@ -380,17 +383,8 @@ export function Conversation() {
                 )}
                 <div className="actions">
                   <ActionLink href="/settings/memory" secondary>
-                    Inspect approved memory
+                    See Memory
                   </ActionLink>
-                  <button
-                    className="text"
-                    onClick={() => {
-                      setConsent("no");
-                      setStage("cancelled");
-                    }}
-                  >
-                    Cancel exchange
-                  </button>
                 </div>
                 <MemoryApproval
                   prefix="conversation.memory"
@@ -400,17 +394,6 @@ export function Conversation() {
             )}
           </section>
         )}
-      </div>
-      <div className="actions">
-        <ActionLink href="/reflect/thoughts" secondary>
-          Thought reflection
-        </ActionLink>
-        <ActionLink href="/reflect/journal" secondary>
-          Energy & journal
-        </ActionLink>
-        <ActionLink href="/settings/memory" secondary>
-          Approved memory
-        </ActionLink>
       </div>
     </>
   );

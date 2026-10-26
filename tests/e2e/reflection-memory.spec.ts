@@ -37,32 +37,28 @@ test("S4 conversation consent, explicit memory, plan and fresh deletion-aware id
   await expect(
     page.getByRole("button", { name: "Choose this step", exact: true }),
   ).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Start the script", exact: true })
-    .click();
-  await page
-    .getByLabel("Your fictional words (optional)")
-    .fill("A fictional day with little room.");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await page.getByLabel("Your words").fill("A fictional day with little room.");
   await page
     .getByRole("banner")
     .getByRole("link", { name: "Help & support" })
     .click();
   await expect(page).toHaveURL(/\/help$/);
   await page.goBack();
-  await expect(page.getByLabel("Your fictional words (optional)")).toHaveValue(
+  await expect(page.getByLabel("Your words")).toHaveValue(
     "A fictional day with little room.",
   );
   await page
-    .getByRole("button", { name: "Continue scripted exchange", exact: true })
+    .getByRole("button", { name: "Continue the script", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Would an idea be useful?" }),
+    page.getByRole("heading", { name: "Would a suggestion help?" }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Choose this step", exact: true }),
   ).toHaveCount(0);
   await page
-    .getByRole("button", { name: "Yes, show an idea", exact: true })
+    .getByRole("button", { name: "Yes, show a suggestion", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Choose this step", exact: true })
@@ -72,18 +68,12 @@ test("S4 conversation consent, explicit memory, plan and fresh deletion-aware id
   await page
     .getByRole("link", { name: "Scripted conversation", exact: true })
     .click();
+  await page.getByText("Keep a memory card", { exact: true }).click();
+  await page.getByLabel("Memory card").fill("Reading a fictional poem");
   await page
-    .getByText("Prepare a memory card (optional)", { exact: true })
+    .getByRole("button", { name: "Keep this card", exact: true })
     .click();
-  await page
-    .getByLabel("Optional memory in your words")
-    .fill("Reading a fictional poem");
-  await page
-    .getByRole("button", { name: "Approve this memory card", exact: true })
-    .click();
-  await page
-    .getByRole("link", { name: "Inspect approved memory", exact: true })
-    .click();
+  await page.getByRole("link", { name: "See Memory", exact: true }).click();
   await expect(
     page.getByRole("heading", {
       name: "Reading a fictional poem",
@@ -91,13 +81,13 @@ test("S4 conversation consent, explicit memory, plan and fresh deletion-aware id
     }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Edit card", exact: true }).click();
-  await page.getByLabel("Edit memory card").fill("Reading a fictional line");
+  await page.getByLabel("Edit card").fill("Reading a fictional line");
   await page
     .getByRole("button", { name: "Save card changes", exact: true })
     .click();
   const memoryDownload = page.waitForEvent("download");
   await page
-    .getByRole("button", { name: "Export memory JSON", exact: true })
+    .getByRole("button", { name: "Export cards (JSON)", exact: true })
     .click();
   const memoryFile = await memoryDownload;
   expect(memoryFile.suggestedFilename()).toBe("koe-synthetic-memory.json");
@@ -109,15 +99,14 @@ test("S4 conversation consent, explicit memory, plan and fresh deletion-aware id
     source: "Scripted conversation: explicit wording",
     at: "2026-10-25T12:00:00.000Z",
   });
+  await page.getByRole("link", { name: "Reflect", exact: true }).click();
   await page
     .getByRole("link", { name: "Scripted conversation", exact: true })
     .click();
   await expect(page.getByTestId("current-script-idea")).toContainText(
     "Reading a fictional line",
   );
-  await page
-    .getByRole("link", { name: "Inspect approved memory", exact: true })
-    .click();
+  await page.getByRole("link", { name: "See Memory", exact: true }).click();
   await page.getByRole("button", { name: "Delete card", exact: true }).click();
   await expect(
     page.getByRole("group", { name: "Delete this memory card?" }),
@@ -131,6 +120,7 @@ test("S4 conversation consent, explicit memory, plan and fresh deletion-aware id
       exact: true,
     }),
   ).toHaveCount(0);
+  await page.getByRole("link", { name: "Reflect", exact: true }).click();
   await page
     .getByRole("link", { name: "Scripted conversation", exact: true })
     .click();
@@ -149,19 +139,15 @@ test("S4 thought draft, temporary memory permission, journal edit/delete/export 
   page,
 }) => {
   await page.goto("/reflect/thoughts");
-  await page
-    .getByLabel("Situation (optional)")
-    .fill("A fictional delayed train");
-  await page.getByRole("button", { name: "Next prompt", exact: true }).click();
-  await page
-    .getByLabel("Thought (optional)")
-    .fill("This delay is inconvenient");
-  await page
-    .getByRole("button", { name: "Skip this prompt", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Skip this prompt", exact: true })
-    .click();
+  await page.getByLabel("Situation").fill("A fictional delayed train");
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByLabel("Thought").fill("This delay is inconvenient");
+  // One button per prompt: "Next" when the field has words, "Skip" when blank.
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Next", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Skip", exact: true }).click();
   await page
     .getByRole("button", { name: "Finish reflection", exact: true })
     .click();
@@ -172,10 +158,10 @@ test("S4 thought draft, temporary memory permission, journal edit/delete/export 
     page.getByRole("status").filter({ hasText: "Reflection finished" }),
   ).toBeFocused();
   await page
-    .getByLabel("An optional step in your words")
+    .getByLabel("A step in your words")
     .fill("Read a fictional timetable");
   await page
-    .getByRole("button", { name: "Bring this step to planner", exact: true })
+    .getByRole("button", { name: "Open in the step planner", exact: true })
     .click();
   await expect(page).toHaveURL(/\/steps\/new$/);
   await expect(page.getByLabel("Your step")).toHaveValue(
@@ -186,45 +172,39 @@ test("S4 thought draft, temporary memory permission, journal edit/delete/export 
     .getByRole("link", { name: "Thought reflection", exact: true })
     .click();
   await page
-    .getByLabel("An optional step in your words")
+    .getByLabel("A step in your words")
     .fill("A different proposed action");
   await page
-    .getByRole("button", { name: "Bring this step to planner", exact: true })
+    .getByRole("button", { name: "Open in the step planner", exact: true })
     .click();
   await expect(page.locator("main").getByRole("alert")).toContainText(
-    "A planner draft is already open",
+    "A step draft is already open in the planner",
   );
   await expect(
     page.getByRole("link", {
-      name: "Inspect existing planner draft",
+      name: "Open the step draft you already have",
       exact: true,
     }),
   ).toBeVisible();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await page.getByRole("link", { name: "Memory", exact: true }).click();
   await page
-    .getByRole("link", { name: "Approved memory", exact: true })
-    .click();
-  await page
-    .getByLabel("Temporary mode: do not create or retrieve memory")
+    .getByLabel("Temporary mode: don't keep or use memory cards")
     .check();
-  await page.getByLabel("New memory card").fill("Must remain unapproved");
+  await page.getByLabel("New card").fill("Must remain unapproved");
   await expect(
-    page.getByRole("button", { name: "Approve new memory", exact: true }),
+    page.getByRole("button", { name: "Keep this card", exact: true }),
   ).toBeDisabled();
+  await page.getByRole("link", { name: "Reflect", exact: true }).click();
+  await page.getByRole("link", { name: "Journal", exact: true }).click();
+  await page.getByLabel("Energy right now").selectOption("low");
+  await page.getByLabel("Note (optional)").fill("A fictional quiet afternoon");
   await page
-    .getByRole("link", { name: "Energy & journal", exact: true })
-    .click();
-  await page.getByLabel("Energy for this note").selectOption("low");
-  await page
-    .getByLabel("Fictional journal note (optional)")
-    .fill("A fictional quiet afternoon");
-  await page
-    .getByRole("button", { name: "Record energy / note", exact: true })
+    .getByRole("button", { name: "Add to journal", exact: true })
     .click();
   await page.getByRole("button", { name: "Edit note", exact: true }).click();
-  await page.getByLabel("Edit journal note").fill("A fictional quiet evening");
-  await page
-    .getByRole("button", { name: "Save note changes", exact: true })
-    .click();
+  await page.getByLabel("Edit note").fill("A fictional quiet evening");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(
     page.getByText("A fictional quiet evening", { exact: true }),
   ).toBeVisible();
@@ -235,7 +215,7 @@ test("S4 thought draft, temporary memory permission, journal edit/delete/export 
   });
   const download = page.waitForEvent("download");
   await page
-    .getByRole("button", { name: "Export journal JSON", exact: true })
+    .getByRole("button", { name: "Export notes (JSON)", exact: true })
     .click();
   const journalFile = await download;
   expect(journalFile.suggestedFilename()).toBe("koe-synthetic-journal.json");
@@ -254,32 +234,29 @@ test("S4 thought draft, temporary memory permission, journal edit/delete/export 
     .getByRole("button", { name: "Yes, delete note", exact: true })
     .click();
   await expect(
-    page.getByText("No notes yet. Nothing needs to be tracked.", {
+    page.getByText("No notes yet. Your first one will appear here.", {
       exact: true,
     }),
   ).toBeVisible();
   await page
+    .getByRole("link", { name: "Back to Reflect", exact: true })
+    .click();
+  await page
     .getByRole("link", { name: "Scripted conversation", exact: true })
     .click();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
   await page
-    .getByRole("button", { name: "Start the script", exact: true })
-    .click();
-  await page
-    .getByLabel("Your fictional words (optional)")
+    .getByLabel("Your words")
     .fill("Keep this draft during an interruption");
   await page
-    .getByRole("button", { name: "Preview interruption", exact: true })
+    .getByRole("button", { name: "Preview an error (review)", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("Error-state preview");
-  await page
-    .getByRole("button", { name: "Retry the script", exact: true })
-    .click();
-  await expect(page.getByLabel("Your fictional words (optional)")).toHaveValue(
+  await expect(page.getByRole("status")).toContainText("Error preview");
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByLabel("Your words")).toHaveValue(
     "Keep this draft during an interruption",
   );
-  await page
-    .getByRole("button", { name: "Cancel exchange", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Stop here", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "You can leave it here.", exact: true }),
   ).toBeVisible();
@@ -301,19 +278,19 @@ test("S4 offline, revoked memory and paused coaching have explicit boundaries", 
     page.getByRole("banner").getByRole("link", { name: "Help & support" }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Restore preview", exact: true })
+    .getByRole("button", { name: "Turn the script back on", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Start the script", exact: true }),
+    page.getByRole("button", { name: "Start", exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Review explorer" }).click();
   await page.getByLabel("Fictional scenario").selectOption("revoked consent");
   await page.locator('main a[href="/settings/memory"]').click();
   await expect(
-    page.getByLabel("Allow approved memory in suggestions"),
+    page.getByLabel("Let suggestions use memory cards"),
   ).not.toBeChecked();
   await expect(
-    page.getByRole("button", { name: "Approve new memory", exact: true }),
+    page.getByRole("button", { name: "Keep this card", exact: true }),
   ).toBeDisabled();
   await page.getByRole("link", { name: "Review explorer" }).click();
   await page.getByLabel("Fictional scenario").selectOption("coaching paused");
@@ -328,13 +305,13 @@ test("S4 offline, revoked memory and paused coaching have explicit boundaries", 
     page.getByText(/UX preview; not a validated safety response/),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Start the script", exact: true }),
+    page.getByRole("button", { name: "Start", exact: true }),
   ).toHaveCount(0);
   await page.getByRole("link", { name: "Reflect", exact: true }).click();
   await expect(
     page.getByRole("link", { name: "Scripted conversation", exact: true }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("link", { name: "Energy & journal", exact: true }),
+    page.getByRole("link", { name: "Journal", exact: true }),
   ).toBeVisible();
 });

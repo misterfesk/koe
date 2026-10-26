@@ -24,7 +24,7 @@ export function Planner() {
     if (sourceId && !canRetrieveMemory(state, sourceId)) {
       setErrors({
         title:
-          "The original memory is no longer approved. Edit a separate step, or discard this draft.",
+          "The memory card behind this step was deleted or paused. Rewrite the step in your own words, or discard the draft.",
       });
       focusFirstInvalid(e);
       return;
@@ -53,14 +53,14 @@ export function Planner() {
   return (
     <>
       <PageHeading
-        eyebrow="Steps · make it yours"
-        description="Choose an ordinary, safe action that fits your day. Rest and asking for help are valid choices."
+        eyebrow="Steps · new step"
+        description="Something ordinary and safe that fits today. Rest and asking for help count."
       >
-        What would matter a little?
+        Write a step
       </PageHeading>
       <form onSubmit={submit} noValidate className="prose">
         <Select
-          label="Meaningful area"
+          label="Area"
           value={area}
           onChange={setArea}
           options={[
@@ -80,24 +80,24 @@ export function Planner() {
           }}
           maxLength={240}
           error={errors.title}
-          hint="Fictional examples only. Keep it specific and adjustable."
+          hint="Small and specific works best, like “Read one page”."
         />
         <button
           type="button"
           className="secondary"
-          onClick={() => setTitle(makeSmaller(title || "an activity I choose"))}
+          onClick={() => setTitle(makeSmaller(title || "a step I choose"))}
         >
-          Make this smaller, then edit
+          Make it smaller
         </button>
         <div className="divider" />
         <Field
-          label="Prediction (optional)"
+          label="What do you expect will happen? (optional)"
           value={prediction}
           onChange={setPrediction}
           maxLength={500}
           multiline
           error={errors.prediction}
-          hint="For example: I expect one page will feel like too much. This is an ordinary-action preview, not an exposure exercise."
+          hint="For example: “One page will feel like too much.” After you try it, you can compare. This is an everyday step, not an exposure exercise."
         />
         <div className="actions">
           <button type="submit">Choose this step</button>

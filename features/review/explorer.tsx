@@ -12,9 +12,9 @@ export function ReviewExplorer() {
     <>
       <PageHeading
         eyebrow="Review tools"
-        description="Explore every candidate feature. All people and histories are fictional; typing stays in this browser session."
+        description="Every candidate feature, and scenarios to test them in. All people and histories are fictional."
       >
-        The whole picture.
+        Review explorer
       </PageHeading>
       <div className="panel">
         <Select
@@ -26,8 +26,7 @@ export function ReviewExplorer() {
           }
         />
         <p className="hint">
-          Switching scenarios discards this session, including drafts. Use Help
-          to test leaving a draft without resetting it.
+          Switching scenarios clears this session, including drafts.
         </p>
         <button
           className="secondary"
@@ -45,7 +44,7 @@ export function ReviewExplorer() {
           <li key={id}>
             <Link href={href}>
               <span className="meta">{id} / </span>
-              <strong>{label}</strong> <span aria-hidden="true">↗</span>
+              <strong>{label}</strong> <span aria-hidden="true">→</span>
             </Link>
           </li>
         ))}

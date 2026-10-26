@@ -2,13 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, useDraft } from "@/components/session";
-import {
-  PageHeading,
-  Select,
-  Toggle,
-  Notice,
-  ActionLink,
-} from "@/components/ui";
+import { PageHeading, Select, Toggle, ActionLink } from "@/components/ui";
 import type { Energy } from "@/domain/tone";
 import { regionOptions } from "@/fixtures/help-resources";
 export function Onboarding() {
@@ -21,31 +15,37 @@ export function Onboarding() {
     <>
       <PageHeading
         eyebrow={"Getting started · " + (n + 1) + " of 3"}
-        description="A few optional choices. Back and skip are always available."
+        description={
+          [
+            "Three short questions. You can skip setup at any point.",
+            "These set today's suggestion. You can change energy on Today.",
+            "Help & support shows a verified service for this region.",
+          ][n]
+        }
       >
         {[
-          "A little context, on your terms.",
-          "What matters for this day?",
-          "Know where to find support.",
+          "Before you start",
+          "What would you like more time for?",
+          "Where are you?",
         ][n] ?? "Getting started"}
       </PageHeading>
       <div className="prose">
         {n === 0 ? (
           <>
             <p>
-              This private review is for adults 18+. Use fictional details only.
-              Koe is a software prototype, not a person or clinician.
+              This private review is for adults. Use fictional details only. Koe
+              is software, not a person or a clinician.
             </p>
             <div className="panel">
               <h2>What this build does</h2>
               <p>
-                It offers optional steps and scripted reflection, with ways to
-                prepare for human support. It cannot assess danger or provide
-                treatment.
+                It suggests small steps, offers scripted reflection and helps
+                you prepare to reach people. It can&apos;t assess danger or
+                provide treatment.
               </p>
               <p>
-                There is no live AI. Typing stays in this browser session;
-                reloading clears it. No message or notification is sent.
+                There is no live AI. What you type stays in this tab until you
+                reload. Nothing is sent.
               </p>
             </div>
             <Toggle
@@ -65,7 +65,7 @@ export function Onboarding() {
         ) : n === 1 ? (
           <>
             <Select
-              label="What would you like room for?"
+              label="Focus"
               value={state.goal}
               onChange={(goal) =>
                 dispatch({ type: "profile", value: { goal } })
@@ -80,7 +80,7 @@ export function Onboarding() {
               ].map((x) => ({ value: x, label: x }))}
             />
             <Select
-              label="Energy for this fictional day"
+              label="Energy today"
               value={state.energy}
               onChange={(value) =>
                 dispatch({ type: "energy", value: value as Energy })
@@ -93,8 +93,8 @@ export function Onboarding() {
               ]}
             />
             <p className="hint">
-              Your choice changes the size and tone of suggestions. It is not a
-              clinical assessment.
+              Energy changes how big the suggestion is and how Koe sounds. It
+              isn&apos;t an assessment.
             </p>
           </>
         ) : (
@@ -108,13 +108,9 @@ export function Onboarding() {
               options={regionOptions}
             />
             <p>
-              Help is available without finishing setup. Listings are dated and
-              locally bundled; availability is not guaranteed.
+              Help & support is in the header on every screen, whether or not
+              you finish setup.
             </p>
-            <Notice>
-              Memory approval and reminder preferences are separate, optional
-              controls. Nothing here opts you in.
-            </Notice>
           </>
         )}
         <div className="actions">
@@ -130,7 +126,7 @@ export function Onboarding() {
             onClick={() => {
               if (n === 0 && !state.adult) {
                 setError(
-                  "Confirm adult review, or skip setup to explore fictional examples.",
+                  "Confirm you're 18 or older to continue, or skip setup.",
                 );
                 requestAnimationFrame(() =>
                   document
@@ -152,10 +148,6 @@ export function Onboarding() {
             Skip setup
           </ActionLink>
         </div>
-        <p className="meta">
-          Skipping leaves optional choices unset. The same adult, fictional-data
-          scope applies.
-        </p>
       </div>
     </>
   );

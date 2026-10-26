@@ -13,7 +13,7 @@ import { downloadJson } from "@/services/export";
 const schema = z
   .string()
   .trim()
-  .min(1, "Describe a fictional issue first.")
+  .min(1, "Describe the problem first.")
   .max(1000);
 export function ReportPreview() {
   const [text, setText] = useDraft("report.text");
@@ -33,14 +33,14 @@ export function ReportPreview() {
   return (
     <>
       <PageHeading
-        eyebrow="Report a problem · preview only"
-        description="There is no monitored inbox here. Use fictional details only. For urgent human support, open Help."
+        eyebrow="Help & support · preview"
+        description="Nobody reads these reports in this build. For support now, go back to Help & support."
       >
-        Make the issue visible.
+        Report a problem
       </PageHeading>
       <form className="prose" onSubmit={submit} noValidate>
         <Field
-          label="Fictional issue"
+          label="What went wrong?"
           value={text}
           onChange={setText}
           multiline
@@ -50,13 +50,13 @@ export function ReportPreview() {
         <div className="actions">
           <button>Preview report</button>
           <ActionLink href="/help" secondary>
-            Return to Help
+            Back to Help & support
           </ActionLink>
         </div>
       </form>
       {preview && (
         <section className="panel prose">
-          <Notice>Report preview prepared. Nothing was submitted.</Notice>
+          <Notice>Here is your report. Nothing was submitted.</Notice>
           <pre>{preview}</pre>
           <button
             className="secondary"
@@ -67,7 +67,7 @@ export function ReportPreview() {
               })
             }
           >
-            Export report preview JSON
+            Export report (JSON)
           </button>
         </section>
       )}

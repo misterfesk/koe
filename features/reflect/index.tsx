@@ -3,93 +3,80 @@
 import Link from "next/link";
 import { useSession } from "@/components/session";
 import { ActionLink, Notice, PageHeading } from "@/components/ui";
-import { tone } from "@/domain/tone";
 
 export function ReflectIndex() {
   const { state } = useSession();
   const paused = state.scenario === "coaching paused";
+  const active = state.steps.find((step) => step.id === state.activeId);
+  // Ordered by effort: the quickest option comes first.
+  const options = [
+    {
+      href: "/reflect/journal",
+      title: "Journal",
+      text: "A few words and your energy. Nothing is scored or read into.",
+      show: true,
+    },
+    {
+      href: "/reflect/conversation",
+      title: "Scripted conversation",
+      text: "A short fixed script. You decide whether to see a suggestion.",
+      show: !paused,
+    },
+    {
+      href: "/reflect/thoughts",
+      title: "Thought reflection",
+      text: "Four prompts about a moment. Skip any of them.",
+      show: !paused,
+    },
+    {
+      href: "/reflect/review",
+      title: "Weekly review",
+      text: active
+        ? "Look back on “" + active.title + "” and decide what comes next."
+        : "Look back on a step and decide what comes next.",
+      show: !paused,
+    },
+  ];
   return (
     <>
       <PageHeading
         eyebrow="Reflect"
         description={
-          tone(state.appearance.tone, "reflection", state.energy).message
+          state.energy === "low"
+            ? "Low on energy? A short journal note is enough."
+            : "Pick whichever takes the least effort right now."
         }
       >
-        A little space to notice.
+        Reflect
       </PageHeading>
       {paused && (
         <>
           <Notice>
             UX preview; not a validated safety response. Ordinary coaching is
-            paused. Notes and memory controls remain available; no real input
-            was assessed.
+            paused. Your journal and memory cards are still available; no real
+            input was assessed.
           </Notice>
           <ActionLink href="/help">Open Help & support</ActionLink>
         </>
       )}
       <ul className="rows">
-        {!paused && (
-          <li>
-            <p className="eyebrow">An optional exchange</p>
-            <h2>
-              <Link href="/reflect/conversation">
-                Scripted conversation <span aria-hidden="true">↗</span>
-              </Link>
-            </h2>
-            <p>
-              A clearly labelled fixed script. You decide whether an idea would
-              help.
-            </p>
-          </li>
-        )}
-        {!paused && (
-          <li>
-            <p className="eyebrow">Your own perspective</p>
-            <h2>
-              <Link href="/reflect/thoughts">
-                Thought reflection <span aria-hidden="true">↗</span>
-              </Link>
-            </h2>
-            <p>Optional prompts, with room to leave an alternative blank.</p>
-          </li>
-        )}
-        <li>
-          <p className="eyebrow">A session timeline</p>
-          <h2>
-            <Link href="/reflect/journal">
-              Energy & journal <span aria-hidden="true">↗</span>
-            </Link>
-          </h2>
-          <p>
-            A note or reported energy, if useful. No scores or patterns
-            inferred.
-          </p>
-        </li>
-        {!paused && (
-          <li>
-            <p className="eyebrow">Change what comes next</p>
-            <h2>
-              <Link href="/reflect/review">
-                Weekly reflection <span aria-hidden="true">↗</span>
-              </Link>
-            </h2>
-            <p>
-              Keep a plan, shrink it, switch activities or make room for human
-              support.
-            </p>
-          </li>
-        )}
-        <li>
-          <p className="eyebrow">Permission, in view</p>
-          <h2>
-            <Link href="/settings/memory">
-              Approved memory <span aria-hidden="true">↗</span>
-            </Link>
-          </h2>
-          <p>Inspect, edit, export or remove the words you chose to keep.</p>
-        </li>
+        {options
+          .filter((option) => option.show)
+          .map((option) => (
+            <li key={option.href}>
+              <h2>
+                <Link href={option.href}>
+                  {option.title} <span aria-hidden="true">→</span>
+                </Link>
+              </h2>
+              <p>{option.text}</p>
+            </li>
+          ))}
       </ul>
+      <p className="meta">
+        Anything you keep as a memory card is in{" "}
+        <Link href="/settings/memory">Settings → Memory</Link>.
+      </p>
     </>
   );
 }

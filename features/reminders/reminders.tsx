@@ -45,7 +45,7 @@ const days = [
 ];
 const virtualTimeInput = z.string().datetime({
   offset: true,
-  message: "Use an ISO time with Z or a timezone offset.",
+  message: "Use an ISO time with Z or an offset, like 2026-10-26T09:00Z.",
 });
 
 export function ReminderSettings() {
@@ -114,6 +114,9 @@ export function ReminderSettings() {
     ],
   );
   const selected = state.steps.find((step) => step.id === current.targetId);
+  // The step being set up, which may come from the step page before it is applied.
+  const focus =
+    state.steps.find((step) => step.id === liveTargetId) ?? selected;
 
   function focusError(form: "preferences" | "clock") {
     requestAnimationFrame(() =>
@@ -164,7 +167,7 @@ export function ReminderSettings() {
     if (!next) return;
     dispatch({ type: "clock", value: next });
     dispatch({ type: "clearDraft", prefix: "reminder.clock." });
-    setFeedback("Virtual time advanced. No notifications will be sent.");
+    setFeedback("Virtual time moved forward.");
   }
 
   function applyTime(e: FormEvent) {
@@ -174,7 +177,7 @@ export function ReminderSettings() {
     if (!iso) {
       setClockError(
         parsed.success
-          ? "Use a valid ISO virtual time."
+          ? "That time doesn't exist. Use an ISO time like 2026-10-26T09:00Z."
           : parsed.error.issues[0].message,
       );
       focusError("clock");
@@ -183,7 +186,7 @@ export function ReminderSettings() {
     setClockError("");
     dispatch({ type: "clock", value: iso });
     dispatch({ type: "clearDraft", prefix: "reminder.clock." });
-    setFeedback("Virtual time updated. No notifications will be sent.");
+    setFeedback("Virtual time set.");
   }
 
   if (state.scenario === "coaching paused")
@@ -191,20 +194,26 @@ export function ReminderSettings() {
   return (
     <>
       <PageHeading
-        eyebrow="Settings · reminder preview"
-        description="An optional fixture preview on a virtual clock. This app never asks for notification permission or delivers anything."
+        eyebrow="Settings"
+        description={
+          focus
+            ? "When a reminder about “" +
+              focus.title +
+              "” would arrive. Koe never asks for notification permission or sends anything."
+            : "Pick a step and see when a reminder would arrive, on a virtual clock. Koe never asks for notification permission or sends anything."
+        }
       >
-        A nudge, only on your terms.
+        Reminder preview
       </PageHeading>
       <div className="split">
         <form data-reminder-form="preferences" onSubmit={apply} noValidate>
           <Toggle
-            label="Opt in to a reminder preview"
+            label="Turn on a reminder preview"
             checked={enabled === "true"}
             onChange={(value) => setEnabled(String(value))}
           />
           <Select
-            label="Step to follow up"
+            label="Step"
             value={liveTargetId}
             onChange={setTargetId}
             error={errors.targetId}
@@ -272,16 +281,15 @@ export function ReminderSettings() {
             />
           </div>
           <p className="hint">
-            A preview inside quiet hours moves to the end of that window. Equal
-            start/end means no quiet window. A nonexistent hour during a clock
-            change is omitted; a repeated hour is used once.
+            A reminder due in quiet hours moves to when they end. The same start
+            and end means no quiet hours. Daylight-saving gaps are skipped.
           </p>
-          <button type="submit">Apply preview preferences</button>
+          <button type="submit">Update preview</button>
         </form>
         <aside className="stack" aria-label="Applied reminder and virtual time">
           <section className="panel">
-            <p className="eyebrow">Applied preferences</p>
-            <h2>Next preview</h2>
+            <p className="eyebrow">With your saved settings</p>
+            <h2>Next reminder would arrive</h2>
             {preview.kind === "ready" ? (
               <>
                 <p>{preview.title}</p>
@@ -293,19 +301,16 @@ export function ReminderSettings() {
                   <span className="meta">{current.timezone}</span>
                 </p>
                 {preview.deferred && (
-                  <p className="hint">Moved out of quiet hours.</p>
+                  <p className="hint">Moved out of your quiet hours.</p>
                 )}
                 <p className="hint">
-                  Neutral notification text: “A moment for your chosen step, if
-                  useful.”
+                  It would say: “Your step is here when you want it.”
                 </p>
               </>
             ) : preview.kind === "idle" ? (
               <p>{preview.reason}</p>
             ) : (
-              <p>
-                Preview unavailable: {Object.values(preview.errors).join(" ")}
-              </p>
+              <p>No preview: {Object.values(preview.errors).join(" ")}</p>
             )}
             <div className="actions">
               <button
@@ -318,9 +323,7 @@ export function ReminderSettings() {
                     value: { ...current, paused: !current.paused },
                   });
                   setFeedback(
-                    current.paused
-                      ? "Preview resumed. No notifications will be sent."
-                      : "Preview paused. No notifications will be sent.",
+                    current.paused ? "Preview resumed." : "Preview paused.",
                   );
                 }}
               >
@@ -328,55 +331,58 @@ export function ReminderSettings() {
               </button>
               {selected && (
                 <ActionLink href={"/steps/" + selected.id} secondary>
-                  Open selected step
+                  Open step
                 </ActionLink>
               )}
             </div>
             <p className="meta">
-              A stopped or deleted plan cannot produce a pending preview.
-              Resuming a plan does not automatically resume its preview.
+              A paused or deleted step has no reminder. Resuming a step leaves
+              its preview paused until you resume it here.
             </p>
           </section>
           <section className="panel">
             <h2>Virtual time</h2>
             <p className="meta">
-              Current fixture clock:{" "}
+              Virtual clock now:{" "}
               <time dateTime={state.clock}>{state.clock}</time>
             </p>
             <form data-reminder-form="clock" onSubmit={applyTime} noValidate>
               <Field
-                label="Virtual clock (ISO time)"
+                label="Set the virtual clock (ISO time)"
                 value={virtualTime}
                 onChange={setVirtualTime}
                 error={clockError}
                 maxLength={80}
               />
               <button className="secondary" type="submit">
-                Apply virtual time
+                Set time
               </button>
             </form>
             <div className="actions">
               <button className="secondary" onClick={() => advance(1)}>
-                Advance one virtual hour
+                +1 hour
               </button>
               <button className="secondary" onClick={() => advance(24)}>
-                Advance one virtual day
+                +1 day
               </button>
             </div>
             <p className="hint">
-              No real-time timers, delivery log or missed-reminder backlog.
+              Moving the clock never builds up missed reminders.
             </p>
           </section>
         </aside>
       </div>
       {feedback && <Notice id="reminder-feedback">{feedback}</Notice>}
       <div className="actions">
-        <ActionLink href="/steps" secondary>
-          Back to Steps
-        </ActionLink>
-        <ActionLink href="/settings" secondary>
-          Back to Settings
-        </ActionLink>
+        {focus ? (
+          <ActionLink href={"/steps/" + focus.id} secondary>
+            Back to the step
+          </ActionLink>
+        ) : (
+          <ActionLink href="/settings" secondary>
+            Back to Settings
+          </ActionLink>
+        )}
       </div>
     </>
   );

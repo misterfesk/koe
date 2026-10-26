@@ -26,8 +26,8 @@ it("does not attribute an earlier report to an untried adjustment", () => {
   s = reducer(s, { type: "acceptAdjustment", id });
   session.state = s;
   render(<Today />);
-  expect(screen.queryByText(/You reported: Partly/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/You said: Partly/)).not.toBeInTheDocument();
   expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-    "A step that's yours",
+    "This one's yours",
   );
 });

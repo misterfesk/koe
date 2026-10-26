@@ -18,7 +18,7 @@ test("foundation: local shell, real 404, scenarios, accessible mobile and deskto
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.goto("/unknown-page");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "A different way back.",
+    "Page not found",
   );
   await expect(
     page.getByRole("banner").getByRole("link", { name: "Help & support" }),

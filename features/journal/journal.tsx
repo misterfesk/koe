@@ -56,13 +56,13 @@ function JournalEntry({ note }: { note: Journal }) {
     <li className={styles.entry}>
       <div className={styles.date}>
         <p className="eyebrow">{note.at.slice(0, 10)}</p>
-        <p className="meta">Reported energy: {energyLabels[note.energy]}</p>
+        <p className="meta">Energy: {energyLabels[note.energy]}</p>
       </div>
       <div className={styles.body}>
         {editing === "yes" ? (
           <form id={"edit-" + note.id} onSubmit={save} noValidate>
             <Field
-              label="Edit journal note"
+              label="Edit note"
               value={text}
               onChange={setText}
               multiline
@@ -70,11 +70,10 @@ function JournalEntry({ note }: { note: Journal }) {
               error={error}
             />
             <p className="hint">
-              The original energy report is retained. This edits the note
-              wording.
+              This changes the words. The energy stays as you said it.
             </p>
             <div className="actions">
-              <button>Save note changes</button>
+              <button>Save changes</button>
               <button
                 className="secondary"
                 type="button"
@@ -89,7 +88,7 @@ function JournalEntry({ note }: { note: Journal }) {
           </form>
         ) : (
           <p id={"note-" + note.id} tabIndex={-1} className={styles.text}>
-            {note.text || "No written note. Energy report only."}
+            {note.text || "No words, just energy."}
           </p>
         )}
         <div className="actions">
@@ -163,7 +162,7 @@ export function JournalPage() {
     setError("");
     setStatus(
       tone(state.appearance.tone, "reflected", energy as Energy).message +
-        " Your reported energy and note are in this session timeline. Nothing was added to memory. Edit energy or wording to add a different note.",
+        " It's in your notes below. Nothing was added to memory.",
     );
     requestAnimationFrame(() =>
       document.getElementById("journal-status")?.focus(),
@@ -173,17 +172,17 @@ export function JournalPage() {
   return (
     <>
       <PageHeading
-        eyebrow="Reflect · energy & journal"
+        eyebrow="Reflect"
         description={
           tone(state.appearance.tone, "journal", state.energy).message
         }
       >
-        A note, if it helps.
+        Journal
       </PageHeading>
       <div className={styles.composer}>
         <form onSubmit={record} noValidate>
           <Select
-            label="Energy for this note"
+            label="Energy right now"
             value={energy}
             onChange={(value) => {
               setEnergy(value);
@@ -193,7 +192,7 @@ export function JournalPage() {
             options={energyOptions}
           />
           <Field
-            label="Fictional journal note (optional)"
+            label="Note (optional)"
             value={text}
             onChange={(value) => {
               setText(value);
@@ -203,11 +202,11 @@ export function JournalPage() {
             multiline
             maxLength={3000}
             error={error}
-            hint="Use fictional words. No mood, diagnosis or cause is inferred."
+            hint="Koe doesn't read mood, diagnosis or causes into it."
           />
           <div className="actions">
             <button disabled={recordedAt === state.clock}>
-              Record energy / note
+              Add to journal
             </button>
             <ActionLink href="/reflect" secondary>
               Keep draft & leave
@@ -222,7 +221,7 @@ export function JournalPage() {
                 setError("");
               }}
             >
-              Discard note draft
+              Discard draft
             </button>
           </div>
         </form>
@@ -231,7 +230,7 @@ export function JournalPage() {
       <section className={styles.timeline} aria-labelledby="journal-timeline">
         <div className={styles.timelineHead}>
           <h2 id="journal-timeline" tabIndex={-1}>
-            Your session timeline
+            Your notes
           </h2>
           <button
             className="secondary"
@@ -242,17 +241,17 @@ export function JournalPage() {
               })
             }
           >
-            Export journal JSON
+            Export notes (JSON)
           </button>
         </div>
         {state.journal.length === 0 ? (
-          <Empty>No notes yet. Nothing needs to be tracked.</Empty>
+          <Empty>No notes yet. Your first one will appear here.</Empty>
         ) : (
           <>
             <p className="meta">
               {state.journal.length === 1
-                ? "One note is not a pattern. This timeline does not infer a cause."
-                : "These are reported experiences, not inferred mood or causal trends."}
+                ? "One note isn't a pattern."
+                : "These are your own words. Koe doesn't read trends or causes into them."}
             </p>
             <ul className="rows">
               {[...state.journal].reverse().map((note) => (
@@ -263,14 +262,8 @@ export function JournalPage() {
         )}
       </section>
       <div className="actions">
-        <ActionLink href="/reflect/conversation" secondary>
-          Scripted conversation
-        </ActionLink>
-        <ActionLink href="/settings/memory" secondary>
-          Approved memory
-        </ActionLink>
-        <ActionLink href="/reflect/review" secondary>
-          Weekly reflection
+        <ActionLink href="/reflect" secondary>
+          Back to Reflect
         </ActionLink>
       </div>
     </>

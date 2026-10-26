@@ -1,3 +1,3 @@
 export default function Loading() {
-  return <p role="status">Opening this page…</p>;
+  return <p role="status">Loading…</p>;
 }

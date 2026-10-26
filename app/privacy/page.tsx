@@ -3,28 +3,26 @@ export default function Page() {
   return (
     <>
       <PageHeading
-        eyebrow="Privacy · review-build explanation"
-        description="This describes this local app, not a future service or legal policy."
+        eyebrow="Privacy"
+        description="How this review build handles what you type. It is not a policy for a future service."
       >
         A session, not a record.
       </PageHeading>
       <div className="prose">
         <p>
-          Use fictional details only. Text and choices remain in this tab’s
-          React state. Reloading starts over. There is no backend database,
-          browser storage of free text, advertising, analytics or live AI
-          integration.
+          Use fictional details only. What you type stays in this browser tab
+          and is cleared when you reload. Nothing is saved to the browser or a
+          server, and there is no advertising, analytics or live AI.
         </p>
         <p>
-          Approve individual memory cards explicitly. Temporary mode prevents
-          new memory and omits approved cards from retrieval. Inspect or remove
-          cards in Settings.
+          Koe only remembers words you approve as a memory card. Temporary mode
+          stops new cards and keeps existing ones out of suggestions. You can
+          edit or delete cards in Settings → Memory.
         </p>
         <p>
-          Exports download to your computer and copy controls write to your
-          clipboard when you choose them. The app cannot delete those copies.
-          Official help links open external sites only when you follow them;
-          their policies then apply.
+          Exports and copied text leave the app when you choose them, and Koe
+          can&apos;t delete those copies. Official help links open other sites,
+          whose own policies apply.
         </p>
         <p>
           A future service needs verified data flows, retention, provider terms,
@@ -32,9 +30,7 @@ export default function Page() {
           does not promise production confidentiality or readiness.
         </p>
         <div className="actions">
-          <ActionLink href="/settings/privacy">
-            Open session controls
-          </ActionLink>
+          <ActionLink href="/settings/privacy">Manage your data</ActionLink>
           <ActionLink href="/help" secondary>
             Help & support
           </ActionLink>

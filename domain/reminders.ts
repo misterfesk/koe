@@ -31,7 +31,7 @@ export const reminderInput = z
       context.addIssue({
         code: "custom",
         path: ["targetId"],
-        message: "Choose a step before opting in.",
+        message: "Choose the step to be reminded about.",
       });
     }
   });
@@ -97,7 +97,7 @@ export function reminderPreview(
       errors: { clock: "Use a valid ISO virtual time." },
     };
   if (!config.enabled)
-    return { kind: "idle", reason: "No reminder preview is opted in." };
+    return { kind: "idle", reason: "No reminder preview is turned on." };
   if (config.paused)
     return {
       kind: "idle",
@@ -107,12 +107,12 @@ export function reminderPreview(
   if (!target)
     return {
       kind: "idle",
-      reason: "The selected step no longer exists. Nothing is pending.",
+      reason: "That step no longer exists. Nothing is pending.",
     };
   if (target.paused)
     return {
       kind: "idle",
-      reason: "The selected step is paused. Nothing is pending.",
+      reason: "That step is paused. Nothing is pending.",
     };
   if (
     "sourceMemoryId" in target &&
@@ -124,7 +124,7 @@ export function reminderPreview(
     return {
       kind: "idle",
       reason:
-        "The approved memory for this plan is unavailable. No preview is pending.",
+        "The memory card behind this step is deleted or paused. Nothing is pending.",
     };
   }
 
@@ -185,7 +185,6 @@ export function reminderPreview(
   }
   return {
     kind: "idle",
-    reason:
-      "No future preview in this virtual window. Choose another time if useful.",
+    reason: "No preview falls in this virtual window. Try another time.",
   };
 }

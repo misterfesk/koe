@@ -3,10 +3,10 @@ export default function NotFound() {
   return (
     <>
       <PageHeading
-        eyebrow="404 · Page not found"
-        description="This address doesn't lead to a Koe page."
+        eyebrow="404"
+        description="This address doesn't lead to a Koe page. Today and Help & support are one click away."
       >
-        A different way back.
+        Page not found
       </PageHeading>
       <div className="actions">
         <ActionLink href="/today">Go to Today</ActionLink>

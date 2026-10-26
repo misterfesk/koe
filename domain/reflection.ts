@@ -47,8 +47,7 @@ export function approveMemory(
   if (state.temporary || !state.memoryConsent) {
     return {
       ok: false,
-      error:
-        "Memory approval is paused. Your words remain only in this session draft.",
+      error: "Memory cards are paused. Your words stay in the draft.",
     };
   }
   const parsed = memoryText.safeParse(text);
@@ -87,14 +86,13 @@ export function prepareConversationStep(
   if (!option)
     return {
       ok: false,
-      error:
-        "An idea is not available without your permission and the local preview.",
+      error: "A suggestion needs your permission and the script turned on.",
     };
   if (sourceMemoryId && !canRetrieveMemory(state, sourceMemoryId))
     return {
       ok: false,
       error:
-        "The memory behind this draft is no longer approved. Edit it as your own words, or use the current idea.",
+        "The memory card behind this step was deleted or paused. Rewrite it in your own words, or use the current suggestion.",
     };
   const parsed = stepInput.safeParse({
     title,
@@ -117,7 +115,8 @@ export function prepareReflectionStep(
   if (hasPlannerDraft(state)) {
     return {
       ok: false,
-      error: "A planner draft is already open. Inspect it before replacing it.",
+      error:
+        "A step draft is already open in the planner. Open it before starting another.",
     };
   }
   const parsed = stepInput.safeParse({ title, area, prediction: "" });
@@ -137,7 +136,10 @@ export function journalActions(text: string, energy: Energy): ActionsResult {
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0].message };
   if (!parsed.data.text && energy === "unknown")
-    return { ok: false, error: "Nothing recorded. You can leave this blank." };
+    return {
+      ok: false,
+      error: "Nothing to add yet. Write a note or choose your energy.",
+    };
   return {
     ok: true,
     actions: [

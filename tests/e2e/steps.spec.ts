@@ -9,7 +9,7 @@ test("S1 drafts, validation and versioned step lifecycle", async ({ page }) => {
   await expect(page.getByLabel("Your step")).toBeFocused();
   await page.getByLabel("Your step").fill("Read a page");
   await page
-    .getByLabel("Prediction (optional)")
+    .getByLabel("What do you expect will happen? (optional)")
     .fill("It might feel difficult");
   await page
     .getByRole("banner")
@@ -24,25 +24,23 @@ test("S1 drafts, validation and versioned step lifecycle", async ({ page }) => {
     "Read a page",
   );
   await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
-  await page.getByLabel("What happened?").selectOption("Partly");
+  await page.getByLabel("How it went").selectOption("Partly");
+  await page.getByLabel("What got in the way?").fill("Too much at once");
   await page
-    .getByLabel("What got in the way? (optional)")
-    .fill("Too much at once");
-  await page
-    .getByLabel("What was it like? (optional)")
+    .getByLabel("How did it compare with what you expected?")
     .fill("A line was enough");
-  await page.getByRole("button", { name: "Record this experience" }).click();
+  await page.getByRole("button", { name: "Save how it went" }).click();
   await expect(
     page.getByText("A line was enough", { exact: true }),
   ).toBeVisible();
   await expect(page.locator("#report-feedback")).toBeFocused();
-  await page.getByLabel("Proposed adjustment").fill("Read one line");
-  await page.getByRole("button", { name: "Preview adjustment" }).click();
-  await page.getByRole("button", { name: "Accept adjustment" }).click();
+  await page.getByLabel("Smaller version").fill("Read one line");
+  await page.getByRole("button", { name: "Preview the change" }).click();
+  await page.getByRole("button", { name: "Use this version" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Read one line",
   );
-  await expect(page.getByLabel("What happened?")).toHaveValue("");
+  await expect(page.getByLabel("How it went")).toHaveValue("");
   await expect(
     page.getByText("It might feel difficult", { exact: true }),
   ).toBeVisible();
@@ -50,7 +48,7 @@ test("S1 drafts, validation and versioned step lifecycle", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Read one line" }),
   ).toBeVisible();
-  await expect(page.getByText(/You reported: Partly/)).toHaveCount(0);
+  await expect(page.getByText(/You said: Partly/)).toHaveCount(0);
   await page.getByRole("link", { name: "Steps", exact: true }).click();
   await expect(page.getByRole("link", { name: "Read one line" })).toBeVisible();
 });
@@ -62,7 +60,7 @@ test("S1 skip is an exit, deleted steps differ from 404, long text reflows", asy
   await expect(
     page.getByRole("heading", { name: "You can leave it here." }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "Choose my own step" }).click();
+  await page.getByRole("link", { name: "Write my own step" }).click();
   await page.setViewportSize({ width: 320, height: 900 });
   await page.getByLabel("Your step").fill("x".repeat(240));
   await page.getByRole("button", { name: "Choose this step" }).click();
@@ -81,7 +79,10 @@ test("S1 skip is an exit, deleted steps differ from 404, long text reflows", asy
       () => document.documentElement.scrollWidth <= innerWidth + 1,
     ),
   ).toBe(true);
-  await page.getByRole("button", { name: "Remove step" }).click();
+  await page.getByRole("button", { name: "Delete step" }).click();
+  await page
+    .getByRole("button", { name: "Yes, delete step", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "This step no longer exists." }),
   ).toBeVisible();

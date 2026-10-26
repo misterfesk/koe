@@ -4,9 +4,9 @@ export default function Page() {
     <>
       <PageHeading
         eyebrow="About this build"
-        description="An adult, English-first exploration. Product direction is still an owner decision."
+        description="A private, English-first build for adults. Product direction is still the owner's decision."
       >
-        A review, with room to change.
+        What this build is for
       </PageHeading>
       <div className="prose">
         <p>
@@ -17,7 +17,7 @@ export default function Page() {
         </p>
         <h2>What is real here</h2>
         <p>
-          The local interactions, session drafts, plan changes and exports work.
+          The local interactions, session drafts, step changes and exports work.
           Help listings have dated primary sources and independent content
           checks.
         </p>
@@ -28,9 +28,9 @@ export default function Page() {
           No efficacy, legal or clinical approval is claimed.
         </p>
         <div className="actions">
-          <ActionLink href="/review">Review the features</ActionLink>
+          <ActionLink href="/review">Open the review explorer</ActionLink>
           <ActionLink href="/privacy" secondary>
-            Read the data explanation
+            How data is handled
           </ActionLink>
         </div>
       </div>

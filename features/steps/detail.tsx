@@ -1,5 +1,6 @@
 "use client";
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useSession, useDraft } from "@/components/session";
 import {
   PageHeading,
@@ -7,6 +8,7 @@ import {
   Select,
   ActionLink,
   Notice,
+  ConfirmDelete,
   focusFirstInvalid,
 } from "@/components/ui";
 import { makeSmaller, currentReport, type Outcome } from "@/domain/state";
@@ -14,6 +16,7 @@ import { tone } from "@/domain/tone";
 import styles from "./steps.module.css";
 export function StepDetail({ id }: { id: string }) {
   const { state, dispatch } = useSession();
+  const router = useRouter();
   const p = state.steps.find((p) => p.id === id);
   const [outcome, setOutcome] = useDraft(
     id + ".v" + (p?.version ?? 0) + ".outcome",
@@ -31,8 +34,8 @@ export function StepDetail({ id }: { id: string }) {
     return (
       <>
         <PageHeading
-          eyebrow="Step unavailable"
-          description="It may have been removed or belonged to an earlier browser session."
+          eyebrow="Steps"
+          description="It was deleted, or it belonged to an earlier session."
         >
           This step no longer exists.
         </PageHeading>
@@ -41,12 +44,12 @@ export function StepDetail({ id }: { id: string }) {
     );
   const latest = currentReport(p);
   const reported = !!latest;
-  const context = latest
-    ? latest.outcome === "Done"
-      ? "done"
-      : "setback"
-    : "chosen";
-  const voice = tone(state.appearance.tone, context, state.energy);
+  const voice = tone(
+    state.appearance.tone,
+    latest ? (latest.outcome === "Done" ? "done" : "setback") : "chosen",
+    state.energy,
+  );
+  const onToday = p.id === state.activeId && !p.paused;
   function report(e: FormEvent) {
     e.preventDefault();
     if (reported) return;
@@ -55,7 +58,7 @@ export function StepDetail({ id }: { id: string }) {
         outcome,
       )
     ) {
-      setReportError("Choose an outcome, or leave without reporting.");
+      setReportError("Choose how it went, or leave without saying.");
       focusFirstInvalid(e);
       return;
     }
@@ -76,8 +79,8 @@ export function StepDetail({ id }: { id: string }) {
   return (
     <>
       <PageHeading
-        eyebrow={p.area + " · Version " + p.version}
-        description={voice.message}
+        eyebrow={p.area + (p.routine ? " · Routine" : "")}
+        description={reported ? undefined : voice.message}
       >
         {p.title}
       </PageHeading>
@@ -88,52 +91,58 @@ export function StepDetail({ id }: { id: string }) {
       )}
       {p.prediction && (
         <div className="panel">
-          <p className="eyebrow">Your original prediction</p>
+          <p className="eyebrow">What you expected</p>
           <p>{p.prediction}</p>
         </div>
       )}
       {!reported ? (
         <form onSubmit={report} className="prose">
-          <h2 className="divider">What was your experience?</h2>
+          <h2 className="divider">How did it go?</h2>
+          <p className="hint">
+            {onToday
+              ? "Whenever you've tried it. Until then it stays on Today."
+              : "Whenever you've tried it."}{" "}
+            Only the first question needs an answer.
+          </p>
           <Select
-            label="What happened?"
+            label="How it went"
             value={outcome}
             onChange={setOutcome}
             error={reportError}
             options={[
-              { value: "", label: "Choose an outcome" },
+              { value: "", label: "Choose one" },
               ...["Done", "Partly", "Not this time", "Prefer not to say"].map(
                 (x) => ({ value: x, label: x }),
               ),
             ]}
           />
           <Field
-            label="What got in the way? (optional)"
+            label="What got in the way?"
             value={barrier}
             onChange={setBarrier}
             maxLength={1000}
             multiline
           />
           <Field
-            label="What was it like? (optional)"
+            label={
+              p.prediction
+                ? "How did it compare with what you expected?"
+                : "What was it like?"
+            }
             value={experience}
             onChange={setExperience}
             maxLength={1000}
             multiline
-            hint="Compare this with your prediction in your own words. One report cannot show what caused a change."
+            hint={
+              p.prediction
+                ? "In your own words. One try can't show what caused a difference."
+                : undefined
+            }
           />
-          <button>Record this experience</button>
+          <button>Save how it went</button>
         </form>
       ) : (
-        <Notice id="report-feedback">
-          {
-            tone(
-              state.appearance.tone,
-              latest?.outcome === "Done" ? "done" : "setback",
-              state.energy,
-            ).message
-          }
-        </Notice>
+        <Notice id="report-feedback">{voice.message}</Notice>
       )}
       {p.versions?.some(
         (v) =>
@@ -141,7 +150,7 @@ export function StepDetail({ id }: { id: string }) {
           !p.reports.some((r) => r.version === v.version),
       ) && (
         <details>
-          <summary>Earlier versions without a report</summary>
+          <summary>Earlier versions you didn&apos;t report on</summary>
           <ul className="rows">
             {p.versions
               .filter(
@@ -151,7 +160,7 @@ export function StepDetail({ id }: { id: string }) {
               )
               .map((v) => (
                 <li key={v.version}>
-                  <p className="meta">Version {v.version} - outcome unknown</p>
+                  <p className="meta">Version {v.version} · not reported</p>
                   <h3>{v.title}</h3>
                   {v.prediction && <p>{v.prediction}</p>}
                 </li>
@@ -160,8 +169,8 @@ export function StepDetail({ id }: { id: string }) {
         </details>
       )}
       {p.reports.length > 0 && (
-        <section className={styles.history} aria-label="Faithful step history">
-          <h2>What you tried & reported</h2>
+        <section className={styles.history} aria-label="Step history">
+          <h2>What you&apos;ve tried</h2>
           {p.reports.map((r, i) => (
             <div key={i}>
               <p className="meta">
@@ -171,19 +180,19 @@ export function StepDetail({ id }: { id: string }) {
               <dl>
                 {r.prediction && (
                   <>
-                    <dt>Original prediction</dt>
+                    <dt>What you expected</dt>
                     <dd>{r.prediction}</dd>
                   </>
                 )}
                 {r.experience && (
                   <>
-                    <dt>Reported experience</dt>
+                    <dt>What it was like</dt>
                     <dd>{r.experience}</dd>
                   </>
                 )}
                 {r.barrier && (
                   <>
-                    <dt>Reported barrier</dt>
+                    <dt>What got in the way</dt>
                     <dd>{r.barrier}</dd>
                   </>
                 )}
@@ -194,15 +203,14 @@ export function StepDetail({ id }: { id: string }) {
       )}
       {reported && (
         <section className="panel prose">
-          <h2>A different shape, if useful.</h2>
+          <h2>Change the step?</h2>
           <p>
-            Edit a smaller part of the same activity. A different activity is a
-            switch, and you can choose one in the planner.
+            Write a smaller version of the same step, or start a different step.
           </p>
           {p.proposal ? (
             <>
               <p>
-                Proposed: <strong>{p.proposal}</strong>
+                New version: <strong>{p.proposal}</strong>
               </p>
               <div className="actions">
                 <button
@@ -211,7 +219,7 @@ export function StepDetail({ id }: { id: string }) {
                     dispatch({ type: "clearDraft", prefix: id + ".adjust" });
                   }}
                 >
-                  Accept adjustment
+                  Use this version
                 </button>
                 <button
                   className="secondary"
@@ -224,7 +232,7 @@ export function StepDetail({ id }: { id: string }) {
                     );
                   }}
                 >
-                  Keep original
+                  Keep the current one
                 </button>
               </div>
             </>
@@ -233,7 +241,9 @@ export function StepDetail({ id }: { id: string }) {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!adjust.trim()) {
-                  setError("Write an adjustment, or keep your original step.");
+                  setError(
+                    "Write the smaller version, or keep the step as it is.",
+                  );
                   focusFirstInvalid(e);
                   return;
                 }
@@ -242,16 +252,16 @@ export function StepDetail({ id }: { id: string }) {
               }}
             >
               <Field
-                label="Proposed adjustment"
+                label="Smaller version"
                 value={adjust}
                 onChange={setAdjust}
                 maxLength={240}
                 error={error}
               />
               <div className="actions">
-                <button>Preview adjustment</button>
+                <button>Preview the change</button>
                 <ActionLink href="/steps/new" secondary>
-                  Switch activity
+                  Write a different step
                 </ActionLink>
               </div>
             </form>
@@ -259,25 +269,41 @@ export function StepDetail({ id }: { id: string }) {
         </section>
       )}
       <div className="actions">
-        <ActionLink href="/settings/reminders" secondary>
-          Reminder preview
-        </ActionLink>
+        <button
+          className="secondary"
+          onClick={() => {
+            dispatch({
+              type: "draft",
+              key: "reminder.config.target",
+              value: id,
+            });
+            router.push("/settings/reminders");
+          }}
+        >
+          Preview a reminder
+        </button>
         <button
           className="secondary"
           onClick={() => dispatch({ type: "pauseStep", id })}
         >
           {p.paused ? "Resume step" : "Pause step"}
         </button>
-        <button
-          className="text danger"
-          onClick={() => dispatch({ type: "deleteStep", id })}
-        >
-          Remove step
-        </button>
+        <ConfirmDelete
+          label="Delete step"
+          question="Delete this step?"
+          detail="Its history and any reminder preview go too. This can't be undone."
+          onConfirm={() => dispatch({ type: "deleteStep", id })}
+        />
       </div>
-      <ActionLink href="/steps" secondary>
-        Back to Steps
-      </ActionLink>
+      {onToday ? (
+        <ActionLink href="/today" secondary>
+          Back to Today
+        </ActionLink>
+      ) : (
+        <ActionLink href="/steps" secondary>
+          Back to Steps
+        </ActionLink>
+      )}
     </>
   );
 }

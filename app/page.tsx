@@ -20,7 +20,7 @@ export default function Page() {
             </ActionLink>
             {REVIEW_ENABLED && (
               <ActionLink href="/review" secondary>
-                Review all features
+                Open the review explorer
               </ActionLink>
             )}
           </div>

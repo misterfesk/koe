@@ -50,8 +50,8 @@ test("deleting a memory card can also remove steps chosen from it, opt-in", asyn
   page,
 }) => {
   await page.goto("/settings/memory");
-  await page.getByLabel("New memory card").fill("A fictional garden bench");
-  await page.getByRole("button", { name: "Approve new memory" }).click();
+  await page.getByLabel("New card").fill("A fictional garden bench");
+  await page.getByRole("button", { name: "Keep this card" }).click();
   await page.getByRole("link", { name: "Today", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: /A fictional garden bench/ }),
@@ -60,7 +60,7 @@ test("deleting a memory card can also remove steps chosen from it, opt-in", asyn
   await page.getByRole("link", { name: "Review explorer" }).click();
   await page.locator('main a[href="/settings/memory"]').first().click();
   await page.getByRole("button", { name: "Delete card", exact: true }).click();
-  const remove = page.getByLabel("Also remove 1 step chosen from this card");
+  const remove = page.getByLabel("Also delete 1 step chosen from this card");
   await expect(remove).not.toBeChecked();
   await remove.check();
   await page

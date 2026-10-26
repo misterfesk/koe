@@ -183,6 +183,7 @@ export type Action =
     }
   | { type: "active"; id: string }
   | { type: "decline" }
+  | { type: "undecline" }
   | { type: "deleteStep"; id: string }
   | { type: "pauseStep"; id: string }
   | {
@@ -274,6 +275,8 @@ export function reducer(s: State, a: Action): State {
         activeId: "",
         notice: "Nothing to catch up on. You can stop here.",
       };
+    case "undecline":
+      return { ...s, declined: false, notice: "" };
     case "deleteStep":
       return {
         ...s,
@@ -448,7 +451,8 @@ export function reducer(s: State, a: Action): State {
         providerEnabled: false,
         memoryConsent: false,
         temporary: true,
-        notice: "Session data deleted. Scripted suggestions disabled.",
+        notice:
+          "Session data deleted. Suggestions are off until you turn them back on.",
       };
   }
 }

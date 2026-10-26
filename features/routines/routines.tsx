@@ -14,7 +14,6 @@ import {
   focusFirstInvalid,
 } from "@/components/ui";
 import { stepInput, type Step } from "@/domain/state";
-import { tone } from "@/domain/tone";
 
 const routineIdeas = {
   rest: {
@@ -57,8 +56,7 @@ function RoutineEditor({ step }: { step: Step }) {
     dispatch({
       type: "draft",
       key: "routine.feedback",
-      value:
-        "Routine updated. Earlier versions and reports stay in its step history.",
+      value: "Routine updated. Earlier versions stay in its history.",
     });
   }
   return (
@@ -68,11 +66,11 @@ function RoutineEditor({ step }: { step: Step }) {
       </p>
       <h3>{step.title}</h3>
       <p className="meta">
-        {step.paused ? "Stopped for now" : "Optional routine · no obligation"}
+        {step.paused ? "Paused" : "Repeats when you want it to"}
       </p>
       <form onSubmit={update} noValidate>
         <Field
-          label="Adjusted routine"
+          label="Change the routine"
           value={title}
           onChange={setTitle}
           error={error}
@@ -89,15 +87,15 @@ function RoutineEditor({ step }: { step: Step }) {
               type: "draft",
               key: "routine.feedback",
               value: step.paused
-                ? "Routine resumed. Any linked reminder preview stays paused until you choose otherwise."
-                : "Routine stopped for now. Any linked reminder preview is paused.",
+                ? "Routine resumed. Its reminder preview stays paused until you resume it."
+                : "Routine paused. Its reminder preview is paused too.",
             });
           }}
         >
-          {step.paused ? "Resume routine" : "Stop routine"}
+          {step.paused ? "Resume routine" : "Pause routine"}
         </button>
         <ActionLink href={"/steps/" + step.id} secondary>
-          Open routine history
+          Open history
         </ActionLink>
         <button
           className="text danger"
@@ -106,15 +104,14 @@ function RoutineEditor({ step }: { step: Step }) {
             dispatch({
               type: "draft",
               key: "routine.feedback",
-              value:
-                "Routine removed from this session. Any linked reminder preview is canceled.",
+              value: "Routine deleted. Its reminder preview is cancelled.",
             });
             requestAnimationFrame(() =>
               document.getElementById("routine-feedback")?.focus(),
             );
           }}
         >
-          Remove routine
+          Delete routine
         </button>
       </div>
     </li>
@@ -157,23 +154,21 @@ export function Routines() {
   return (
     <>
       <PageHeading
-        eyebrow="Steps · flexible routines"
-        description={
-          tone(state.appearance.tone, "welcome", state.energy).message
-        }
+        eyebrow="Steps"
+        description="A step that repeats, like resting or winding down. Change or pause it any time."
       >
-        A rhythm you can change.
+        Routines
       </PageHeading>
       <div className="split">
         <section>
-          <h2>One optional rhythm.</h2>
+          <h2>Start a routine</h2>
           <p>
-            Choose something comfortable and consistent with any guidance you
-            already follow. There are no sleep, exercise or weight targets.
+            Pick something comfortable that fits any guidance you already
+            follow. Koe sets no sleep, exercise or weight targets.
           </p>
           <form onSubmit={choose} noValidate>
             <Select
-              label="Routine type"
+              label="Kind"
               value={kind}
               onChange={(value) => {
                 setKind(value);
@@ -195,7 +190,7 @@ export function Routines() {
               onChange={setTitle}
               maxLength={240}
               error={error}
-              hint="Edit the idea to fit your fictional day. Choosing does not mean completing."
+              hint="Edit it to fit your day."
             />
             <div className="actions">
               <button>Choose this routine</button>
@@ -206,14 +201,9 @@ export function Routines() {
           </form>
         </section>
         <aside>
-          <h2>Your rhythms, adjustable.</h2>
-          <p className="hint">
-            Stopping pauses the routine and any linked reminder preview.
-            Resuming the routine leaves that preview paused until you choose to
-            resume it.
-          </p>
+          <h2>Your routines</h2>
           {routines.length === 0 ? (
-            <Empty>No routines chosen. You do not need one.</Empty>
+            <Empty>No routines yet. You don&apos;t need one.</Empty>
           ) : (
             <ul className="rows">
               {routines.map((step) => (
@@ -229,11 +219,8 @@ export function Routines() {
         </Notice>
       )}
       <div className="actions">
-        <ActionLink href="/settings/reminders" secondary>
-          Reminder preview
-        </ActionLink>
-        <ActionLink href="/reflect/review" secondary>
-          Optional weekly review
+        <ActionLink href="/steps" secondary>
+          Back to Steps
         </ActionLink>
       </div>
     </>

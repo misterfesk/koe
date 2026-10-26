@@ -62,7 +62,7 @@ export function WeeklyReview() {
           parsed.error.issues.map((issue) => [
             String(issue.path[0]),
             issue.path[0] === "choice"
-              ? "Choose a next approach, or leave without changing the plan."
+              ? "Choose what happens next, or leave without changing the step."
               : issue.message,
           ]),
         ),
@@ -102,26 +102,24 @@ export function WeeklyReview() {
   return (
     <>
       <PageHeading
-        eyebrow="Reflect · optional weekly review"
+        eyebrow="Reflect · weekly review"
         description={
           tone(state.appearance.tone, "review", state.energy).message
         }
       >
-        A check-in that can change the plan.
+        Look back on a step
       </PageHeading>
       <p className="prose">
-        No score or schedule to keep up with. Describe what the action made room
-        for, if anything, then choose what happens next.
+        Say what it gave you, if anything, then choose what happens next. Only
+        the last question needs an answer.
       </p>
       {state.steps.length === 0 ? (
         <>
-          <Empty>
-            No chosen step to review yet. There is nothing to catch up on.
-          </Empty>
+          <Empty>No steps to look back on yet. Nothing to catch up on.</Empty>
           <div className="actions">
-            <ActionLink href="/steps/new">Choose an optional step</ActionLink>
-            <ActionLink href="/today" secondary>
-              Leave the review
+            <ActionLink href="/today">See today&apos;s suggestion</ActionLink>
+            <ActionLink href="/steps/new" secondary>
+              Write my own step
             </ActionLink>
           </div>
         </>
@@ -129,7 +127,7 @@ export function WeeklyReview() {
         <div className="split">
           <form onSubmit={submit} noValidate>
             <Select
-              label="Plan to review"
+              label="Step"
               value={targetId}
               onChange={(value) => {
                 setTargetId(value);
@@ -139,7 +137,7 @@ export function WeeklyReview() {
                 });
               }}
               options={[
-                { value: "", label: "Choose a plan" },
+                { value: "", label: "Choose a step" },
                 ...state.steps.map((step) => ({
                   value: step.id,
                   label: step.title + (step.paused ? " (paused)" : ""),
@@ -148,13 +146,12 @@ export function WeeklyReview() {
             />
             {!target ? (
               <Empty>
-                This selected plan is no longer available. Choose another, or
-                leave the review.
+                That step no longer exists. Choose another, or leave the review.
               </Empty>
             ) : (
               <>
                 <Field
-                  label="What did this make room for? (optional)"
+                  label="What did it give you?"
                   value={functionNote}
                   onChange={setFunctionNote}
                   multiline
@@ -162,12 +159,12 @@ export function WeeklyReview() {
                   error={errors.functionNote}
                 />
                 <Select
-                  label="Effort (optional)"
+                  label="How much effort did it take?"
                   value={effort}
                   onChange={setEffort}
                   error={errors.effort}
                   options={[
-                    { value: "", label: "Leave this open" },
+                    { value: "", label: "Skip" },
                     { value: "less", label: "Less than I expected" },
                     { value: "manageable", label: "Manageable for me" },
                     { value: "more", label: "More than I wanted" },
@@ -175,12 +172,12 @@ export function WeeklyReview() {
                   ]}
                 />
                 <Select
-                  label="Helpfulness (optional)"
+                  label="Was it useful?"
                   value={helpfulness}
                   onChange={setHelpfulness}
                   error={errors.helpfulness}
                   options={[
-                    { value: "", label: "Leave this open" },
+                    { value: "", label: "Skip" },
                     { value: "helpful", label: "Useful to me" },
                     { value: "mixed", label: "Mixed / hard to tell" },
                     { value: "unhelpful", label: "Not useful to me" },
@@ -188,41 +185,57 @@ export function WeeklyReview() {
                   ]}
                 />
                 <Select
-                  label="Next approach"
+                  label="What next?"
                   value={choice}
                   onChange={setChoice}
                   error={errors.choice}
                   options={[
-                    { value: "", label: "Choose, or leave for now" },
-                    { value: "continue", label: "Continue this plan" },
-                    { value: "shrink", label: "Try a smaller part" },
+                    { value: "", label: "Choose one" },
+                    { value: "continue", label: "Keep this step" },
+                    { value: "shrink", label: "Try a smaller version" },
                     {
                       value: "switch",
-                      label: "Switch to a different activity",
+                      label: "Try a different step",
                     },
                     {
                       value: "support",
-                      label: "Pause and look at human support",
+                      label: "Pause it and look at support from people",
                     },
                   ]}
                 />
                 {choice === "shrink" && (
                   <Field
-                    label="Your adjusted step"
+                    label="Smaller version"
                     value={adjustment}
                     onChange={setAdjustment}
                     maxLength={240}
                     error={errors.adjustment}
-                    hint="Edit a smaller part of this activity in your own words. A different activity is a switch."
+                    hint="The same step, cut down. For something else, choose “Try a different step”."
                   />
                 )}
-                <p className="hint">
-                  Switching or looking at support pauses the old plan and its
-                  linked reminder preview. Continuing a stopped plan resumes the
-                  plan; its preview stays paused until you choose otherwise.
-                </p>
+                {(choice === "switch" || choice === "support") && (
+                  <p className="hint">
+                    This pauses the step and its reminder preview.
+                  </p>
+                )}
+                {choice === "continue" && target.paused && (
+                  <p className="hint">
+                    This resumes the step. Its reminder preview stays paused
+                    until you resume it.
+                  </p>
+                )}
                 <div className="actions">
-                  <button>Apply this review</button>
+                  <button>
+                    {choice === "continue"
+                      ? "Keep it on Today"
+                      : choice === "shrink"
+                        ? "Save the smaller version"
+                        : choice === "switch"
+                          ? "Pause it and write a new step"
+                          : choice === "support"
+                            ? "Pause it and open Help & support"
+                            : "Save review"}
+                  </button>
                   <ActionLink href="/today" secondary>
                     Keep draft & leave
                   </ActionLink>
@@ -240,27 +253,24 @@ export function WeeklyReview() {
               </>
             )}
           </form>
-          <aside aria-label="Plan and reported experience">
+          <aside aria-label="The step and how it went">
             {target && (
               <section className="panel">
-                <p className="eyebrow">
-                  Current plan · Version {target.version}
-                </p>
+                <p className="eyebrow">{target.area}</p>
                 <h2>{target.title}</h2>
                 <p className="meta">
                   {target.paused
                     ? "Paused"
                     : report
-                      ? "You reported: " + report.outcome
-                      : "Outcome unknown"}
+                      ? "You said: " + report.outcome
+                      : "Not reported yet"}
                 </p>
                 {report?.experience && <p>{report.experience}</p>}
-                <p>
-                  These are your reports, not a measure of efficacy or a
-                  clinical assessment.
+                <p className="hint">
+                  Your own report, not a measure of whether it works.
                 </p>
                 <ActionLink href={"/steps/" + target.id} secondary>
-                  Open reviewed step
+                  Open step
                 </ActionLink>
               </section>
             )}

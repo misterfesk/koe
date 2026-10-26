@@ -4,21 +4,23 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/session";
-import { PageHeading, ActionLink, Notice } from "@/components/ui";
+import { PageHeading, ActionLink, Notice, Select } from "@/components/ui";
 import {
   getSuggestionOptions,
   makeSmaller,
   currentReport,
   hasPlannerDraft,
 } from "@/domain/state";
-import { tone } from "@/domain/tone";
+import { tone, type Energy } from "@/domain/tone";
 import styles from "./steps.module.css";
 export function Today() {
   const { state, dispatch } = useSession();
   const router = useRouter();
   const [handoffBlocked, setHandoffBlocked] = useState(false);
+  const [shown, setShown] = useState(0);
   const active = state.steps.find((s) => s.id === state.activeId && !s.paused);
-  const option = getSuggestionOptions(state)[0];
+  const options = getSuggestionOptions(state);
+  const option = options[shown % options.length];
   const suggestion = option.title;
   const latest = currentReport(active);
   const context = latest
@@ -35,15 +37,28 @@ export function Today() {
   return (
     <>
       <PageHeading
-        eyebrow="Today · at your own pace"
-        description={
-          state.onboarded ? state.goal : "A small beginning, if you want one."
-        }
+        eyebrow={state.onboarded ? "Today · " + state.goal : "Today"}
       >
         {voice.message}
       </PageHeading>
       {state.scenario === "returning after absence" && (
         <p className="meta">Welcome back. There is nothing to catch up on.</p>
+      )}
+      {!active && !state.declined && !offline && (
+        <Select
+          label="Energy today"
+          value={state.energy}
+          onChange={(value) => {
+            dispatch({ type: "energy", value: value as Energy });
+            setShown(0);
+          }}
+          options={[
+            { value: "unknown", label: "Prefer not to say" },
+            { value: "low", label: "Low · keep things quiet" },
+            { value: "steady", label: "A little room" },
+            { value: "more", label: "More room today" },
+          ]}
+        />
       )}
       {state.declined && !active ? (
         <section className={styles.exit}>
@@ -51,19 +66,17 @@ export function Today() {
             ○
           </span>
           <h2>You can leave it here.</h2>
-          <p>No obligation. No reminders added.</p>
-          <ActionLink href="/steps/new" secondary>
-            Choose my own step
-          </ActionLink>
+          <p>Nothing was added, and no reminder preview is set.</p>
           <div className="actions">
             <button
-              className="text"
-              onClick={() => {
-                dispatch({ type: "reset", scenario: state.scenario });
-              }}
+              className="secondary"
+              onClick={() => dispatch({ type: "undecline" })}
             >
-              Start a fresh preview
+              Show the suggestion again
             </button>
+            <ActionLink href="/steps/new" secondary>
+              Write my own step
+            </ActionLink>
           </div>
         </section>
       ) : (
@@ -71,10 +84,13 @@ export function Today() {
           <div className={styles.topline}>
             <span className="eyebrow">
               {active
-                ? "Your chosen step"
+                ? "Your step"
                 : offline
                   ? "Suggestions offline"
-                  : "One optional idea"}
+                  : "Suggestion " +
+                    ((shown % options.length) + 1) +
+                    " of " +
+                    options.length}
             </span>
             <span className={styles.orbit} aria-hidden="true">
               ◌
@@ -87,16 +103,16 @@ export function Today() {
           </h2>
           <p>
             {offline
-              ? "You can write your own step, or stop here. Help works without them."
+              ? "You can write your own step, or stop here. Help & support works without suggestions."
               : active
                 ? latest
-                  ? "You reported: " +
+                  ? "You said: " +
                     latest.outcome +
-                    ". Any change is your choice."
-                  : "Choosing is a beginning. You can tell us what happened whenever you want."
+                    ". Keep the step, make it smaller, or leave it."
+                  : "When you've tried it, you can say how it went. Nothing is overdue."
                 : state.energy === "low"
-                  ? "Rest counts as a choice. Nothing here needs to be earned."
-                  : "A little time with something you enjoy. No result to aim for."}
+                  ? "Rest counts as a step. Nothing here needs to be earned."
+                  : "Take it as it is, make it smaller, or pick another."}
           </p>
           {offline ? (
             <>
@@ -112,7 +128,8 @@ export function Today() {
               <div className="actions">
                 {active ? (
                   <ActionLink href={"/steps/" + active.id}>
-                    Open step & follow-up <span aria-hidden="true">→</span>
+                    {latest ? "Open step" : "Say how it went"}{" "}
+                    <span aria-hidden="true">→</span>
                   </ActionLink>
                 ) : (
                   <button
@@ -131,6 +148,14 @@ export function Today() {
                 )}
               </div>
               <div className={styles.alternatives}>
+                {!active && options.length > 1 && (
+                  <button
+                    className="secondary"
+                    onClick={() => setShown((value) => value + 1)}
+                  >
+                    Show another
+                  </button>
+                )}
                 <button
                   className="secondary"
                   onClick={() => {
@@ -159,15 +184,15 @@ export function Today() {
                 >
                   Make it smaller
                 </button>
+                <ActionLink href="/steps/new" secondary>
+                  Write my own
+                </ActionLink>
                 <button
-                  className="secondary"
+                  className="text"
                   onClick={() => dispatch({ type: "decline" })}
                 >
                   Not today
                 </button>
-                <ActionLink href="/steps/new" secondary>
-                  Something else
-                </ActionLink>
               </div>
             </>
           )}
@@ -175,27 +200,22 @@ export function Today() {
       )}
       {handoffBlocked && (
         <Notice>
-          A planner draft is already in progress.{" "}
-          <Link href="/steps/new">Inspect existing draft</Link> before starting
-          another.
+          You already have a step draft. <Link href="/steps/new">Open it</Link>{" "}
+          before starting another.
         </Notice>
       )}
-      <div className={styles.below}>
-        <p>
-          One decision is enough.
-          <br />
-          <span className="meta">You can change your mind, or stop here.</span>
-        </p>
-        <ActionLink href="/reflect" secondary>
-          Rather reflect?
-        </ActionLink>
-      </div>
-      {!state.temporary && state.memoryConsent && state.memories.length > 0 && (
+      {!active && option.sourceMemoryId && (
         <p className="meta">
-          This idea uses an approved preference.{" "}
-          <Link href="/settings/memory">Inspect memory</Link>
+          This suggestion uses one of your memory cards.{" "}
+          <Link href="/settings/memory">See Memory</Link>
         </p>
       )}
+      <div className={styles.below}>
+        <p className="meta">Not a step kind of day?</p>
+        <ActionLink href="/reflect" secondary>
+          Reflect instead <span aria-hidden="true">→</span>
+        </ActionLink>
+      </div>
     </>
   );
 }

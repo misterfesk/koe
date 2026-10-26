@@ -18,7 +18,7 @@ export function reviewActions(
     return {
       ok: false,
       message:
-        "Write an adjusted step using 1 to 240 characters, or choose another approach.",
+        "Write the smaller version in 240 characters or fewer, or choose something else.",
     };
   }
   const actions: Action[] = [];
@@ -36,8 +36,8 @@ export function reviewActions(
       actions,
       message:
         choice === "continue"
-          ? "Review applied. Your selected step is on Today."
-          : "Review applied. Your edited step is now the next version; earlier reports are unchanged.",
+          ? "Saved. The step is on Today."
+          : "Saved. The smaller version is on Today, and your earlier reports are kept.",
     };
   }
   if (!step.paused) actions.push({ type: "pauseStep", id: step.id });
@@ -48,7 +48,7 @@ export function reviewActions(
     route: choice === "switch" ? "/steps/new" : "/help",
     message:
       choice === "switch"
-        ? "The previous step is paused while you choose another. Its reminder preview is paused too."
-        : "The previous step and its reminder preview are paused. Human support remains your choice.",
+        ? "The old step and its reminder preview are paused."
+        : "The step and its reminder preview are paused.",
   };
 }

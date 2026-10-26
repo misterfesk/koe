@@ -31,7 +31,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </Link>
         <span className={styles.label}>PRIVATE REVIEW · FICTIONAL DATA</span>
         <Link className={styles.help} href="/help">
-          Help & support <span aria-hidden="true">↗</span>
+          Help & support
         </Link>
       </header>
       <div className={styles.layout}>
@@ -54,7 +54,7 @@ export function Shell({ children }: { children: ReactNode }) {
           ))}
           {REVIEW_ENABLED && (
             <Link className={styles.explorer} href="/review">
-              Review explorer <span aria-hidden="true">↗</span>
+              Review explorer
             </Link>
           )}
         </nav>
@@ -63,7 +63,6 @@ export function Shell({ children }: { children: ReactNode }) {
         </main>
       </div>
       <footer className={styles.footer}>
-        <span>A little space. Your own pace.</span>
         <div>
           <Link href="/about">About this build</Link>
           <Link href="/privacy">Privacy</Link>

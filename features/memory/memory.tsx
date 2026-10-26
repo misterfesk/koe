@@ -3,7 +3,6 @@
 import { useState, type FormEvent } from "react";
 import { useDraft, useSession } from "@/components/session";
 import {
-  ActionLink,
   Empty,
   Field,
   Notice,
@@ -49,7 +48,7 @@ function MemoryCard({ card }: { card: Memory }) {
       {editing === "yes" ? (
         <form onSubmit={save} noValidate>
           <Field
-            label="Edit memory card"
+            label="Edit card"
             value={text}
             onChange={setText}
             multiline
@@ -76,9 +75,7 @@ function MemoryCard({ card }: { card: Memory }) {
         </h2>
       )}
       <p className="meta">Source: {card.source}</p>
-      <p className="meta">
-        Approval date is retained when you edit the wording.
-      </p>
+      <p className="meta">Editing keeps the original date.</p>
       <div className="actions">
         {editing !== "yes" && (
           <button className="secondary" onClick={() => setEditing("yes")}>
@@ -90,12 +87,12 @@ function MemoryCard({ card }: { card: Memory }) {
           question="Delete this memory card?"
           detail={
             linkedSteps.length
-              ? "Ideas will stop using it and any reminder preview linked to it is cancelled. Steps you chose from it stay unless you tick the box."
-              : "Ideas will stop using it. This cannot be undone."
+              ? "Suggestions stop using it and its reminder preview is cancelled. Steps you chose from it stay unless you tick the box."
+              : "Suggestions stop using it. This can't be undone."
           }
           extra={
             linkedSteps.length
-              ? "Also remove " +
+              ? "Also delete " +
                 linkedSteps.length +
                 (linkedSteps.length === 1 ? " step" : " steps") +
                 " chosen from this card"
@@ -142,46 +139,44 @@ export function MemoryPage() {
     dispatch(result.action);
     setText("");
     setError("");
-    setStatus(
-      "Memory card approved for this session. Nothing was sent to a provider.",
-    );
+    setStatus("Card kept for this session. Nothing was sent anywhere.");
   }
 
   return (
     <>
       <PageHeading
-        eyebrow="Settings · approved memory"
-        description="Cards contain your approved words, with their source and approval date. You can change or remove them."
+        eyebrow="Settings"
+        description="Koe remembers only the words you approve here, with where and when they came from."
       >
-        Only what you choose to keep.
+        Memory
       </PageHeading>
       <div className={styles.controls}>
         <Toggle
-          label="Allow approved memory in suggestions"
+          label="Let suggestions use memory cards"
           checked={state.memoryConsent}
           onChange={(value) => dispatch({ type: "memoryConsent", value })}
         />
         <Toggle
-          label="Temporary mode: do not create or retrieve memory"
+          label="Temporary mode: don't keep or use memory cards"
           checked={state.temporary}
           onChange={(value) => dispatch({ type: "temporary", value })}
         />
         {blocked && (
           <Notice>
-            Memory approval and retrieval are paused. Existing cards remain
-            visible for inspection, export or deletion.
+            Memory cards are paused. You can still edit, export or delete the
+            ones you have.
           </Notice>
         )}
         <p className="hint">
-          All cards are session-only in this review build. This control is not a
-          promise about a future provider, logs or backups.
+          Cards last only for this session. This is not a promise about how a
+          future service would handle logs or backups.
         </p>
       </div>
       <div className={styles.layout}>
         <section aria-labelledby="approved-cards">
           <div className={styles.sectionHead}>
             <h2 id="approved-cards" tabIndex={-1}>
-              Approved cards
+              Your cards
             </h2>
             <span className="meta">
               {state.memories.length} in this session
@@ -189,8 +184,8 @@ export function MemoryPage() {
           </div>
           {state.memories.length === 0 ? (
             <Empty>
-              No approved memory cards. Suggestions use only the fictional
-              defaults.
+              No memory cards yet. Suggestions use the built-in examples. You
+              can keep a card at the end of a reflection or journal note.
             </Empty>
           ) : (
             <ul className="rows">
@@ -209,46 +204,35 @@ export function MemoryPage() {
                 })
               }
             >
-              Export memory JSON
+              Export cards (JSON)
             </button>
           </div>
         </section>
         <section className="panel" aria-labelledby="new-card">
-          <h2 id="new-card">A card in your words.</h2>
+          <h2 id="new-card">Write a card</h2>
           <p>
-            No text is remembered automatically. Approve only what you want
-            later suggestions to use.
+            Nothing is remembered automatically. Keep only what you want
+            suggestions to use.
           </p>
           <form onSubmit={approve} noValidate>
             <Field
-              label="New memory card"
+              label="New card"
               value={text}
               onChange={setText}
               multiline
               maxLength={1000}
               error={error}
             />
-            <button disabled={blocked}>Approve new memory</button>
+            <button disabled={blocked}>Keep this card</button>
           </form>
           {status && (
             <Notice>
               {state.memories.some((card) => card.id === receiptId)
                 ? status
-                : "The previously approved card has been deleted. It is no longer used in new suggestions."}
+                : "That card was deleted. Suggestions no longer use it."}
             </Notice>
           )}
         </section>
-      </div>
-      <div className="actions">
-        <ActionLink href="/reflect/conversation" secondary>
-          Scripted conversation
-        </ActionLink>
-        <ActionLink href="/reflect/journal" secondary>
-          Energy & journal
-        </ActionLink>
-        <ActionLink href="/reflect/thoughts" secondary>
-          Thought reflection
-        </ActionLink>
       </div>
     </>
   );

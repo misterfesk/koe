@@ -20,25 +20,25 @@ import styles from "./thoughts.module.css";
 const prompts = [
   {
     key: "situation",
-    label: "Situation (optional)",
+    label: "Situation",
     title: "What happened around you?",
-    hint: "A few concrete words are enough. You can skip any prompt.",
+    hint: "A few concrete words are enough. Every prompt can stay blank.",
   },
   {
     key: "thought",
-    label: "Thought (optional)",
+    label: "Thought",
     title: "What words came to mind?",
     hint: "Record your own words. This app does not decide whether they are true.",
   },
   {
     key: "feeling",
-    label: "Feeling (optional)",
+    label: "Feeling",
     title: "Anything you want to name?",
     hint: "A word, a description, or no answer. Nothing is inferred from silence.",
   },
   {
     key: "alternative",
-    label: "Another perspective (optional)",
+    label: "Another perspective",
     title: "Is there another angle you want to keep?",
     hint: "You do not need a positive version. Practical hardship can remain hard, and this can stay blank.",
   },
@@ -99,7 +99,7 @@ export function Thoughts() {
   return (
     <>
       <PageHeading
-        eyebrow={"Reflect · optional prompt " + (index + 1) + " of 4"}
+        eyebrow={"Thought reflection · " + (index + 1) + " of 4"}
         description={
           tone(state.appearance.tone, "reflection", state.energy).message
         }
@@ -124,33 +124,26 @@ export function Thoughts() {
               className="secondary"
               onClick={() => setStage(String(index - 1))}
             >
-              Previous prompt
+              Back
             </button>
           )}
           {index < 3 && (
             <>
               <button onClick={() => setStage(String(index + 1))}>
-                Next prompt
-              </button>
-              <button
-                className="text"
-                onClick={() => setStage(String(index + 1))}
-              >
-                Skip this prompt
+                {values[prompt.key].trim() ? "Next" : "Skip"}
               </button>
             </>
           )}
           {index === 3 && <button onClick={finish}>Finish reflection</button>}
           <ActionLink href="/reflect" secondary>
-            {index === 3 ? "Leave without finishing" : "Keep draft & leave"}
+            Keep draft & leave
           </ActionLink>
         </div>
         {savedAt && (
           <Notice id="thoughts-saved">
             {tone(state.appearance.tone, "reflected", state.energy).message}{" "}
-            Reflection finished at {savedAt.slice(0, 16).replace("T", " ")}{" "}
-            virtual time. Your words stay in this session only and nothing has
-            been added to memory. You can stop here.
+            Reflection finished. Nothing was added to memory. You can stop here,
+            or use what you wrote below.
           </Notice>
         )}
         <details className={styles.notes} open={index === 3}>
@@ -164,15 +157,15 @@ export function Thoughts() {
             ))}
           </dl>
         </details>
-        {index === 3 && (
+        {index === 3 && savedAt && (
           <section className={styles.next} ref={stepRef}>
-            <h2>Any next step is optional.</h2>
+            <h2>Want to turn this into a step?</h2>
             <p>
-              A safe, ordinary action can go to the planner for you to review
-              and choose. Leaving it blank does not add a plan.
+              Write an ordinary action and it opens in the step planner, where
+              you can edit it before choosing. Blank adds nothing.
             </p>
             <Field
-              label="An optional step in your words"
+              label="A step in your words"
               value={step}
               onChange={setStep}
               maxLength={240}
@@ -197,11 +190,11 @@ export function Thoughts() {
                   router.push("/steps/new");
                 }}
               >
-                Bring this step to planner
+                Open in the step planner
               </button>
               {plannerDraftExists && (
                 <ActionLink href="/steps/new" secondary>
-                  Inspect existing planner draft
+                  Open the step draft you already have
                 </ActionLink>
               )}
             </div>
@@ -220,11 +213,8 @@ export function Thoughts() {
               setStepError("");
             }}
           >
-            Discard reflection draft
+            Discard draft
           </button>
-          <ActionLink href="/settings/memory" secondary>
-            Approved memory
-          </ActionLink>
         </div>
       </div>
     </>

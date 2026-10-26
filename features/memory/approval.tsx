@@ -32,7 +32,7 @@ export function MemoryApproval({
     setText("");
     setError("");
     setStatus(
-      "Card approved for this session. You can inspect, edit or delete it in Memory.",
+      "Memory card kept for this session. Edit or delete it any time in Settings → Memory.",
     );
     requestAnimationFrame(() =>
       document.getElementById(prefix + "-status")?.focus(),
@@ -41,36 +41,33 @@ export function MemoryApproval({
 
   return (
     <details>
-      <summary>Prepare a memory card (optional)</summary>
+      <summary>Keep a memory card</summary>
       <p>
-        Only the words you explicitly approve become a memory card. No
-        interpretation is added.
+        Write what later suggestions should remember, in your words. Koe keeps
+        exactly what you approve and adds nothing.
       </p>
       {blocked && (
-        <Notice>
-          Memory creation and retrieval are paused. You can keep a draft without
-          approving it.
-        </Notice>
+        <Notice>Memory cards are paused, so this can only stay a draft.</Notice>
       )}
       <form onSubmit={submit} noValidate>
         <Field
-          label="Optional memory in your words"
+          label="Memory card"
           value={text}
           onChange={setText}
           multiline
           maxLength={1000}
           error={error}
         />
-        <p className="hint">Provenance: {source}</p>
+        <p className="hint">Saved with its source: {source.split(":")[0]}</p>
         <button className="secondary" disabled={blocked}>
-          Approve this memory card
+          Keep this card
         </button>
       </form>
       {status && (
         <Notice id={prefix + "-status"}>
           {state.memories.some((card) => card.id === receiptId)
             ? status
-            : "The previously approved card has been deleted. It is no longer used in new suggestions."}
+            : "That card was deleted. Suggestions no longer use it."}
         </Notice>
       )}
     </details>
