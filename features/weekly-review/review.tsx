@@ -13,6 +13,7 @@ import {
   PageHeading,
   Select,
   focusFirstInvalid,
+  ConfirmDelete,
 } from "@/components/ui";
 import { currentReport, makeSmaller } from "@/domain/state";
 import { reviewActions } from "@/domain/review";
@@ -38,7 +39,7 @@ export function WeeklyReview() {
   const [helpfulness, setHelpfulness] = useDraft("weekly.draft.helpfulness");
   const [choice, setChoice] = useDraft("weekly.draft.choice");
   const [adjustment, setAdjustment] = useDraft(
-    "weekly.draft.adjustment",
+    "weekly.draft.adjustment." + targetId,
     target ? makeSmaller(target.title) : "",
   );
   const [result, setResult] = useDraft("weekly.result");
@@ -129,13 +130,7 @@ export function WeeklyReview() {
             <Select
               label="Step"
               value={targetId}
-              onChange={(value) => {
-                setTargetId(value);
-                dispatch({
-                  type: "clearDraft",
-                  prefix: "weekly.draft.adjustment",
-                });
-              }}
+              onChange={setTargetId}
               options={[
                 { value: "", label: "Choose a step" },
                 ...state.steps.map((step) => ({
@@ -239,16 +234,15 @@ export function WeeklyReview() {
                   <ActionLink href="/today" secondary>
                     Keep draft & leave
                   </ActionLink>
-                  <button
-                    type="button"
-                    className="text"
-                    onClick={() => {
+                  <ConfirmDelete
+                    label="Discard review draft"
+                    question="Discard this weekly review draft?"
+                    detail="This deletes your unsaved review and smaller-version drafts. Saved steps and reports stay."
+                    onConfirm={() => {
                       dispatch({ type: "clearDraft", prefix: "weekly.draft." });
                       setErrors({});
                     }}
-                  >
-                    Discard review draft
-                  </button>
+                  />
                 </div>
               </>
             )}

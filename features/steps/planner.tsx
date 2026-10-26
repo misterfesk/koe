@@ -8,8 +8,9 @@ import {
   Select,
   ActionLink,
   focusFirstInvalid,
+  ConfirmDelete,
 } from "@/components/ui";
-import { stepInput, makeSmaller, canRetrieveMemory } from "@/domain/state";
+import { stepInput, canRetrieveMemory } from "@/domain/state";
 export function Planner() {
   const { state, dispatch } = useSession();
   const [title, setTitle] = useDraft("step.title");
@@ -82,13 +83,13 @@ export function Planner() {
           error={errors.title}
           hint="Small and specific works best, like “Read one page”."
         />
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => setTitle(makeSmaller(title || "a step I choose"))}
-        >
-          Make it smaller
-        </button>
+        <details>
+          <summary>Make it smaller</summary>
+          <p className="hint">
+            Keep the same activity. Try less time, fewer items or an easier
+            setting, then edit your step above.
+          </p>
+        </details>
         <div className="divider" />
         <Field
           label="What do you expect will happen? (optional)"
@@ -104,16 +105,15 @@ export function Planner() {
           <ActionLink href="/today" secondary>
             Keep draft & leave
           </ActionLink>
-          <button
-            type="button"
-            className="text"
-            onClick={() => {
+          <ConfirmDelete
+            label="Discard draft"
+            question="Discard this step draft?"
+            detail="Your chosen steps stay."
+            onConfirm={() => {
               dispatch({ type: "clearDraft", prefix: "step." });
               setErrors({});
             }}
-          >
-            Discard draft
-          </button>
+          />
         </div>
       </form>
     </>

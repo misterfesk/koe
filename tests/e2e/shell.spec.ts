@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./guards";
 import AxeBuilder from "@axe-core/playwright";
 test("foundation: local shell, real 404, scenarios, accessible mobile and desktop", async ({
   page,

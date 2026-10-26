@@ -412,3 +412,16 @@ details {
     padding: 12px 8px;
   }
 }
+
+button.danger:not(.text) {
+  background: #812c33;
+  border-color: #812c33;
+  color: var(--cream) !important;
+}
+
+[data-plain="true"] .dark-panel .eyebrow {
+  color: var(--secondary);
+}
+[data-plain="true"] .dark-panel :focus-visible {
+  outline-color: var(--focus);
+}

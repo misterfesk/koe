@@ -5,6 +5,7 @@ import { type ReactNode } from "react";
 import { useSession } from "./session";
 import { REVIEW_ENABLED } from "@/fixtures/review";
 import styles from "./shell.module.css";
+import { Mascot } from "./mascot";
 const nav = [
   ["/today", "Today"],
   ["/steps", "Steps"],
@@ -29,6 +30,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <Link className={styles.wordmark} href="/today" aria-label="Koe home">
           Koe<span aria-hidden="true">.</span>
         </Link>
+        <Mascot />
         <span className={styles.label}>PRIVATE REVIEW · FICTIONAL DATA</span>
         <Link className={styles.help} href="/help">
           Help & support

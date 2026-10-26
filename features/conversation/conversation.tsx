@@ -10,6 +10,7 @@ import {
   Notice,
   PageHeading,
   focusFirstInvalid,
+  ConfirmDelete,
 } from "@/components/ui";
 import {
   conversationOption,
@@ -240,15 +241,15 @@ export function Conversation() {
               <ActionLink href="/reflect" secondary>
                 Back to Reflect
               </ActionLink>
-              <button
-                className="text"
-                onClick={() => {
+              <ConfirmDelete
+                label="Discard draft"
+                question="Discard this conversation draft?"
+                detail="This deletes your conversation words and step draft. Chosen steps and memory cards stay."
+                onConfirm={() => {
                   dispatch({ type: "clearDraft", prefix: "conversation." });
                   setError("");
                 }}
-              >
-                Discard draft
-              </button>
+              />
             </div>
             <MemoryApproval
               prefix="conversation.memory"
@@ -266,8 +267,8 @@ export function Conversation() {
                 Fixed script · the same response for every input
               </p>
               <p>
-                No need to put a positive spin on it. We can leave this here, or
-                choose one ordinary next step.
+                No need to put a positive spin on it. You can leave this here,
+                or choose one ordinary next step.
               </p>
             </div>
             {stage === "permission" ? (
@@ -277,10 +278,12 @@ export function Conversation() {
                 <div className="actions">
                   <button
                     onClick={() => {
-                      // Copy the idea into the editable draft once; later idea changes never overwrite it.
-                      const shown = conversationOption(state, true);
-                      setStep(shown?.title ?? "");
-                      setSourceMemoryId(shown?.sourceMemoryId ?? "");
+                      // A resumed conversation retains both the edited words and their provenance.
+                      if (state.drafts["conversation.step"] === undefined) {
+                        const shown = conversationOption(state, true);
+                        setStep(shown?.title ?? "");
+                        setSourceMemoryId(shown?.sourceMemoryId ?? "");
+                      }
                       setConsent("yes");
                       setStage("suggestion");
                     }}
@@ -355,19 +358,18 @@ export function Conversation() {
                     />
                     <div className="actions">
                       <button disabled={!idea}>Choose this step</button>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => {
+                      <ConfirmDelete
+                        label="Use the suggestion as written"
+                        question="Replace this step draft?"
+                        detail="This replaces your edited step. Your conversation words stay."
+                        onConfirm={() => {
                           if (option) {
                             setStep(option.title);
                             setSourceMemoryId(option.sourceMemoryId ?? "");
                             setError("");
                           }
                         }}
-                      >
-                        Use the suggestion as written
-                      </button>
+                      />
                       <button
                         type="button"
                         className="secondary"

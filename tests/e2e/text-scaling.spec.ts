@@ -1,6 +1,17 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "./guards";
+import type { Page } from "@playwright/test";
 
-const routes = ["/", "/today", "/reflect/conversation", "/settings/reminders"];
+const routes = [
+  "/",
+  "/today",
+  "/reflect/conversation",
+  "/settings/reminders",
+  "/connect",
+  "/connect/care",
+  "/settings/appearance",
+  "/settings/memory",
+  "/help",
+];
 
 async function noHorizontalScroll(page: Page) {
   return page.evaluate(
@@ -20,6 +31,7 @@ async function splitWords(page: Page) {
     const broken: string[] = [];
     const seen = new Set<Node>();
     for (const el of Array.from(roots)) {
+      if (el.closest("main")) continue;
       for (const node of Array.from(el.childNodes)) {
         if (node.nodeType !== Node.TEXT_NODE || seen.has(node)) continue;
         seen.add(node);

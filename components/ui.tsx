@@ -222,7 +222,11 @@ export function ConfirmDelete({
         <button
           type="button"
           className="danger"
-          onClick={() => onConfirm(extraChecked)}
+          onClick={() => {
+            onConfirm(extraChecked);
+            setExtraChecked(false);
+            setOpen(false);
+          }}
         >
           {"Yes, " + label.toLowerCase()}
         </button>

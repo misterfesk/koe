@@ -74,16 +74,18 @@ function JournalEntry({ note }: { note: Journal }) {
             </p>
             <div className="actions">
               <button>Save changes</button>
-              <button
-                className="secondary"
-                type="button"
-                onClick={() => {
+              <ConfirmDelete
+                label="Discard edit"
+                question="Discard these note changes?"
+                detail="Your saved note stays. Only this unsaved edit is deleted."
+                onConfirm={() => {
                   dispatch({ type: "clearDraft", prefix });
                   setError("");
+                  requestAnimationFrame(() =>
+                    document.getElementById("note-" + note.id)?.focus(),
+                  );
                 }}
-              >
-                Discard edit
-              </button>
+              />
             </div>
           </form>
         ) : (
@@ -211,18 +213,17 @@ export function JournalPage() {
             <ActionLink href="/reflect" secondary>
               Keep draft & leave
             </ActionLink>
-            <button
-              type="button"
-              className="text"
-              onClick={() => {
+            <ConfirmDelete
+              label="Discard draft"
+              question="Discard this journal draft?"
+              detail="This deletes your unsaved note and energy choice. Saved notes stay."
+              onConfirm={() => {
                 dispatch({ type: "clearDraft", prefix: "journal.new." });
                 setRecordedAt("");
                 recording.current = "";
                 setError("");
               }}
-            >
-              Discard draft
-            </button>
+            />
           </div>
         </form>
         {status && <Notice id="journal-status">{status}</Notice>}

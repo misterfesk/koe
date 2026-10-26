@@ -10,6 +10,7 @@ import {
   Notice,
   PageHeading,
   focusFirstInvalid,
+  ConfirmDelete,
 } from "@/components/ui";
 import { prepareReflectionStep, thoughtInput } from "@/domain/reflection";
 import { hasPlannerDraft } from "@/domain/state";
@@ -205,16 +206,16 @@ export function Thoughts() {
           </section>
         )}
         <div className="actions">
-          <button
-            className="text"
-            onClick={() => {
+          <ConfirmDelete
+            label="Discard draft"
+            question="Discard this thought reflection?"
+            detail="This deletes the reflection and its unsaved step and memory-card drafts. Chosen steps and memory cards stay."
+            onConfirm={() => {
               dispatch({ type: "clearDraft", prefix: "thoughts." });
               setErrors({});
               setStepError("");
             }}
-          >
-            Discard draft
-          </button>
+          />
         </div>
       </div>
     </>

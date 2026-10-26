@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./guards";
 test("S1 drafts, validation and versioned step lifecycle", async ({ page }) => {
   await page.goto("/steps/new");
   await page.getByLabel("Your step").fill("   ");

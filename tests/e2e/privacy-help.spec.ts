@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./guards";
 import { readFile } from "node:fs/promises";
 test("S2 onboarding choices carry to Today, Help needs no setup, export/delete/reset are real local controls", async ({
   page,
@@ -65,6 +65,9 @@ test("S2 onboarding choices carry to Today, Help needs no setup, export/delete/r
   await expect(page.getByRole("status")).toContainText("Session data deleted");
   await expect(page.getByLabel("Suggestions on")).not.toBeChecked();
   await page.getByRole("button", { name: "Start over" }).click();
+  await page
+    .getByRole("button", { name: "Yes, start over", exact: true })
+    .click();
   await expect(page.getByLabel("Suggestions on")).toBeChecked();
 });
 test("S2 offline Help remains useful and issue reports are previews only", async ({

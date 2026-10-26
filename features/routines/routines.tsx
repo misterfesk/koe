@@ -12,6 +12,7 @@ import {
   PageHeading,
   Select,
   focusFirstInvalid,
+  ConfirmDelete,
 } from "@/components/ui";
 import { stepInput, type Step } from "@/domain/state";
 
@@ -97,10 +98,13 @@ function RoutineEditor({ step }: { step: Step }) {
         <ActionLink href={"/steps/" + step.id} secondary>
           Open history
         </ActionLink>
-        <button
-          className="text danger"
-          onClick={() => {
+        <ConfirmDelete
+          label="Delete routine"
+          question="Delete this routine?"
+          detail="Its history and reminder preview go too. This can't be undone."
+          onConfirm={() => {
             dispatch({ type: "deleteStep", id: step.id });
+            dispatch({ type: "clearDraft", prefix: "routine.edit." + step.id });
             dispatch({
               type: "draft",
               key: "routine.feedback",
@@ -110,9 +114,7 @@ function RoutineEditor({ step }: { step: Step }) {
               document.getElementById("routine-feedback")?.focus(),
             );
           }}
-        >
-          Delete routine
-        </button>
+        />
       </div>
     </li>
   );
@@ -170,15 +172,7 @@ export function Routines() {
             <Select
               label="Kind"
               value={kind}
-              onChange={(value) => {
-                setKind(value);
-                setTitle(
-                  (
-                    routineIdeas[value as keyof typeof routineIdeas] ??
-                    routineIdeas.rest
-                  ).title,
-                );
-              }}
+              onChange={setKind}
               options={Object.entries(routineIdeas).map(([value, entry]) => ({
                 value,
                 label: entry.label,

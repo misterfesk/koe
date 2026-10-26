@@ -1,7 +1,13 @@
 "use client";
 import { useState } from "react";
 import { useSession } from "@/components/session";
-import { PageHeading, Notice, Toggle, ActionLink } from "@/components/ui";
+import {
+  PageHeading,
+  Notice,
+  Toggle,
+  ActionLink,
+  ConfirmDelete,
+} from "@/components/ui";
 import { downloadJson } from "@/services/export";
 export function PrivacyControls() {
   const { state, dispatch } = useSession();
@@ -98,15 +104,15 @@ export function PrivacyControls() {
           Starting over clears this session and brings back the demo with
           suggestions on.
         </p>
-        <button
-          className="secondary"
-          onClick={() => {
+        <ConfirmDelete
+          label="Start over"
+          question="Start this session over?"
+          detail="This deletes your steps, drafts, notes, memory cards and reminder previews, and turns suggestions back on."
+          onConfirm={() => {
             dispatch({ type: "reset" });
             setConfirm(false);
           }}
-        >
-          Start over
-        </button>
+        />
         <div className="actions">
           <ActionLink href="/settings/memory" secondary>
             Memory

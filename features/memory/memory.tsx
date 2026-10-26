@@ -57,16 +57,18 @@ function MemoryCard({ card }: { card: Memory }) {
           />
           <div className="actions">
             <button>Save card changes</button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
+            <ConfirmDelete
+              label="Discard edit"
+              question="Discard these memory-card changes?"
+              detail="Your saved card stays. Only this unsaved edit is deleted."
+              onConfirm={() => {
                 dispatch({ type: "clearDraft", prefix });
                 setError("");
+                requestAnimationFrame(() =>
+                  document.getElementById("card-" + card.id)?.focus(),
+                );
               }}
-            >
-              Discard edit
-            </button>
+            />
           </div>
         </form>
       ) : (
