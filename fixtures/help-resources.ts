@@ -9,6 +9,7 @@ export type HelpResource = {
   sourceUrl: string;
   retrievedAt: string;
   note?: string;
+  emergency?: string;
 };
 export const helpResources: HelpResource[] = [
   {
@@ -20,6 +21,7 @@ export const helpResources: HelpResource[] = [
     hours: "24/7",
     sourceUrl: "https://988lifeline.org/get-help/",
     retrievedAt: "2026-10-25",
+    emergency: "911",
   },
   {
     region: "SG",
@@ -30,6 +32,7 @@ export const helpResources: HelpResource[] = [
     hours: "24/7",
     sourceUrl: "https://www.sos.org.sg/our-services/",
     retrievedAt: "2026-10-25",
+    emergency: "995 (ambulance)",
   },
   {
     region: "JP",
@@ -43,6 +46,7 @@ export const helpResources: HelpResource[] = [
       "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/hukushi_kaigo/shougaishahukushi/jisatsu/soudan_tel.html",
     retrievedAt: "2026-10-25",
     note: "Calls beginning with 050 and LINE Out cannot connect. Consult the ministry's local contact list.",
+    emergency: "119 (ambulance and fire)",
   },
   {
     region: "KR",
@@ -54,6 +58,7 @@ export const helpResources: HelpResource[] = [
     hours: "24 hours",
     sourceUrl: "https://www.129.go.kr/109",
     retrievedAt: "2026-10-25",
+    emergency: "119",
   },
   {
     region: "BD",
@@ -64,6 +69,7 @@ export const helpResources: HelpResource[] = [
     hours: "Every day, 3:00 PM to 3:00 AM local time",
     sourceUrl: "https://kaanpeteroi.org/helpline-service/",
     retrievedAt: "2026-10-25",
+    emergency: "999",
   },
   {
     region: "IN",
@@ -76,6 +82,7 @@ export const helpResources: HelpResource[] = [
     sourceUrl:
       "https://www.pib.gov.in/PressReleseDetailm.aspx?PRID=2321522&lang=1&reg=3",
     retrievedAt: "2026-10-25",
+    emergency: "112",
   },
   {
     region: "LK",
@@ -86,6 +93,7 @@ export const helpResources: HelpResource[] = [
     sourceUrl: "https://www.nimh.health.gov.lk/",
     retrievedAt: "2026-10-25",
     note: "Hours were not stated on the checked page.",
+    emergency: "1990 (ambulance)",
   },
   {
     region: "LT",
@@ -98,6 +106,7 @@ export const helpResources: HelpResource[] = [
     sourceUrl: "https://www.kpsc.lt/vilties-linija/",
     retrievedAt: "2026-10-25",
     note: "Available only from Lithuanian telecommunications networks.",
+    emergency: "112",
   },
   {
     region: "ZA",
@@ -108,6 +117,7 @@ export const helpResources: HelpResource[] = [
     hours: "24 hours",
     sourceUrl: "https://www.sadag.org/",
     retrievedAt: "2026-10-25",
+    emergency: "10177 (ambulance) or 112 from a mobile phone",
   },
   {
     region: "PL",
@@ -119,6 +129,63 @@ export const helpResources: HelpResource[] = [
     hours: "24/7",
     sourceUrl: "https://116sos.pl/",
     retrievedAt: "2026-10-25",
+    emergency: "112",
+  },
+  {
+    region: "GB",
+    country: "United Kingdom",
+    name: "Samaritans",
+    phone: "116 123",
+    channels: "Call",
+    hours: "24 hours a day, 365 days a year",
+    sourceUrl: "https://www.samaritans.org/how-we-can-help/contact-samaritan/",
+    retrievedAt: "2026-10-26",
+    note: "The checked page lists the phone line as free from any phone. It says online chat is not currently available and the UK email and letter services are closed.",
+    emergency: "999 or 112",
+  },
+  {
+    region: "IE",
+    country: "Ireland",
+    name: "Samaritans Ireland",
+    phone: "116 123",
+    channels: "Call",
+    hours: "Day or night, 365 days a year",
+    sourceUrl: "https://www.samaritans.org/ireland/samaritans-ireland/",
+    retrievedAt: "2026-10-26",
+    emergency: "112 or 999",
+  },
+  {
+    region: "CA",
+    country: "Canada",
+    name: "9-8-8 Suicide Crisis Helpline",
+    phone: "9-8-8",
+    channels: "Call or text",
+    hours: "24 hours a day, every day of the year",
+    sourceUrl: "https://988.ca/",
+    retrievedAt: "2026-10-26",
+    emergency: "911",
+  },
+  {
+    region: "AU",
+    country: "Australia",
+    name: "Lifeline",
+    phone: "13 11 14",
+    channels: "Call, text (0477 13 11 14) or online chat",
+    hours: "Any time of the day or night",
+    sourceUrl: "https://www.lifeline.org.au/get-help/",
+    retrievedAt: "2026-10-26",
+    emergency: "000",
+  },
+  {
+    region: "NZ",
+    country: "New Zealand",
+    name: "1737, Need to talk?",
+    phone: "1737",
+    channels: "Call, text or chat",
+    hours: "24/7",
+    sourceUrl: "https://1737.org.nz/",
+    retrievedAt: "2026-10-26",
+    emergency: "111",
   },
 ];
 export const regionOptions = [
