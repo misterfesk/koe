@@ -1,0 +1,28 @@
+.dialog {
+  width: min(34rem, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 28px;
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+.dialog::backdrop {
+  background: rgb(56 45 41 / 0.6);
+}
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.top h2 {
+  margin: 0 0 12px;
+}
+@media (max-width: 800px) {
+  .dialog {
+    padding: 20px 16px;
+  }
+}

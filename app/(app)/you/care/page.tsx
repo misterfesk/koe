@@ -42,7 +42,7 @@ export default async function Page() {
   return (
     <>
       <PageHeading
-        eyebrow="Connect"
+        eyebrow="You · People"
         description="A short note to take to a doctor, therapist or other professional. It stays here unless you copy, print or save it."
       >
         Prepare for an appointment

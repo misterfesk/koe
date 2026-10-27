@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { useBrowserValue } from "@/components/use-browser";
 import { regionOptions } from "@/fixtures/help-resources";
@@ -26,22 +27,11 @@ export function StartForm() {
   const errors = state && !state.ok ? state.errors : {};
   return (
     <form action={action} className="prose" noValidate>
-      <div className="panel">
-        <h2>What Koe is</h2>
-        <ul className="plain-list">
-          <li>
-            A tool for planning small, everyday steps and noticing what helps.
-          </li>
-          <li>
-            An AI you can talk things through with. It&apos;s not a person, a
-            therapist or a crisis service.
-          </li>
-          <li>
-            It can&apos;t check on you or contact anyone. In an emergency, call
-            your local emergency number.
-          </li>
-        </ul>
-      </div>
+      <p>
+        Koe is an AI companion that helps you plan gentle days. It&apos;s not a
+        therapist, and it can&apos;t respond to emergencies.{" "}
+        <Link href="/help">Get help now</Link>.
+      </p>
       <label className="toggle">
         <input
           type="checkbox"
@@ -92,7 +82,7 @@ export function StartForm() {
       </div>
       <p className="meta">
         You start as a guest. What you write is saved encrypted on Koe&apos;s
-        server and linked to this browser. Make an account in Settings so you
+        server and linked to this browser. Make an account in You so you
         don&apos;t lose it if you clear your browser or change devices.
       </p>
     </form>

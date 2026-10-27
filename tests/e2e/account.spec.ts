@@ -8,7 +8,7 @@ test("a guest's steps move into a new account and survive sign-out", async ({
   const title = await chooseFirstSuggestion(page);
   const email = `e2e-${info.project.name}-${Date.now()}@example.com`;
 
-  await page.goto("/settings/account");
+  await page.goto("/you/account");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("a-long-test-password");
   await page.getByRole("button", { name: "Create account" }).click();
@@ -34,7 +34,7 @@ test("memory cards can be added, exported and everything deleted", async ({
   page,
 }) => {
   await startAsGuest(page);
-  await page.goto("/settings/memory");
+  await page.goto("/you/knows");
   await page
     .getByLabel("Add a card")
     .first()
@@ -42,7 +42,7 @@ test("memory cards can be added, exported and everything deleted", async ({
   await page.getByRole("button", { name: "Add" }).first().click();
   await expect(page.getByText("Short walks outside help me")).toBeVisible();
 
-  await page.goto("/settings/privacy");
+  await page.goto("/you/data");
   const download = page.waitForEvent("download");
   await page.getByRole("link", { name: /Download my data/ }).click();
   const file = await download;
@@ -56,5 +56,5 @@ test("memory cards can be added, exported and everything deleted", async ({
   await page.getByRole("button", { name: "Delete everything" }).click();
   await expect(page).toHaveURL(/\/\?deleted=1$/);
   await page.goto("/today");
-  await expect(page).toHaveURL(/\/start$/);
+  await expect(page).toHaveURL(/\/$/);
 });

@@ -4,6 +4,31 @@ const config: NextConfig = {
   // PGlite loads its WebAssembly Postgres from disk at runtime; bundling breaks it.
   serverExternalPackages: ["@electric-sql/pglite", "web-push"],
   devIndicators: false,
+  // Old v1 addresses. Not permanent: later slices may re-home them again.
+  async redirects() {
+    const to = (source: string, destination: string) => ({
+      source,
+      destination,
+      permanent: false,
+    });
+    return [
+      to("/reflect", "/talk"),
+      to("/reflect/talk", "/talk"),
+      to("/reflect/talk/:id", "/talk/:id"),
+      to("/reflect/week", "/you/look-back"),
+      to("/reflect/journey", "/you/look-back/journey"),
+      to("/connect", "/you/people"),
+      to("/connect/care", "/you/care"),
+      to("/settings", "/you"),
+      to("/settings/memory", "/you/knows"),
+      to("/settings/reminders", "/you/reminders"),
+      to("/settings/privacy", "/you/data"),
+      to("/settings/account", "/you/account"),
+      to("/settings/appearance", "/you/appearance"),
+      to("/steps", "/today"),
+      to("/start", "/"),
+    ];
+  },
   async headers() {
     return [
       {

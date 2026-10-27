@@ -94,7 +94,7 @@ export default async function Page({
         <>
           <p className="meta">Talk · {modeLabels[t.mode]}</p>
           <p>
-            <Link href={"/reflect/talk/" + t.id}>{t.title}</Link>
+            <Link href={"/talk/" + t.id}>{t.title}</Link>
           </p>
         </>
       ),
@@ -123,7 +123,7 @@ export default async function Page({
   return (
     <>
       <PageHeading
-        eyebrow="Reflect · Journey"
+        eyebrow="You · Look back"
         description="What you did, what you said helped, and your notes. Only you can see this."
       >
         Your journey
@@ -177,7 +177,7 @@ export default async function Page({
       )}
       {span < 365 && (
         <p>
-          <Link href={"/reflect/journey?days=" + Math.min(span * 3, 365)}>
+          <Link href={"/you/look-back/journey?days=" + Math.min(span * 3, 365)}>
             Show earlier
           </Link>
         </p>

@@ -39,7 +39,7 @@ export default async function Page({
         <PageHeading eyebrow="Steps" description="It may have been deleted.">
           This step isn&apos;t here.
         </PageHeading>
-        <ActionLink href="/steps">See your steps</ActionLink>
+        <ActionLink href="/today">Back to Today</ActionLink>
       </>
     );
   const report = reportOn(step, v.today);
@@ -78,16 +78,14 @@ export default async function Page({
       <StepManage step={step} region={v.profile.region} />
       {step.status === "active" && (
         <p>
-          <Link
-            href={"/settings/reminders?step=" + step.id + "#step-" + step.id}
-          >
+          <Link href={"/you/reminders?step=" + step.id + "#step-" + step.id}>
             Set a reminder for this step <span aria-hidden="true">→</span>
           </Link>
         </p>
       )}
       <StepHistory step={step} today={v.today} />
       <p>
-        <Link href="/steps">← All steps</Link>
+        <Link href="/today">← Back to Today</Link>
       </p>
     </>
   );

@@ -98,7 +98,7 @@ export function MemoryProposal({
       )}
       <p className="meta">
         Koe uses memory cards to suggest steps that fit you. You can see, edit
-        or delete them in Settings.
+        or delete them in You.
       </p>
       <div className="actions">
         <button

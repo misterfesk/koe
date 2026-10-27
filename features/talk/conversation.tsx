@@ -86,7 +86,7 @@ export function Conversation({
         setNotice(
           "Koe can't reply right now. What you wrote is saved. Try again in a little while.",
         );
-      if (!id) router.replace("/reflect/talk/" + r.conversationId);
+      if (!id) router.replace("/talk/" + r.conversationId);
     });
   }
 

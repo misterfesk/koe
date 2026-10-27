@@ -248,7 +248,7 @@ export async function sendTestReminder() {
     JSON.stringify({
       title: "Koe",
       body: "This is a test. Reminders will look like this.",
-      url: "/settings/reminders",
+      url: "/you/reminders",
     }),
   );
   return { delivered };

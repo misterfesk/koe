@@ -12,7 +12,7 @@ export function DeleteConversation({ id }: { id: string }) {
       detail="Steps and memory cards you kept from it stay."
       onConfirm={async () => {
         await removeConversation(id);
-        router.push("/reflect");
+        router.push("/talk");
       }}
     />
   );

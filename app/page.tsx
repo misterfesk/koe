@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionLink, Notice } from "@/components/ui";
+import { Welcome } from "@/features/onboarding/welcome";
 import { getViewer } from "@/server/viewer";
 import styles from "./landing.module.css";
 
@@ -29,9 +30,9 @@ export default async function Page({
             what actually helps over time.
           </p>
           <div className="actions">
-            <ActionLink href="/start">
+            <Welcome autoOpen={!deleted}>
               Start now <span aria-hidden="true">→</span>
-            </ActionLink>
+            </Welcome>
             <ActionLink href="/sign-in" secondary>
               I have an account
             </ActionLink>

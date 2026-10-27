@@ -55,9 +55,7 @@ export default async function Page() {
       <>
         <PageHeading eyebrow="Today">Today</PageHeading>
         <SafetyCheck region={p.region} />
-        <p className="meta">
-          Your steps are kept. <Link href="/steps">See your steps</Link>
-        </p>
+        <p className="meta">Your plans are kept.</p>
       </>
     );
 
@@ -117,13 +115,13 @@ export default async function Page() {
       {later.length > 0 && (
         <p className="meta">
           {later.length} more {later.length === 1 ? "step is" : "steps are"}{" "}
-          planned for other days. <Link href="/steps">See your steps</Link>
+          planned for other days.
         </p>
       )}
 
       <div className={styles.below}>
         <p className="meta">Not a step kind of day?</p>
-        <Link className="button secondary" href="/reflect">
+        <Link className="button secondary" href="/talk">
           Talk it through <span aria-hidden="true">→</span>
         </Link>
       </div>

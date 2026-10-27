@@ -2,13 +2,77 @@ import { expect, test } from "@playwright/test";
 import { chooseFirstSuggestion, startAsGuest } from "./helpers";
 
 test("setup can't be finished without confirming 18+", async ({ page }) => {
-  await page.goto("/start");
-  await page.getByRole("button", { name: "Start" }).click();
-  await expect(page.locator("p.error")).toContainText("18 or older");
-  await expect(page).toHaveURL(/\/start$/);
-  // App pages send people without a session to setup.
+  await page.goto("/");
+  const dialog = page.getByRole("dialog", { name: "Welcome to Koe" });
+  await dialog.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(dialog.locator("p.error")).toContainText("18 or older");
+  await expect(page).toHaveURL(/\/$/);
+  // App pages send people without a session back to the welcome dialog.
   await page.goto("/today");
-  await expect(page).toHaveURL(/\/start$/);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(dialog).toBeVisible();
+});
+
+test("a new visitor starts in the welcome dialog, then skips the intake", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const dialog = page.getByRole("dialog", { name: "Welcome to Koe" });
+  await expect(dialog).toBeVisible();
+  // Esc returns to the landing page; the button brings the dialog back.
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: /Start now/ }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("I'm 18 or older").check();
+  await dialog.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(page).toHaveURL(/\/intake$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Let's get to know you" }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Skip for now" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+});
+
+test("each tab and Help are reachable and show their page", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await startAsGuest(page);
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  for (const [tab, url, heading] of [
+    ["Talk", /\/talk$/, "Talk it through"],
+    ["Shelf", /\/shelf$/, "Shelf"],
+    ["You", /\/you$/, "You"],
+    ["Today", /\/today$/, /./],
+  ] as const) {
+    await nav.getByRole("link", { name: tab }).click();
+    await expect(page).toHaveURL(url);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
+    await expect(nav.getByRole("link", { name: tab })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  }
+  await page.getByRole("link", { name: "Help", exact: true }).click();
+  await expect(page).toHaveURL(/\/help/);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+});
+
+test("old addresses go to the new ones", async ({ page }) => {
+  await startAsGuest(page);
+  for (const [from, to] of [
+    ["/reflect", /\/talk$/],
+    ["/reflect/talk", /\/talk$/],
+    ["/connect", /\/you\/people$/],
+    ["/settings", /\/you$/],
+    ["/settings/memory", /\/you\/knows$/],
+    ["/steps", /\/today$/],
+    ["/start", /\/today$/],
+  ] as const) {
+    await page.goto(from);
+    await expect(page).toHaveURL(to);
+  }
 });
 
 test("a step chosen on Today is still there after a reload", async ({
@@ -37,7 +101,7 @@ test("a step chosen on Today is still there after a reload", async ({
     page.getByRole("button", { name: "Low", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
 
-  await page.goto("/reflect/journey");
+  await page.goto("/you/look-back/journey");
   await expect(page.getByRole("link", { name: title })).toBeVisible();
 });
 
@@ -77,9 +141,7 @@ test("plan a repeating step with an if-then cue", async ({ page }) => {
   await expect(page.getByText("When: After breakfast")).toBeVisible();
 
   await page.goto("/steps");
-  await expect(
-    page.getByRole("link", { name: /Water the plants/ }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/\/today$/);
 });
 
 test("problem solving ends in a planned step", async ({ page }) => {
@@ -106,7 +168,7 @@ test("a worrying note gets the safety check and pauses coaching until resumed", 
   page,
 }) => {
   await startAsGuest(page, "GB");
-  await page.goto("/reflect");
+  await page.goto("/you/notes");
   await page.getByLabel("Write a note").fill("I just want to disappear");
   await page.getByRole("button", { name: "Save note" }).click();
   await expect(
@@ -138,17 +200,17 @@ test("Talk saves the conversation even when the AI is off", async ({
   page,
 }) => {
   await startAsGuest(page);
-  await page.goto("/reflect/talk");
+  await page.goto("/talk");
   await expect(page.getByText("Koe is an AI, not a person")).toBeVisible();
   await page.getByLabel("Your message").fill("Work has been a lot this week");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page).toHaveURL(/\/reflect\/talk\/.+/);
+  await expect(page).toHaveURL(/\/talk\/.+/);
   await expect(
     page
       .getByRole("list", { name: "Conversation" })
       .getByText("Work has been a lot this week"),
   ).toBeVisible();
-  await page.goto("/reflect");
+  await page.goto("/talk");
   await expect(
     page.getByRole("link", { name: "Work has been a lot this week" }),
   ).toBeVisible();
@@ -158,7 +220,7 @@ test("a risky message in Talk is never answered by the model", async ({
   page,
 }) => {
   await startAsGuest(page);
-  await page.goto("/reflect/talk");
+  await page.goto("/talk");
   await page
     .getByLabel("Your message")
     .fill("they would be better off without me");
@@ -172,7 +234,7 @@ test("a risky message in Talk is never answered by the model", async ({
   await expect(page.getByLabel("Your message")).toHaveCount(0);
 
   // A new conversation is no way around the pause, and no dead end either.
-  await page.goto("/reflect/talk");
+  await page.goto("/talk");
   await expect(
     page.getByRole("heading", { name: /are you safe right now/ }),
   ).toBeVisible();

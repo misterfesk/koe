@@ -44,7 +44,7 @@ export async function start(_: unknown, form: FormData): Promise<ActionResult> {
     region,
     timezone: parsed.data.timezone,
   });
-  redirect("/today");
+  redirect("/intake");
 }
 
 const credentials = z.object({
@@ -105,7 +105,7 @@ export async function createAccount(
   } catch (error) {
     return authError(error);
   }
-  redirect("/settings/account?created=1");
+  redirect("/you/account?created=1");
 }
 
 export async function signIn(

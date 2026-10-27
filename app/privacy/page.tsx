@@ -59,10 +59,10 @@ export default function Page() {
         </p>
         <h2>Your controls</h2>
         <p>
-          In <Link href="/settings/privacy">Your data</Link> you can switch chat
-          history off, download everything in one file, or delete everything.
-          Deleting removes it from the database straight away. Memory cards are
-          in <Link href="/settings/memory">About me</Link>.
+          In <Link href="/you/data">Your data</Link> you can switch chat history
+          off, download everything in one file, or delete everything. Deleting
+          removes it from the database straight away. Memory cards are in{" "}
+          <Link href="/you/knows">What Koe knows</Link>.
         </p>
       </div>
     </>

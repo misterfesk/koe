@@ -31,7 +31,7 @@ export default async function Page({
   return (
     <>
       <PageHeading
-        eyebrow="Settings · Reminders"
+        eyebrow="You · Reminders"
         description="Only reminders you set. They pause themselves if a few go unanswered, so they never pile up."
       >
         Reminders

@@ -17,7 +17,7 @@ export default async function Page({
     return (
       <>
         <PageHeading
-          eyebrow="Settings · Account"
+          eyebrow="You · Account"
           description="Everything you've done so far moves into the account. Nothing is lost."
         >
           Make an account
@@ -36,7 +36,7 @@ export default async function Page({
     );
   return (
     <>
-      <PageHeading eyebrow="Settings · Account">Your account</PageHeading>
+      <PageHeading eyebrow="You · Account">Your account</PageHeading>
       {created && (
         <Notice>
           Account created. Everything you did as a guest is in it.
@@ -52,7 +52,7 @@ export default async function Page({
       <SignOut />
       <p className="meta" style={{ marginTop: 24 }}>
         To delete your account and everything in it, go to{" "}
-        <Link href="/settings/privacy">Your data</Link>.
+        <Link href="/you/data">Your data</Link>.
       </p>
     </>
   );

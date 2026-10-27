@@ -41,7 +41,7 @@ export function Shell({
         </Link>
         {appearance?.mascot && !appearance.plain && <Mascot />}
         <Link className={styles.help} href="/help">
-          Help now
+          Help
         </Link>
       </header>
       <div className={signedIn ? styles.layout : styles.single}>

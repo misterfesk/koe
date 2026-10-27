@@ -23,7 +23,7 @@ export default async function Page() {
   return (
     <>
       <PageHeading
-        eyebrow="Reflect · Weekly look-back"
+        eyebrow="You · Look back"
         description="About three minutes. Nothing here is graded."
       >
         Your last seven days

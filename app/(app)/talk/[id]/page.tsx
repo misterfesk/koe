@@ -23,12 +23,12 @@ export default async function Page({
         <PageHeading eyebrow="Talk" description="It may have been deleted.">
           This conversation isn&apos;t here.
         </PageHeading>
-        <ActionLink href="/reflect/talk">Start a new one</ActionLink>
+        <ActionLink href="/talk">Start a new one</ActionLink>
       </>
     );
   return (
     <>
-      <PageHeading eyebrow={"Reflect · " + modeLabels[convo.mode]}>
+      <PageHeading eyebrow={"Talk · " + modeLabels[convo.mode]}>
         {convo.title}
       </PageHeading>
       <Conversation
@@ -39,7 +39,7 @@ export default async function Page({
         region={v.profile.region}
       />
       <div className="actions">
-        <Link className="button secondary" href="/reflect/talk">
+        <Link className="button secondary" href="/talk">
           New conversation
         </Link>
         <DeleteConversation id={convo.id} />

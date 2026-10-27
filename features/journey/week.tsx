@@ -50,8 +50,8 @@ export function WeekDecisions({
               Pick something new on Today
             </Link>
           )}
-          <Link className="button secondary" href="/reflect">
-            Back to Reflect
+          <Link className="button secondary" href="/talk">
+            Back to Talk
           </Link>
         </div>
       </section>

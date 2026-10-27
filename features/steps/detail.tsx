@@ -237,7 +237,7 @@ export function StepManage({
           onConfirm={() =>
             startTransition(async () => {
               await removeStep(step.id);
-              router.push("/steps");
+              router.push("/today");
             })
           }
         />

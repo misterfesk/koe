@@ -4,7 +4,7 @@ import { MemoryCards } from "@/features/settings/memory";
 import { listMemory } from "@/server/data/memory";
 import { requireViewer } from "@/server/viewer";
 
-export const metadata: Metadata = { title: "About me" };
+export const metadata: Metadata = { title: "What Koe knows" };
 
 export default async function Page() {
   const v = await requireViewer();
@@ -12,10 +12,10 @@ export default async function Page() {
   return (
     <>
       <PageHeading
-        eyebrow="Settings · About me"
+        eyebrow="You · What Koe knows"
         description="Koe only remembers what you add here or say yes to. It uses these cards to make suggestions fit you. Nothing is remembered without asking."
       >
-        About me
+        What Koe knows
       </PageHeading>
       <MemoryCards
         cards={cards}

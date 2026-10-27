@@ -125,7 +125,7 @@ export function CarePreparation({
       {status && <Notice>{status}</Notice>}
       <p className="meta">
         Want help working out what to say?{" "}
-        <Link href="/reflect/talk?mode=care">Talk it through with Koe</Link>
+        <Link href="/talk?mode=care">Talk it through with Koe</Link>
       </p>
     </div>
   );

@@ -2,6 +2,11 @@
   min-height: 100vh;
 }
 .header {
+  /* Help stays in reach however far the page is scrolled. */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--canvas);
   display: flex;
   align-items: center;
   gap: 20px;

@@ -10,7 +10,7 @@ export default async function Page() {
   const p = v.profile;
   return (
     <>
-      <PageHeading eyebrow="Settings · Appearance">Appearance</PageHeading>
+      <PageHeading eyebrow="You · Appearance">Appearance</PageHeading>
       <div className="prose">
         <Appearance
           tone={p.tone}

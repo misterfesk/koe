@@ -34,6 +34,6 @@ export type Viewer = NonNullable<Awaited<ReturnType<typeof getViewer>>> & {
 /** For app pages and actions: a signed-in person who has finished setup. */
 export async function requireViewer(): Promise<Viewer> {
   const viewer = await getViewer();
-  if (!viewer?.profile?.onboardedAt) redirect("/start");
+  if (!viewer?.profile?.onboardedAt) redirect("/");
   return viewer as Viewer;
 }

@@ -26,8 +26,8 @@ export default async function Page() {
       </PageHeading>
       <CredentialsForm action={signIn} submitLabel="Sign in" />
       <p className="meta">
-        New here? <Link href="/start">Start as a guest</Link>, then make an
-        account in Settings.
+        New here? <Link href="/">Start as a guest</Link>, then make an account
+        in You.
       </p>
     </>
   );

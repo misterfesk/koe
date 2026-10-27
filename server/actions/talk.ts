@@ -222,7 +222,7 @@ export async function keepMemory(
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0].message };
   if (!v.profile.memoryOn)
-    return { ok: false, error: "Memory is off in Settings." };
+    return { ok: false, error: "Memory is off. You can turn it on in You." };
   await addMemory(v.db, v.user.id, {
     ...parsed.data,
     source: "talk",

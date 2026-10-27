@@ -11,7 +11,7 @@ export default async function Page() {
   return (
     <>
       <PageHeading
-        eyebrow="Settings · Your data"
+        eyebrow="You · Your data"
         description="It's yours: see it, take it with you, or delete it."
       >
         Your data
@@ -21,7 +21,7 @@ export default async function Page() {
         <Transcripts keep={v.profile.keepTranscripts} />
         <p className="meta">
           Memory cards are managed in{" "}
-          <Link href="/settings/memory">About me</Link>.
+          <Link href="/you/knows">What Koe knows</Link>.
         </p>
         <h2>Export</h2>
         <p>
