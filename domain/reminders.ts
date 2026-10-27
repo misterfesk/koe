@@ -71,3 +71,43 @@ export function nextReminderAt(
 
 /** After this many reminders in a row with no answer, Koe pauses them. */
 export const IGNORE_LIMIT = 3;
+
+export type ReminderKind = "item" | "morning_plan";
+
+export const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
+
+/**
+ * The nudge budget. Koe's own nudge is the morning plan reminder, and
+ * `profile.nudgesPerDay` (default 1) caps how many of those it sends in a
+ * local day. Reminders the person set for an item are not nudges: they asked
+ * for each one, so they never count against the budget and never use it up.
+ */
+export function canSendKoeNudge(budget: number, sentToday: number) {
+  return budget > 0 && sentToday < budget;
+}
+
+/** One-off items remind once; only a repeating item or the morning plan comes back. */
+export function remindsOnce(
+  kind: ReminderKind,
+  repeatDays: number[] | null | undefined,
+) {
+  return kind === "item" && !repeatDays?.length;
+}
+
+const clock = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+/**
+ * What a lock screen shows. Lock screens are public: no entry title, why
+ * line or health word, only the kind of reminder and, for an item, its time.
+ */
+export function reminderPayload(kind: ReminderKind, minuteOfDay: number) {
+  return {
+    title: "Koe",
+    body:
+      kind === "morning_plan"
+        ? "Your day is ready."
+        : `A reminder for ${clock(minuteOfDay)}.`,
+    url: "/today",
+  };
+}

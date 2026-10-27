@@ -17,7 +17,13 @@ import {
   planItemSchema,
 } from "@/domain/plan-menu";
 import type { RiskLevel } from "@/domain/safety";
-import { commitIntro } from "../data/intake";
+import { EVERY_DAY, inQuietHours } from "@/domain/reminders";
+import { commitIntro, getPlanDay } from "../data/intake";
+import {
+  setMorningReminder,
+  setReminder,
+  subscriptionsFor,
+} from "../data/reminders";
 import { screen } from "../safety";
 import { synthesiseIntake, templateResult } from "../llm/intake";
 import { requireViewer } from "../viewer";
@@ -118,6 +124,9 @@ const startInput = z.object({
     .max(4),
   savePeople: z.array(z.string().trim().min(1).max(40)).max(3),
   items: z.array(planItemSchema).min(1).max(3),
+  // "Remind me for each of these": only honoured once a device is set up.
+  remindItems: z.boolean().default(false),
+  morningPlanMinute: z.number().int().min(0).max(1439).nullable().default(null),
 });
 
 /** "Start my day": writes exactly what the person approved, then opens Today. */
@@ -163,6 +172,30 @@ export async function startMyDay(input: unknown): Promise<ActionResult> {
     memoryOn: v.profile.memoryOn,
     today: v.today,
   });
+  const wantsAny =
+    parsed.data.remindItems || parsed.data.morningPlanMinute !== null;
+  const subs = wantsAny ? await subscriptionsFor(v.db, [v.user.id]) : [];
+  const morning = parsed.data.morningPlanMinute;
+  if (subs.length && morning !== null)
+    await setMorningReminder(v.db, v.user.id, morning, v.profile.timezone);
+  if (parsed.data.remindItems) {
+    const plan = subs.length
+      ? await getPlanDay(v.db, v.user.id, v.today)
+      : null;
+    for (const item of plan?.items ?? []) {
+      if (
+        !item.stepId ||
+        inQuietHours(item.minuteOfDay, v.profile.quietStart, v.profile.quietEnd)
+      )
+        continue;
+      await setReminder(
+        v.db,
+        v.user.id,
+        { stepId: item.stepId, minuteOfDay: item.minuteOfDay, days: EVERY_DAY },
+        v.profile.timezone,
+      );
+    }
+  }
   refresh();
   redirect("/today");
 }

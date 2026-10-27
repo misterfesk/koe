@@ -418,15 +418,20 @@ export const reachOut = pgTable(
   (t) => [index("reach_out_user_idx").on(t.userId)],
 );
 
-/** A reminder the person set for one step. Koe never adds one on its own. */
+/**
+ * A reminder the person turned on. Koe never adds one on its own.
+ * kind "item": for one plan item. kind "morning_plan": the one daily
+ * "your day is ready" reminder (no item, one per person).
+ */
 export const reminder = pgTable(
   "reminder",
   {
     id: id(),
     userId: owner(),
-    stepId: text("step_id")
+    kind: text("kind", { enum: ["item", "morning_plan"] })
       .notNull()
-      .references(() => step.id, { onDelete: "cascade" }),
+      .default("item"),
+    stepId: text("step_id").references(() => step.id, { onDelete: "cascade" }),
     minuteOfDay: integer("minute_of_day").notNull(),
     // 0 = Sunday … 6 = Saturday.
     days: integer("days").array().notNull(),
@@ -439,6 +444,9 @@ export const reminder = pgTable(
   },
   (t) => [
     uniqueIndex("reminder_step_idx").on(t.stepId),
+    uniqueIndex("reminder_morning_idx")
+      .on(t.userId)
+      .where(sql`${t.kind} = 'morning_plan'`),
     index("reminder_due_idx").on(t.nextAt),
   ],
 );

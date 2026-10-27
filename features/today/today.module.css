@@ -203,3 +203,11 @@
   font-weight: 500;
   margin-bottom: 10px;
 }
+
+.calendarLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--secondary);
+  font-size: 0.9375rem;
+}

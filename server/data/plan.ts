@@ -7,6 +7,7 @@ import type { Db } from "../db";
 import { checkIn, planDay, step, stepReport } from "../db/schema";
 import { open, seal } from "../crypto";
 import { getPlanDay, type PlanDayView } from "./intake";
+import { followItems, parkItems } from "./reminders";
 import { insertStep } from "./steps";
 
 // Writing a day's plan: every change is a new plan_day version plus the
@@ -145,6 +146,14 @@ export async function writePlanVersion(
         .update(step)
         .set({ status: "archived", updatedAt: new Date() })
         .where(and(eq(step.userId, userId), inArray(step.id, gone)));
+    // A reminder moves with its item, and stops with an item that left Today.
+    // A swapped-in item is a new entry and starts with no reminder.
+    await followItems(
+      tx,
+      userId,
+      items.map((i) => i.stepId!).filter((id) => owned.has(id)),
+    );
+    await parkItems(tx, userId, gone);
 
     // A new day starts clean: yesterday's unfinished items are not carried over.
     if (w.reason === "first_open")
@@ -265,6 +274,14 @@ export async function undoLastChange(db: Db, userId: string, day: string) {
         .update(step)
         .set({ status: "archived", updatedAt: new Date() })
         .where(and(eq(step.userId, userId), inArray(step.id, added)));
+    // Reminders go back to how they were: items that returned have theirs
+    // again, at the restored time; items the change added lose theirs.
+    await followItems(
+      tx,
+      userId,
+      was.items.flatMap((i) => (i.stepId ? [i.stepId] : [])),
+    );
+    await parkItems(tx, userId, added);
 
     await tx
       .delete(planDay)

@@ -15,3 +15,14 @@ describe("sign-in rate limit", () => {
     expect(results.slice(10)).toEqual([false, false]);
   });
 });
+
+describe("test notification rate limit", () => {
+  it("allows 5 a minute per person, not per network address", async () => {
+    const { allow } = await import("@/server/rate-limit");
+    const mine = [];
+    for (let i = 0; i < 6; i++)
+      mine.push(await allow("reminder-test", "user-1"));
+    expect(mine).toEqual([true, true, true, true, true, false]);
+    expect(await allow("reminder-test", "user-2")).toBe(true);
+  });
+});

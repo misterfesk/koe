@@ -6,6 +6,7 @@ import type { Reveal } from "@/domain/intake";
 import { alternativeFor, sizeLabels, type PlanItem } from "@/domain/plan-menu";
 import { formatMinutes } from "@/domain/time";
 import { startMyDay } from "@/server/actions/intake";
+import { enableNotifications } from "../reminders/notifications";
 import { SafetyCheck } from "../safety/safety-check";
 import { clearDraft } from "./draft-store";
 import styles from "./intake.module.css";
@@ -19,9 +20,11 @@ type Card = Reveal["memories"][number] & { keep: boolean };
 export function RevealScreen({
   reveal,
   region,
+  publicKey,
 }: {
   reveal: Reveal;
   region: string | null;
+  publicKey: string | null;
 }) {
   const [summary, setSummary] = useState(reveal.summary);
   const [cards, setCards] = useState<Card[]>(
@@ -31,6 +34,9 @@ export function RevealScreen({
     reveal.model.names.map((n) => ({ ...n, name: n.name })),
   );
   const [items, setItems] = useState<PlanItem[]>(reveal.items);
+  const [morningOn, setMorningOn] = useState(false);
+  const [itemsOn, setItemsOn] = useState(false);
+  const [remindError, setRemindError] = useState("");
   const [announce, setAnnounce] = useState("");
   const [error, setError] = useState("");
   const [flagged, setFlagged] = useState(false);
@@ -39,6 +45,30 @@ export function RevealScreen({
   useEffect(() => {
     heading.current?.focus();
   }, [flagged]);
+
+  // Reminders start off. Turning one on asks the browser then, with the
+  // reason just shown above the switch.
+  const morning = reveal.model.morningPlan;
+  const morningMinute =
+    morning && morning !== "none" ? Number(morning.slice(0, 2)) * 60 : null;
+  const toggleMorning = (on: boolean) =>
+    startTransition(async () => {
+      setRemindError("");
+      if (on) {
+        const asked = await enableNotifications(publicKey!);
+        if (!asked.ok) return setRemindError(asked.message);
+      }
+      setMorningOn(on);
+    });
+  const toggleItems = (on: boolean) =>
+    startTransition(async () => {
+      setRemindError("");
+      if (on) {
+        const asked = await enableNotifications(publicKey!);
+        if (!asked.ok) return setRemindError(asked.message);
+      }
+      setItemsOn(on);
+    });
 
   const swap = (index: number) => {
     const next = alternativeFor(items[index], reveal.model);
@@ -62,6 +92,8 @@ export function RevealScreen({
           .map(({ kind, text }) => ({ kind, text })),
         savePeople: save.filter((n) => n.save).map((n) => n.name),
         items,
+        remindItems: itemsOn,
+        morningPlanMinute: morningOn ? morningMinute : null,
       });
       // On success the server sends the person to Today.
       if (!r.ok) return setError(Object.values(r.errors)[0]);
@@ -224,6 +256,43 @@ export function RevealScreen({
           {announce}
         </p>
       </section>
+
+      {publicKey && (
+        <section aria-labelledby="reveal-remind">
+          <h2 id="reveal-remind" className={styles.sectionTitle}>
+            Want a reminder?
+          </h2>
+          <p className="meta">
+            Both are off until you turn them on, and are saved when you start
+            your day. A reminder shows only the time, never what it is.
+          </p>
+          {morningMinute !== null && (
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={morningOn}
+                disabled={pending}
+                onChange={(e) => toggleMorning(e.target.checked)}
+              />
+              <span>Remind me at {morning} when my day is ready</span>
+            </label>
+          )}
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={itemsOn}
+              disabled={pending}
+              onChange={(e) => toggleItems(e.target.checked)}
+            />
+            <span>Remind me at the time of each thing in my plan</span>
+          </label>
+          {remindError && (
+            <p className="error" role="alert">
+              {remindError}
+            </p>
+          )}
+        </section>
+      )}
 
       {error && (
         <p className="error" role="alert">

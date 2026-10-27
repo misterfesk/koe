@@ -1,30 +1,28 @@
 "use client";
 import { useState, useTransition } from "react";
-import { useBrowserValue } from "@/components/use-browser";
+import { IGNORE_LIMIT } from "@/domain/reminders";
 import { describeDays, formatMinutes, weekdayOptions } from "@/domain/time";
 import {
   removeReminder,
   saveReminder,
-  sendTestReminder,
   setQuietHours,
-  subscribePush,
   toggleReminder,
+  turnOnMorningPlan,
 } from "@/server/actions/settings";
 import type { ReminderView } from "@/server/data/reminders";
+import {
+  enableNotifications,
+  TestNow,
+  useAllowed,
+  usePushSupport,
+} from "../reminders/notifications";
 
-type Step = { id: string; title: string; repeatDays: number[] | null };
+type Entry = { id: string; title: string; repeatDays: number[] | null };
 
 const toMinutes = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
   return (h || 0) * 60 + (m || 0);
 };
-
-function base64ToBytes(base64: string) {
-  const padded = (base64 + "=".repeat((4 - (base64.length % 4)) % 4))
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-  return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
-}
 
 /** Turns notifications on for this browser. Asked only when someone sets a reminder. */
 export function DeviceNotifications({
@@ -35,10 +33,10 @@ export function DeviceNotifications({
   subscribed: boolean;
 }) {
   const [state, setState] = useState<string>("");
-  const supported = useBrowserValue(
-    () => "serviceWorker" in navigator && "PushManager" in window,
-    true,
-  );
+  const [justOn, setJustOn] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const supported = usePushSupport();
+  const allowed = useAllowed();
   if (!publicKey)
     return (
       <p className="meta">Reminders aren&apos;t set up on this server yet.</p>
@@ -50,64 +48,130 @@ export function DeviceNotifications({
         Screen first.
       </p>
     );
+  const on = subscribed && allowed;
   return (
     <div className="panel">
       <p>
-        {subscribed
-          ? "Notifications are on for at least one of your devices."
-          : "Reminders arrive as notifications. Turn them on for this device."}
+        {on
+          ? "Reminders are on for this device."
+          : "Reminders arrive as notifications. They show only the time, never what it is."}
       </p>
       <div className="actions">
-        <button
-          type="button"
-          className={subscribed ? "secondary" : undefined}
-          onClick={async () => {
-            try {
-              const permission = await Notification.requestPermission();
-              if (permission !== "granted")
-                return setState(
-                  "Notifications are blocked. You can allow them in your browser's site settings.",
-                );
-              const reg = await navigator.serviceWorker.register("/sw.js");
-              await navigator.serviceWorker.ready;
-              const sub =
-                (await reg.pushManager.getSubscription()) ??
-                (await reg.pushManager.subscribe({
-                  userVisibleOnly: true,
-                  applicationServerKey: base64ToBytes(publicKey),
-                }));
-              await subscribePush(sub.toJSON());
-              setState("Notifications are on for this device.");
-            } catch {
-              setState("Couldn't turn notifications on here. Try again later.");
-            }
-          }}
-        >
-          {subscribed ? "Turn on for this device too" : "Turn on notifications"}
-        </button>
-        {subscribed && (
+        {!on && (
           <button
             type="button"
-            className="secondary"
-            onClick={async () => {
-              const r = await sendTestReminder();
-              setState(
-                r.delivered
-                  ? "Test sent. It can take a few seconds."
-                  : "Couldn't send a test. Try turning notifications on again.",
-              );
-            }}
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const r = await enableNotifications(publicKey);
+                setState(r.ok ? "" : r.message);
+                setJustOn(r.ok);
+              })
+            }
           >
-            Send a test
+            Turn on reminders
           </button>
         )}
+        {(on || justOn) && <TestNow />}
       </div>
-      {state && (
+      {justOn && (
         <p className="meta" role="status">
+          Reminders are on for this device.
+        </p>
+      )}
+      {state && (
+        <p className="error" role="alert">
           {state}
         </p>
       )}
     </div>
+  );
+}
+
+/** The one daily "your day is ready" reminder. Off until the person turns it on. */
+export function MorningPlanReminder({
+  publicKey,
+  subscribed,
+  reminder,
+  defaultMinute,
+}: {
+  publicKey: string | null;
+  subscribed: boolean;
+  reminder?: ReminderView;
+  defaultMinute: number;
+}) {
+  const [time, setTime] = useState(
+    formatMinutes(reminder?.minuteOfDay ?? defaultMinute),
+  );
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+  const allowed = useAllowed();
+  if (!publicKey) return null;
+  const on = !!reminder && !reminder.paused;
+  const save = (ask: boolean) =>
+    startTransition(async () => {
+      setError("");
+      if (ask && !(allowed && subscribed)) {
+        const r = await enableNotifications(publicKey);
+        if (!r.ok) return setError(r.message);
+      }
+      const r = await turnOnMorningPlan({ minuteOfDay: toMinutes(time) });
+      if (!r.ok) setError(r.error ?? "");
+    });
+  return (
+    <section aria-labelledby="morning-plan" style={{ marginTop: 32 }}>
+      <h2 id="morning-plan">Morning plan reminder</h2>
+      <p className="hint">
+        One reminder a day, when your day is ready. It stays off until you turn
+        it on.
+      </p>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={on}
+          disabled={pending}
+          onChange={(e) => {
+            if (e.target.checked) save(true);
+            else if (reminder)
+              startTransition(() => removeReminder(reminder.id));
+          }}
+        />
+        <span>Remind me when my day is ready</span>
+      </label>
+      {reminder?.paused && (
+        <p className="meta">
+          {reminder.ignoredCount >= IGNORE_LIMIT
+            ? "Paused after a few went unanswered. Turn it on again any time."
+            : "Paused."}
+        </p>
+      )}
+      <div className="inline-form">
+        <div className="field">
+          <label htmlFor="morning-time">Time</label>
+          <input
+            id="morning-time"
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+          />
+        </div>
+        {reminder && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={pending}
+            onClick={() => save(false)}
+          >
+            Save time
+          </button>
+        )}
+      </div>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -117,7 +181,7 @@ export function ReminderRow({
   focus,
   quiet,
 }: {
-  step: Step;
+  step: Entry;
   reminder?: ReminderView;
   focus: boolean;
   /** The reminder's time falls inside quiet hours, so it won't arrive. */
@@ -139,8 +203,8 @@ export function ReminderRow({
         <>
           <p className="meta">
             {reminder.paused
-              ? reminder.ignoredCount >= 3
-                ? "Paused after a few reminders went unanswered. Turn it back on any time."
+              ? reminder.ignoredCount >= IGNORE_LIMIT
+                ? "Paused after a few went unanswered. Turn it back on any time."
                 : "Paused"
               : `${formatMinutes(reminder.minuteOfDay)} · ${describeDays(reminder.days)}`}
           </p>

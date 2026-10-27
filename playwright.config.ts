@@ -45,6 +45,8 @@ export default defineConfig({
       KOE_AI: "off",
       KOE_SCHEDULER: "off",
       KOE_RATE_LIMIT: "off",
+      // Pushes are recorded, not sent.
+      KOE_PUSH_STUB: "on",
       APP_URL: "http://127.0.0.1:" + port,
     },
   },

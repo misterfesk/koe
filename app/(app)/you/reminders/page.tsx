@@ -4,9 +4,11 @@ import { Empty, PageHeading } from "@/components/ui";
 import { inQuietHours } from "@/domain/reminders";
 import {
   DeviceNotifications,
+  MorningPlanReminder,
   QuietHours,
   ReminderRow,
 } from "@/features/settings/reminders";
+import { getUserModel } from "@/server/data/intake";
 import { listReminders, subscriptionsFor } from "@/server/data/reminders";
 import { listSteps } from "@/server/data/steps";
 import { env } from "@/server/env";
@@ -22,30 +24,40 @@ export default async function Page({
 }) {
   const v = await requireViewer();
   const focus = (await searchParams).step;
-  const [steps, reminders, subs] = await Promise.all([
+  const [steps, reminders, subs, model] = await Promise.all([
     listSteps(v.db, v.user.id),
     listReminders(v.db, v.user.id),
     subscriptionsFor(v.db, [v.user.id]),
+    v.profile.memoryOn ? getUserModel(v.db, v.user.id) : null,
   ]);
+  const publicKey = pushConfigured()
+    ? (env().VAPID_PUBLIC_KEY ?? "stub")
+    : null;
+  const chosen = model?.model.morningPlan;
+  const defaultMinute =
+    chosen && chosen !== "none" ? Number(chosen.slice(0, 2)) * 60 : 8 * 60;
   const active = steps.filter((s) => s.status === "active");
   return (
     <>
       <PageHeading
         eyebrow="You · Reminders"
-        description="Only reminders you set. They pause themselves if a few go unanswered, so they never pile up."
+        description="Only reminders you turn on. If a few go unanswered they pause, so they never pile up."
       >
         Reminders
       </PageHeading>
-      <DeviceNotifications
-        publicKey={pushConfigured() ? env().VAPID_PUBLIC_KEY! : null}
+      <DeviceNotifications publicKey={publicKey} subscribed={subs.length > 0} />
+      <MorningPlanReminder
+        publicKey={publicKey}
         subscribed={subs.length > 0}
+        reminder={reminders.find((r) => r.kind === "morning_plan")}
+        defaultMinute={defaultMinute}
       />
-      <section aria-labelledby="for-steps">
-        <h2 id="for-steps">Your steps</h2>
+      <section aria-labelledby="for-steps" style={{ marginTop: 32 }}>
+        <h2 id="for-steps">Reminders for your day</h2>
         {active.length === 0 ? (
           <Empty>
-            No steps to remind you about.{" "}
-            <Link href="/today">Choose one on Today</Link>.
+            Nothing to remind you about yet.{" "}
+            <Link href="/today">Today has what is planned</Link>.
           </Empty>
         ) : (
           <ul className="rows">
@@ -53,10 +65,14 @@ export default async function Page({
               <ReminderRow
                 key={s.id}
                 step={{ id: s.id, title: s.title, repeatDays: s.repeatDays }}
-                reminder={reminders.find((r) => r.stepId === s.id)}
+                reminder={reminders.find(
+                  (r) => r.kind === "item" && r.stepId === s.id,
+                )}
                 focus={focus === s.id}
                 quiet={(() => {
-                  const r = reminders.find((x) => x.stepId === s.id);
+                  const r = reminders.find(
+                    (x) => x.kind === "item" && x.stepId === s.id,
+                  );
                   return (
                     !!r &&
                     inQuietHours(
@@ -77,8 +93,8 @@ export default async function Page({
         <QuietHours start={v.profile.quietStart} end={v.profile.quietEnd} />
       </section>
       <p className="meta">
-        Lock-screen text never says what your step is: just &ldquo;A reminder
-        you set.&rdquo; Times use {v.profile.timezone}.
+        A reminder on your lock screen shows only the time, never what it is.
+        Times use {v.profile.timezone}.
       </p>
     </>
   );

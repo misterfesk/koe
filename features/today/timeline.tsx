@@ -10,6 +10,7 @@ import {
 } from "@/domain/steps";
 import { notToday, rateVsExpected, tooMuchToday } from "@/server/actions/plan";
 import { reportHowItWent, takeBackReport } from "@/server/actions/steps";
+import { RemindControl, type PushState } from "../reminders/remind-control";
 import { SafetyCheck } from "../safety/safety-check";
 import { AddSomething } from "./add-something";
 import type { Entry } from "./model";
@@ -20,7 +21,7 @@ const answers = [
   ["partly", "Partly"],
 ] as const;
 
-function EntryCard({ entry }: { entry: Entry }) {
+function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -64,6 +65,24 @@ function EntryCard({ entry }: { entry: Entry }) {
         </p>
       )}
       {entry.why && <p className={styles.cue}>{entry.why}</p>}
+      {!report && entry.minute !== null && (
+        <RemindControl
+          stepId={entry.id}
+          title={entry.title}
+          minute={entry.minute}
+          reminder={entry.reminder}
+          push={push}
+        />
+      )}
+      {entry.minute !== null && (
+        <a
+          className={styles.calendarLink}
+          href={"/api/calendar/item/" + entry.id}
+          download
+        >
+          Add to calendar
+        </a>
+      )}
 
       {!report && !open && (
         <div className={styles.taps} role="group" aria-label="How did it go?">
@@ -230,10 +249,12 @@ export function Timeline({
   entries,
   canAdd,
   region,
+  push,
 }: {
   entries: Entry[];
   canAdd: boolean;
   region: string | null;
+  push: PushState;
 }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
@@ -250,11 +271,16 @@ export function Timeline({
       ) : (
         <ul className={styles.cards}>
           {entries.map((e) => (
-            <EntryCard key={e.id} entry={e} />
+            <EntryCard key={e.id} entry={e} push={push} />
           ))}
         </ul>
       )}
       <div className={styles.dayActions}>
+        {entries.some((e) => e.minute !== null) && (
+          <a className="button secondary" href="/api/calendar/today" download>
+            Add today to your calendar
+          </a>
+        )}
         {canAdd && <AddSomething onSafety={setSafety} />}
         {entries.length > 1 && (
           <button

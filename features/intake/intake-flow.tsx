@@ -163,7 +163,13 @@ const titles: Record<number, string> = {
   5: "How should Koe be with you?",
 };
 
-export function IntakeFlow({ region }: { region: string | null }) {
+export function IntakeFlow({
+  region,
+  publicKey,
+}: {
+  region: string | null;
+  publicKey: string | null;
+}) {
   const [stage, setStage] = useState<Stage>("intro");
   const [draft, setDraft] = useState<Draft>(blank);
   const [reveal, setReveal] = useState<RevealData | null>(null);
@@ -299,7 +305,9 @@ export function IntakeFlow({ region }: { region: string | null }) {
     );
 
   if (stage === "reveal" && reveal)
-    return <RevealScreen reveal={reveal} region={region} />;
+    return (
+      <RevealScreen reveal={reveal} region={region} publicKey={publicKey} />
+    );
 
   if (typeof stage !== "number") return null;
   const question = stage;
@@ -491,7 +499,7 @@ export function IntakeFlow({ region }: { region: string | null }) {
           />
           <ChipGroup
             legend="A morning plan time"
-            hint="Nothing is sent yet. Koe will ask before it ever sends a reminder."
+            hint="This only picks a time. A reminder stays off until you turn it on."
             options={morningPlans.map((m) => ({
               value: m,
               label: m === "none" ? "Not now" : m,

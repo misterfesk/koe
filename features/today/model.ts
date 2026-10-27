@@ -1,5 +1,6 @@
 import type { PlanKind, PlanSize } from "@/domain/plan-menu";
 import type { Outcome, VsExpected } from "@/domain/steps";
+import type { EntryReminder } from "../reminders/remind-control";
 
 /** One entry on Today's timeline, ready to show (times already formatted). */
 export type Entry = {
@@ -22,6 +23,8 @@ export type Entry = {
     vsExpected: VsExpected | null;
   } | null;
   later: { label: string; minute: number; time: string }[];
+  /** The reminder the person turned on for this entry, if any. */
+  reminder: EntryReminder | null;
 };
 
 export type Banner = {

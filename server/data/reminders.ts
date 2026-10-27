@@ -1,12 +1,25 @@
 import "server-only";
-import { and, eq, inArray, isNotNull, lte } from "drizzle-orm";
-import { nextReminderAt } from "@/domain/reminders";
+import { and, eq, gt, inArray, isNotNull, lte } from "drizzle-orm";
+import {
+  EVERY_DAY,
+  nextReminderAt,
+  type ReminderKind,
+} from "@/domain/reminders";
 import type { Db } from "../db";
-import { profile, pushSubscription, reminder, step } from "../db/schema";
+import {
+  planDay,
+  profile,
+  pushSubscription,
+  reminder,
+  step,
+} from "../db/schema";
+
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export type ReminderView = {
   id: string;
-  stepId: string;
+  kind: ReminderKind;
+  stepId: string | null;
   minuteOfDay: number;
   days: number[];
   paused: boolean;
@@ -21,6 +34,7 @@ export async function listReminders(db: Db, userId: string) {
     .where(eq(reminder.userId, userId));
   return rows.map((r): ReminderView => ({
     id: r.id,
+    kind: r.kind,
     stepId: r.stepId,
     minuteOfDay: r.minuteOfDay,
     days: r.days,
@@ -45,7 +59,7 @@ export async function setReminder(
   const nextAt = nextReminderAt(input, timezone, new Date());
   await db
     .insert(reminder)
-    .values({ userId, ...input, nextAt })
+    .values({ userId, kind: "item", ...input, nextAt })
     .onConflictDoUpdate({
       target: reminder.stepId,
       set: {
@@ -57,6 +71,81 @@ export async function setReminder(
       },
     });
   return true;
+}
+
+/** The one morning plan reminder; setting it again changes its time and turns it on. */
+export async function setMorningReminder(
+  db: Db,
+  userId: string,
+  minuteOfDay: number,
+  timezone: string,
+) {
+  const input = { minuteOfDay, days: EVERY_DAY };
+  const nextAt = nextReminderAt(input, timezone, new Date());
+  const [have] = await db
+    .select({ id: reminder.id })
+    .from(reminder)
+    .where(and(eq(reminder.userId, userId), eq(reminder.kind, "morning_plan")));
+  if (have)
+    await db
+      .update(reminder)
+      .set({ minuteOfDay, nextAt, paused: false, ignoredCount: 0 })
+      .where(eq(reminder.id, have.id));
+  else
+    await db
+      .insert(reminder)
+      .values({ userId, kind: "morning_plan", ...input, nextAt });
+}
+
+/**
+ * Plan changes and reminders. An item whose time moved takes its reminder
+ * with it; an item that comes back (undo) gets its reminder back. Both
+ * are recomputed from the entry's own time.
+ */
+export async function followItems(
+  tx: Db | Tx,
+  userId: string,
+  stepIds: string[],
+) {
+  if (!stepIds.length) return;
+  const rows = await tx
+    .select({ r: reminder, minute: step.minuteOfDay })
+    .from(reminder)
+    .innerJoin(step, eq(step.id, reminder.stepId))
+    .where(and(eq(reminder.userId, userId), inArray(reminder.stepId, stepIds)));
+  if (!rows.length) return;
+  const [p] = await tx
+    .select({ timezone: profile.timezone })
+    .from(profile)
+    .where(eq(profile.userId, userId));
+  const now = new Date();
+  for (const { r, minute } of rows) {
+    const minuteOfDay = minute ?? r.minuteOfDay;
+    await tx
+      .update(reminder)
+      .set({
+        minuteOfDay,
+        nextAt: nextReminderAt(
+          { minuteOfDay, days: r.days },
+          p?.timezone ?? "UTC",
+          now,
+        ),
+      })
+      .where(eq(reminder.id, r.id));
+  }
+}
+
+/** Items that left Today: their reminders stop (and come back only if the item does). */
+export async function parkItems(
+  tx: Db | Tx,
+  userId: string,
+  stepIds: string[],
+) {
+  if (!stepIds.length) return;
+  await tx
+    .update(reminder)
+    .set({ nextAt: null })
+    .where(and(eq(reminder.userId, userId), inArray(reminder.stepId, stepIds)));
 }
 
 export async function pauseReminder(
@@ -79,6 +168,12 @@ export async function pauseReminder(
       nextAt: paused ? r.nextAt : nextReminderAt(r, timezone, new Date()),
     })
     .where(eq(reminder.id, id));
+}
+
+export async function deleteMorningReminder(db: Db, userId: string) {
+  await db
+    .delete(reminder)
+    .where(and(eq(reminder.userId, userId), eq(reminder.kind, "morning_plan")));
 }
 
 export async function deleteReminder(db: Db, userId: string, id: string) {
@@ -130,13 +225,15 @@ export async function dueReminders(db: Db, now: Date) {
       reminder,
       stepStatus: step.status,
       repeatDays: step.repeatDays,
+      plannedFor: step.plannedFor,
+      nudgesPerDay: profile.nudgesPerDay,
       timezone: profile.timezone,
       quietStart: profile.quietStart,
       quietEnd: profile.quietEnd,
       paused: profile.coachingPausedAt,
     })
     .from(reminder)
-    .innerJoin(step, eq(step.id, reminder.stepId))
+    .leftJoin(step, eq(step.id, reminder.stepId))
     .innerJoin(profile, eq(profile.userId, reminder.userId))
     .where(
       and(
@@ -160,4 +257,14 @@ export async function rescheduleAll(db: Db, userId: string, timezone: string) {
       .update(reminder)
       .set({ nextAt: nextReminderAt(r, timezone, now) })
       .where(eq(reminder.id, r.id));
+}
+
+/** Whether the person opened Today (which plans the day) after `since`. */
+export async function openedSince(db: Db, userId: string, since: Date) {
+  const [row] = await db
+    .select({ id: planDay.id })
+    .from(planDay)
+    .where(and(eq(planDay.userId, userId), gt(planDay.createdAt, since)))
+    .limit(1);
+  return !!row;
 }

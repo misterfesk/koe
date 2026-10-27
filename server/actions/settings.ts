@@ -4,23 +4,27 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { inQuietHours } from "@/domain/reminders";
-import { isValidTimeZone } from "@/domain/time";
+import { EVERY_DAY, inQuietHours } from "@/domain/reminders";
+import { isValidTimeZone, localMinutes } from "@/domain/time";
 import { helpResources } from "@/fixtures/help-resources";
 import { auth } from "../auth";
 import { memoryKinds, tones, user } from "../db/schema";
 import { addMemory, deleteMemory, updateMemory } from "../data/memory";
 import { updateProfile } from "../data/profile";
 import {
+  deleteMorningReminder,
   deleteReminder,
   deleteSubscription,
   pauseReminder,
   rescheduleAll,
   saveSubscription,
+  setMorningReminder,
   setReminder,
   subscriptionsFor,
 } from "../data/reminders";
-import { pushConfigured, sendTo } from "../push";
+import { pushConfigured, sendDetailed } from "../push";
+import { allow } from "../rate-limit";
+import { getStep } from "../data/steps";
 import { screen } from "../safety";
 import { getViewer, requireViewer } from "../viewer";
 import type { RiskLevel } from "@/domain/safety";
@@ -156,7 +160,7 @@ export async function saveReminder(
     v.profile.timezone,
   );
   refresh();
-  return ok ? { ok } : { ok, error: "This step is gone." };
+  return ok ? { ok } : { ok, error: "That one is gone." };
 }
 
 export async function toggleReminder(reminderId: string, paused: boolean) {
@@ -239,10 +243,32 @@ export async function unsubscribePush(endpoint: string) {
   refresh();
 }
 
-export async function sendTestReminder() {
+export type TestResult = { ok: boolean; message: string };
+
+/**
+ * Sends a test notification to this person's own devices and says plainly
+ * what happened. "Delivered" is never claimed: the push service accepted it.
+ */
+export async function sendTestReminder(): Promise<TestResult> {
   const v = await requireViewer();
+  if (!pushConfigured())
+    return {
+      ok: false,
+      message: "Reminders aren't set up on this server yet.",
+    };
+  if (!(await allow("reminder-test", v.user.id)))
+    return {
+      ok: false,
+      message: "That's a few tests in a minute. Try again shortly.",
+    };
   const subs = await subscriptionsFor(v.db, [v.user.id]);
-  const delivered = await sendTo(
+  if (!subs.length)
+    return {
+      ok: false,
+      message:
+        "This device isn't set up for reminders yet. Turn them on first.",
+    };
+  const r = await sendDetailed(
     v.db,
     subs,
     JSON.stringify({
@@ -251,7 +277,103 @@ export async function sendTestReminder() {
       url: "/you/reminders",
     }),
   );
-  return { delivered };
+  if (r.delivered)
+    return { ok: true, message: "Test on its way. Check your notifications." };
+  if (r.expired && !r.refused)
+    return {
+      ok: false,
+      message:
+        "This device's reminder setup had expired. Turn reminders on again.",
+    };
+  return {
+    ok: false,
+    message:
+      "The browser's notification service didn't accept it" +
+      (r.status ? ` (code ${r.status}).` : ".") +
+      " Try turning reminders on again.",
+  };
+}
+
+const remindInput = z.object({
+  stepId: id,
+  minuteOfDay: z.number().int().min(0).max(1439).optional(),
+});
+
+/** "Remind me" on an entry: at its own time, or at a time the person picks. */
+export async function remindMe(
+  input: z.input<typeof remindInput>,
+): Promise<{ ok: boolean; error?: string; minuteOfDay?: number }> {
+  const v = await requireViewer();
+  const parsed = remindInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Pick a time first." };
+  const s = await getStep(v.db, v.user.id, parsed.data.stepId);
+  if (!s) return { ok: false, error: "That one is gone." };
+  const minuteOfDay = parsed.data.minuteOfDay ?? s.minuteOfDay;
+  if (minuteOfDay === null || minuteOfDay === undefined)
+    return { ok: false, error: "Pick a time first." };
+  if (inQuietHours(minuteOfDay, v.profile.quietStart, v.profile.quietEnd))
+    return {
+      ok: false,
+      error:
+        "That's inside your quiet hours. Pick another time, or change quiet hours in You.",
+    };
+  if (
+    !s.repeatDays &&
+    s.plannedFor === v.today &&
+    minuteOfDay <= localMinutes(v.profile.timezone)
+  )
+    return {
+      ok: false,
+      error: "That time has passed today. Move it to later first.",
+    };
+  const ok = await setReminder(
+    v.db,
+    v.user.id,
+    { stepId: s.id, minuteOfDay, days: s.repeatDays ?? EVERY_DAY },
+    v.profile.timezone,
+  );
+  refresh();
+  return ok ? { ok, minuteOfDay } : { ok, error: "That one is gone." };
+}
+
+const morningInput = z.object({
+  minuteOfDay: z.number().int().min(0).max(1439),
+});
+
+/** Turns the morning plan reminder off. */
+export async function turnOffMorningPlan() {
+  const v = await requireViewer();
+  await deleteMorningReminder(v.db, v.user.id);
+  refresh();
+}
+
+/** The morning plan reminder: on at this time, or changed to it. */
+export async function turnOnMorningPlan(
+  input: z.input<typeof morningInput>,
+): Promise<{ ok: boolean; error?: string }> {
+  const v = await requireViewer();
+  const parsed = morningInput.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Pick a time first." };
+  if (
+    inQuietHours(
+      parsed.data.minuteOfDay,
+      v.profile.quietStart,
+      v.profile.quietEnd,
+    )
+  )
+    return {
+      ok: false,
+      error:
+        "That's inside your quiet hours. Pick another time, or change quiet hours below.",
+    };
+  await setMorningReminder(
+    v.db,
+    v.user.id,
+    parsed.data.minuteOfDay,
+    v.profile.timezone,
+  );
+  refresh();
+  return { ok: true };
 }
 
 // --- Account ---

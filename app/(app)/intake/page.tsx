@@ -4,6 +4,8 @@ import { PageHeading } from "@/components/ui";
 import { IntakeFlow } from "@/features/intake/intake-flow";
 import { SafetyCheck } from "@/features/safety/safety-check";
 import { hasIntro } from "@/server/data/intake";
+import { env } from "@/server/env";
+import { pushConfigured } from "@/server/push";
 import { requireViewer } from "@/server/viewer";
 
 export const metadata: Metadata = { title: "Get to know you" };
@@ -19,5 +21,10 @@ export default async function Page() {
         <SafetyCheck region={v.profile.region} />
       </>
     );
-  return <IntakeFlow region={v.profile.region} />;
+  return (
+    <IntakeFlow
+      region={v.profile.region}
+      publicKey={pushConfigured() ? (env().VAPID_PUBLIC_KEY ?? "stub") : null}
+    />
+  );
 }

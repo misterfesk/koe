@@ -9,12 +9,14 @@ import {
   templateNote,
 } from "@/domain/day-plan";
 import { kindLabel } from "@/domain/plan-menu";
+import { IGNORE_LIMIT, inQuietHours } from "@/domain/reminders";
 import { isDue, isRepeating, reportOn, type StepView } from "@/domain/steps";
 import {
   daysBetween,
   describeDays,
   formatClock,
   localDay,
+  localMinutes,
   uses12Hour,
 } from "@/domain/time";
 import { tone } from "@/domain/tone";
@@ -26,6 +28,9 @@ import { Timeline } from "@/features/today/timeline";
 import { WelcomeBack } from "@/features/today/welcome-back";
 import styles from "@/features/today/today.module.css";
 import { getCheckInView, previousVersion } from "@/server/data/plan";
+import { listReminders, subscriptionsFor } from "@/server/data/reminders";
+import { env } from "@/server/env";
+import { pushConfigured } from "@/server/push";
 import { listSteps } from "@/server/data/steps";
 import { openToday } from "@/server/llm/planner";
 import { requireViewer } from "@/server/viewer";
@@ -48,14 +53,19 @@ export default async function Page() {
   // The first time today is opened, the day is planned (once, even if two
   // requests arrive together).
   const plan = await openToday(v.user.id, { db: v.db, today: v.today });
-  const [steps, checkIn, before, accept] = await Promise.all([
+  const [steps, checkIn, before, accept, reminders, subs] = await Promise.all([
     listSteps(v.db, v.user.id),
     getCheckInView(v.db, v.user.id, v.today),
     plan.version > 1
       ? previousVersion(v.db, v.user.id, v.today, plan.version)
       : Promise.resolve(null),
     headers(),
+    listReminders(v.db, v.user.id),
+    subscriptionsFor(v.db, [v.user.id]),
   ]);
+  const remindersByStep = new Map(
+    reminders.flatMap((r) => (r.stepId ? [[r.stepId, r] as const] : [])),
+  );
   const hour12 = uses12Hour(accept.get("accept-language"));
   const clock = (m: number) => formatClock(m, hour12);
 
@@ -76,6 +86,19 @@ export default async function Page() {
       report: r
         ? { id: r.id, outcome: r.outcome, vsExpected: r.vsExpected }
         : null,
+      reminder: (() => {
+        const rem = remindersByStep.get(s.id);
+        return rem
+          ? {
+              id: rem.id,
+              time: clock(rem.minuteOfDay),
+              minute: rem.minuteOfDay,
+              paused: rem.paused,
+              backedOff: rem.paused && rem.ignoredCount >= IGNORE_LIMIT,
+              quiet: inQuietHours(rem.minuteOfDay, p.quietStart, p.quietEnd),
+            }
+          : null;
+      })(),
       later:
         inPlan && minute !== null
           ? laterOptions(minute).map((o) => ({ ...o, time: clock(o.minute) }))
@@ -108,11 +131,25 @@ export default async function Page() {
   let banner: Banner | null = null;
   if (plan.version > 1 && plan.reason !== "intro" && before) {
     const diff = diffPlans(before, plan.items);
+    // A reminder belongs to its item. An item that left takes it along, and
+    // whatever replaced it starts without one; Undo brings both back.
+    const stillThere = new Set(plan.items.map((i) => i.stepId));
+    const lostReminder = before.some(
+      (i) =>
+        i.stepId &&
+        !stillThere.has(i.stepId) &&
+        remindersByStep.get(i.stepId) !== undefined,
+    );
     banner = {
       note:
         plan.note ??
         templateNote(diff, { reason: plan.reason ?? "", energy: plan.energy }),
-      lines: diffLines(diff, clock),
+      lines: [
+        ...diffLines(diff, clock),
+        ...(lostReminder
+          ? ["Reminder removed with the old item. Undo brings it back."]
+          : []),
+      ],
       canUndo: true,
     };
   } else if (plan.note) {
@@ -129,6 +166,20 @@ export default async function Page() {
         : "setback"
       : "welcome";
   const voice = tone(p.tone, context, checkIn?.energy ?? null);
+
+  // The next reminder still to come today, as a quiet line (and only then).
+  const nowMinute = localMinutes(p.timezone);
+  const next = entries
+    .filter(
+      (e) =>
+        !e.report &&
+        e.reminder &&
+        !e.reminder.paused &&
+        !e.reminder.quiet &&
+        e.reminder.minute > nowMinute,
+    )
+    .sort((a, b) => a.reminder!.minute - b.reminder!.minute)
+    .map((e) => ({ time: e.reminder!.time, title: e.title }))[0];
 
   const away =
     p.lastSeenAt &&
@@ -152,8 +203,19 @@ export default async function Page() {
         entries={entries}
         canAdd={plan.items.length < 5}
         region={p.region}
+        push={{
+          publicKey: pushConfigured()
+            ? (env().VAPID_PUBLIC_KEY ?? "stub")
+            : null,
+          subscribed: subs.length > 0,
+        }}
       />
-      {/* Slots for the next reminder (S4) and the shelf card (S6). */}
+      {next && (
+        <p className="meta">
+          Next reminder: {next.time} · {next.title}
+        </p>
+      )}
+      {/* Slot for the shelf card (S6). */}
       <div className={styles.below}>
         <p className="meta">Rather talk it through?</p>
         <Link className="button secondary" href="/talk">
