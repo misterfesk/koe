@@ -44,6 +44,7 @@ export default defineConfig({
       DATABASE_URL: "file:./.data/e2e-" + port,
       KOE_AI: "off",
       KOE_SCHEDULER: "off",
+      KOE_RATE_LIMIT: "off",
       APP_URL: "http://127.0.0.1:" + port,
     },
   },

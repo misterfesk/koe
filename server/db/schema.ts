@@ -281,7 +281,8 @@ export const stepReport = pgTable(
   },
   (t) => [
     index("step_report_user_idx").on(t.userId, t.day),
-    index("step_report_step_idx").on(t.stepId),
+    // One answer per step per day; a second tap changes it.
+    uniqueIndex("step_report_step_day_idx").on(t.stepId, t.day),
   ],
 );
 

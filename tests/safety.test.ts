@@ -11,6 +11,12 @@ describe("detectRisk", () => {
     "suicide tonight, I have a plan",
     "I don’t want to live anymore", // curly apostrophe
     "goodbye forever everyone",
+    // Missed in the 2026-10-26 code review:
+    "I want to end it",
+    "I have pills saved up for tonight",
+    "i've been saving up my tablets",
+    "kms",
+    "thinking about unaliving myself",
   ])("flags explicit intent as urgent: %s", (text) => {
     expect(detectRisk(text)).toBe("urgent");
   });
@@ -24,6 +30,11 @@ describe("detectRisk", () => {
     "no one would miss me",
     "I keep having suicidal thoughts",
     "I don't want to wake up tomorrow",
+    // Missed in the 2026-10-26 code review:
+    "I don't want to live",
+    "I don't want to be alive",
+    "Everyone would be better off if I was gone",
+    "I want to unalive",
   ])("flags passive wishes and self-harm as concern: %s", (text) => {
     expect(detectRisk(text)).toBe("concern");
   });

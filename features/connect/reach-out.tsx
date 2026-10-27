@@ -211,7 +211,8 @@ export function ReachOut({
                 disabled={pending}
                 onClick={() =>
                   startTransition(async () => {
-                    await markSent({ personId, draft });
+                    const r = await markSent({ personId, draft });
+                    if (r.safety !== "none") setSafety(r.safety);
                     setDraft(null);
                     setAsked(false);
                     setStatus("");

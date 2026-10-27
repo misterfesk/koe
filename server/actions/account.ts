@@ -9,6 +9,7 @@ import { helpResources } from "@/fixtures/help-resources";
 import { auth } from "../auth";
 import { db } from "../db";
 import { completeSetup } from "../data/profile";
+import { allow } from "../rate-limit";
 import { getViewer } from "../viewer";
 
 const setup = z.object({
@@ -28,6 +29,7 @@ export async function start(_: unknown, form: FormData): Promise<ActionResult> {
     : "OTHER";
   let userId = (await getViewer())?.user.id;
   if (!userId) {
+    if (!(await allow("guest"))) return tooMany;
     const guest = await (
       await auth()
     ).api.signInAnonymous({ headers: await headers() });
@@ -53,6 +55,11 @@ const credentials = z.object({
     .max(128, "Use 128 characters or fewer."),
 });
 
+const tooMany: ActionResult = {
+  ok: false,
+  errors: { form: "Too many tries. Wait a few minutes and try again." },
+};
+
 function authError(error: unknown): ActionResult {
   if (error instanceof APIError) {
     const code = String(error.body?.code ?? "");
@@ -76,7 +83,7 @@ function authError(error: unknown): ActionResult {
   }
   return {
     ok: false,
-    errors: { form: "Something went wrong. Nothing was changed. Try again." },
+    errors: { form: "Something went wrong. Try again in a moment." },
   };
 }
 
@@ -87,6 +94,7 @@ export async function createAccount(
 ): Promise<ActionResult> {
   const parsed = credentials.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
+  if (!(await allow("sign-up", parsed.data.email))) return tooMany;
   try {
     await (
       await auth()
@@ -108,6 +116,7 @@ export async function signIn(
     .extend({ password: z.string().min(1, "Enter your password.").max(128) })
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
+  if (!(await allow("sign-in", parsed.data.email))) return tooMany;
   try {
     await (
       await auth()

@@ -7,6 +7,7 @@ import {
   setAppearance,
   setPlace,
   setPrivacy,
+  unsubscribePush,
 } from "@/server/actions/settings";
 import { CredentialsForm } from "../account/credentials";
 
@@ -190,9 +191,24 @@ export function GuestAccount() {
   );
 }
 
+/** Signing out also stops this device getting the account's reminders. */
 export function SignOut() {
   return (
-    <form action={signOut}>
+    <form
+      action={async () => {
+        try {
+          const reg = await navigator.serviceWorker?.getRegistration();
+          const sub = await reg?.pushManager.getSubscription();
+          if (sub) {
+            await unsubscribePush(sub.endpoint);
+            await sub.unsubscribe();
+          }
+        } catch {
+          // Sign out regardless.
+        }
+        await signOut();
+      }}
+    >
       <button className="secondary">Sign out</button>
     </form>
   );

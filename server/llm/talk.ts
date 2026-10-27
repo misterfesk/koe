@@ -110,7 +110,7 @@ export async function classifyRisk(history: ChatMessage[]) {
         { role: "user", content: transcript },
       ],
       safetyShape,
-      { model: env().KOE_SAFETY_MODEL, temperature: 0, timeoutMs: 20_000 },
+      { model: env().KOE_SAFETY_MODEL, temperature: 0, timeoutMs: 40_000 },
     );
     return level as RiskLevel;
   } catch {
@@ -120,8 +120,23 @@ export async function classifyRisk(history: ChatMessage[]) {
 
 // Helplines the model might still write despite instructions. Numbers shown
 // to people come only from the verified Help listings.
-const phoneLike =
-  /\b(call|text|dial|ring|phone|hotline|helpline|lifeline)\b[^.\n]{0,30}\+?\d[\d\s-]{1,}\d|\b(988|911|999|112|000|111|116\s?123)\b|https?:\/\/|www\./i;
+/** True if text names a helpline, a phone number or a web address. */
+export function mentionsContact(text: string) {
+  const digits = (m: string) => m.replace(/\D/g, "").length;
+  const long = text.match(/\+?\d[\d\s().-]{5,}\d/g) ?? [];
+  if (long.some((m) => digits(m) >= 7)) return true;
+  if (/https?:\/\/|www\.|\.(org|com|net|gov)\b/i.test(text)) return true;
+  if (
+    /\b(hotline|helpline|lifeline|samaritans|crisis (line|text|team))\b/i.test(
+      text,
+    )
+  )
+    return true;
+  // Short emergency and crisis numbers, only next to a calling word.
+  return /\b(call|text|dial|ring|phone|contact)\b[^.\n]{0,25}\b(988|911|999|112|000|111|1737|116\s?123|13\s?11\s?14)\b/i.test(
+    text,
+  );
+}
 
 export async function reply(
   mode: TalkMode,
@@ -150,13 +165,18 @@ export async function reply(
   });
   let text = out.reply;
   let risky = detectRisk(text) !== "none";
-  if (phoneLike.test(text)) {
+  if (mentionsContact(text)) {
     text =
       "If you need someone right now, the Help now button at the top of the screen lists people you can reach, with numbers checked for your region.";
     risky = true;
   }
   const proposals: Proposals = {};
-  if (!risky && out.step && detectRisk(out.step.title) === "none")
+  if (
+    !risky &&
+    out.step &&
+    detectRisk(out.step.title) === "none" &&
+    !mentionsContact(out.step.title)
+  )
     proposals.step = {
       title: out.step.title.replace(/\.$/, ""),
       area: out.step.area,
@@ -167,6 +187,7 @@ export async function reply(
     memoryOn &&
     out.memory &&
     detectRisk(out.memory.text) === "none" &&
+    !mentionsContact(out.memory.text) &&
     !context.memory.some(
       (m) => m.text.toLowerCase() === out.memory!.text.toLowerCase(),
     )

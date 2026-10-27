@@ -20,7 +20,7 @@ export function pushConfigured() {
 // Lock screens are public: the text never includes what the step is.
 const PAYLOAD = JSON.stringify({
   title: "Koe",
-  body: "A reminder you set. Your step is on Today.",
+  body: "A reminder you set.",
   url: "/today",
 });
 
@@ -43,6 +43,8 @@ export async function sendTo(
             privateKey: e.VAPID_PRIVATE_KEY!,
           },
           TTL: 60 * 60,
+          // One unresponsive endpoint must not stall everyone's reminders.
+          timeout: 10_000,
         },
       );
       delivered++;
@@ -78,6 +80,8 @@ export async function runDueReminders(db: Db, now = new Date()) {
       row.stepStatus !== "active" ||
       !!row.paused ||
       !!answered ||
+      // After downtime, a reminder that is long overdue is skipped, not sent late.
+      now.getTime() - (r.nextAt?.getTime() ?? 0) > 30 * 60_000 ||
       inQuietHours(
         localMinutes(row.timezone, now),
         row.quietStart,

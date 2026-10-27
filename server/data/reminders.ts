@@ -147,3 +147,17 @@ export async function dueReminders(db: Db, now: Date) {
     )
     .limit(500);
 }
+
+/** After a timezone change, every reminder's next time is recomputed. */
+export async function rescheduleAll(db: Db, userId: string, timezone: string) {
+  const rows = await db
+    .select()
+    .from(reminder)
+    .where(eq(reminder.userId, userId));
+  const now = new Date();
+  for (const r of rows)
+    await db
+      .update(reminder)
+      .set({ nextAt: nextReminderAt(r, timezone, now) })
+      .where(eq(reminder.id, r.id));
+}

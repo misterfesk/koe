@@ -191,3 +191,14 @@ export async function purgeOldConversations(db: Db, userId: string) {
       ),
     );
 }
+
+/** For the scheduler: applies "chat history off" for everyone who chose it. */
+export async function purgeExpiredTranscripts(db: Db) {
+  await db.execute(sql`
+    delete from "conversation" c
+    using "profile" p
+    where p."user_id" = c."user_id"
+      and p."keep_transcripts" = false
+      and c."updated_at" < now() - interval '1 day'
+  `);
+}

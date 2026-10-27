@@ -24,15 +24,19 @@ export default function Page() {
         </p>
         <p>
           If you have an account, Koe stores your email address and a hashed
-          password. As a guest, Koe stores no email at all.
+          password. As a guest, Koe stores no email at all. For each signed-in
+          session Koe also keeps the IP address and browser details, to keep the
+          session working and secure. A guest&apos;s data stays until it&apos;s
+          deleted; it doesn&apos;t expire on its own.
         </p>
         <h2>What goes to the AI provider</h2>
         <p>
           AI features use Nebius Token Factory. When you talk with Koe, ask for
           a smaller version, ask for ideas or draft a message, the text needed
           for that is sent to Nebius to write the reply. In Talk that includes
-          the conversation and, if memory is on, your memory cards and recent
-          steps.
+          the conversation and, if memory is on, your memory cards, recent steps
+          and today&apos;s energy check-in. With memory off, only the
+          conversation is sent.
         </p>
         <p>
           <strong>Not yet confirmed:</strong> how long Nebius keeps this text

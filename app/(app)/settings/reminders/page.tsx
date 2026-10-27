@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Empty, PageHeading } from "@/components/ui";
+import { inQuietHours } from "@/domain/reminders";
 import {
   DeviceNotifications,
   QuietHours,
@@ -54,6 +55,17 @@ export default async function Page({
                 step={{ id: s.id, title: s.title, repeatDays: s.repeatDays }}
                 reminder={reminders.find((r) => r.stepId === s.id)}
                 focus={focus === s.id}
+                quiet={(() => {
+                  const r = reminders.find((x) => x.stepId === s.id);
+                  return (
+                    !!r &&
+                    inQuietHours(
+                      r.minuteOfDay,
+                      v.profile.quietStart,
+                      v.profile.quietEnd,
+                    )
+                  );
+                })()}
               />
             ))}
           </ul>

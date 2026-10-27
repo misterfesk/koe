@@ -115,10 +115,13 @@ export function ReminderRow({
   step,
   reminder,
   focus,
+  quiet,
 }: {
   step: Step;
   reminder?: ReminderView;
   focus: boolean;
+  /** The reminder's time falls inside quiet hours, so it won't arrive. */
+  quiet: boolean;
 }) {
   const [open, setOpen] = useState(focus && !reminder);
   const [time, setTime] = useState(
@@ -141,6 +144,12 @@ export function ReminderRow({
                 : "Paused"
               : `${formatMinutes(reminder.minuteOfDay)} · ${describeDays(reminder.days)}`}
           </p>
+          {quiet && !reminder.paused && (
+            <p className="error">
+              This time is inside your quiet hours, so it won&apos;t arrive.
+              Change the time or your quiet hours.
+            </p>
+          )}
           <div className="row-actions">
             <button
               type="button"

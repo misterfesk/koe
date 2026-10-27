@@ -15,6 +15,7 @@ import {
   deleteReminder,
   deleteSubscription,
   pauseReminder,
+  rescheduleAll,
   saveSubscription,
   setReminder,
   subscriptionsFor,
@@ -60,7 +61,10 @@ const place = z.object({
 
 export async function setPlace(input: z.input<typeof place>) {
   const v = await requireViewer();
-  await updateProfile(v.db, v.user.id, place.parse(input));
+  const next = place.parse(input);
+  await updateProfile(v.db, v.user.id, next);
+  if (next.timezone !== v.profile.timezone)
+    await rescheduleAll(v.db, v.user.id, next.timezone);
   refresh();
 }
 
@@ -184,8 +188,30 @@ export async function setQuietHours(input: z.input<typeof quiet>) {
   refresh();
 }
 
+// Only the browsers' own push services: the server makes requests to this
+// address, so an arbitrary URL would let anyone aim it at other hosts.
+const pushHosts = [
+  /^fcm\.googleapis\.com$/,
+  /^android\.googleapis\.com$/,
+  /^updates\.push\.services\.mozilla\.com$/,
+  /^[a-z0-9-]+\.push\.services\.mozilla\.com$/,
+  /^web\.push\.apple\.com$/,
+  /^[a-z0-9-]+\.push\.apple\.com$/,
+  /^[a-z0-9-]+\.notify\.windows\.com$/,
+];
+
 const subscription = z.object({
-  endpoint: z.url().max(2000),
+  endpoint: z
+    .url()
+    .max(2000)
+    .refine((u) => {
+      const url = new URL(u);
+      return (
+        url.protocol === "https:" &&
+        !url.port &&
+        pushHosts.some((h) => h.test(url.hostname))
+      );
+    }, "Unsupported push service"),
   keys: z.object({
     p256dh: z.string().min(10).max(200),
     auth: z.string().min(4).max(100),
@@ -234,11 +260,12 @@ export async function sendTestReminder() {
 export async function deleteAccount(confirmation: string) {
   const v = await requireViewer();
   if (confirmation.trim().toLowerCase() !== "delete") return { ok: false };
+  // Delete first: if that fails, the person is still signed in and can retry.
+  await v.db.delete(user).where(eq(user.id, v.user.id));
   try {
     await (await auth()).api.signOut({ headers: await headers() });
   } catch {
-    // The rows go regardless; a stale cookie then points at nothing.
+    // The session row went with the user; the stale cookie points at nothing.
   }
-  await v.db.delete(user).where(eq(user.id, v.user.id));
   redirect("/?deleted=1");
 }

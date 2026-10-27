@@ -164,8 +164,23 @@ describe("accounts", { timeout: 30_000 }, () => {
     });
     const c = await talk.startConversation(db, "a", "talk", "Hi");
     await talk.addMessage(db, "a", c, "user", "Hello");
+    // Both have profiles; the guest's safety pause and private choice survive.
+    await profile.completeSetup(db, "a", { region: "SG", timezone: "UTC" });
+    await profile.completeSetup(db, "b", { region: "GB", timezone: "UTC" });
+    await profile.updateProfile(db, "a", {
+      coachingPausedAt: new Date(),
+      memoryOn: false,
+    });
 
     await transferOwnership(db, "a", "b");
+
+    const [merged] = await db
+      .select()
+      .from(schema.profile)
+      .where(eq(schema.profile.userId, "b"));
+    expect(merged.region).toBe("GB");
+    expect(merged.coachingPausedAt).not.toBeNull();
+    expect(merged.memoryOn).toBe(false);
 
     expect(await steps.listSteps(db, "b")).toHaveLength(1);
     expect((await steps.listSteps(db, "b"))[0].reports).toHaveLength(1);

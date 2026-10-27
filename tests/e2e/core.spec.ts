@@ -170,6 +170,15 @@ test("a risky message in Talk is never answered by the model", async ({
     page.getByText("the usual conversation is paused"),
   ).toBeVisible();
   await expect(page.getByLabel("Your message")).toHaveCount(0);
+
+  // A new conversation is no way around the pause, and no dead end either.
+  await page.goto("/reflect/talk");
+  await expect(
+    page.getByRole("heading", { name: /are you safe right now/ }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "I'm safe for now" }).click();
+  await page.getByRole("button", { name: "Carry on with Koe" }).click();
+  await expect(page.getByLabel("Your message")).toBeVisible();
 });
 
 test("Help works signed out, with tap-to-call", async ({ page }) => {

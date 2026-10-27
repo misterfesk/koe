@@ -164,36 +164,23 @@ export async function reportStep(
   const s = await owned(db, userId, stepId);
   if (!s) return null;
   return db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({ id: stepReport.id })
-      .from(stepReport)
-      .where(
-        and(
-          eq(stepReport.userId, userId),
-          eq(stepReport.stepId, stepId),
-          eq(stepReport.day, today),
-        ),
-      );
-    let id = existing?.id;
-    if (id) {
-      await tx
-        .update(stepReport)
-        .set({ outcome, version: s.version, updatedAt: new Date() })
-        .where(eq(stepReport.id, id));
-    } else {
-      const [row] = await tx
-        .insert(stepReport)
-        .values({
-          userId,
-          stepId,
-          version: s.version,
-          day: today,
-          outcome,
-          expectation: s.expectation,
-        })
-        .returning({ id: stepReport.id });
-      id = row.id;
-    }
+    // The unique (step, day) index makes a double tap or a race an update.
+    const [row] = await tx
+      .insert(stepReport)
+      .values({
+        userId,
+        stepId,
+        version: s.version,
+        day: today,
+        outcome,
+        expectation: s.expectation,
+      })
+      .onConflictDoUpdate({
+        target: [stepReport.stepId, stepReport.day],
+        set: { outcome, version: s.version, updatedAt: new Date() },
+      })
+      .returning({ id: stepReport.id });
+    const id = row.id;
     const oneOff = !s.repeatDays?.length;
     if (oneOff && (s.status === "active" || s.status === "finished")) {
       await tx

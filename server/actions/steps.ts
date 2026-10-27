@@ -221,7 +221,10 @@ export async function smallerVersions(input: {
     cue = s.cue;
   }
   if (!title) return { options: [], source: "none" };
-  if (!v.profile.coachingPausedAt) {
+  const risky =
+    !input.stepId &&
+    (await screen(v.db, v.user.id, "step", [title])) !== "none";
+  if (!risky && !v.profile.coachingPausedAt) {
     const options = await shrinkStep(title, cue);
     if (options.length) return { options, source: "ai" };
   }

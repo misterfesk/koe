@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+import { safetyEvent } from "@/server/db/schema";
 import { listMemory } from "@/server/data/memory";
 import {
   getWeeklyReview,
@@ -33,7 +35,23 @@ export async function GET() {
       tone: v.profile.tone,
       quietStart: v.profile.quietStart,
       quietEnd: v.profile.quietEnd,
+      nudgesPerDay: v.profile.nudgesPerDay,
+      plain: v.profile.plain,
+      reducedMotion: v.profile.reducedMotion,
+      mascot: v.profile.mascot,
+      adultAttestedAt: v.profile.adultAttestedAt,
+      createdAt: v.profile.createdAt,
     },
+    // When a safety check fired and where. Koe never stores what was written.
+    safetyChecks: await v.db
+      .select({
+        level: safetyEvent.level,
+        source: safetyEvent.source,
+        surface: safetyEvent.surface,
+        at: safetyEvent.createdAt,
+      })
+      .from(safetyEvent)
+      .where(eq(safetyEvent.userId, id)),
     steps: await listSteps(v.db, id),
     notes: await listNotes(v.db, id),
     checkIns: await listCheckIns(v.db, id),

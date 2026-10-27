@@ -10,11 +10,27 @@ import { checkIn, movableTables, profile, weeklyReview } from "./schema";
  */
 export async function transferOwnership(db: Db, from: string, to: string) {
   await db.transaction(async (tx) => {
-    const existing = await tx
-      .select({ userId: profile.userId })
+    const [existing] = await tx
+      .select()
       .from(profile)
       .where(eq(profile.userId, to));
-    if (existing.length) {
+    const [guest] = await tx
+      .select()
+      .from(profile)
+      .where(eq(profile.userId, from));
+    if (existing) {
+      // The account's settings win, except that a safety pause and the more
+      // private choice are never lost by signing in.
+      if (guest)
+        await tx
+          .update(profile)
+          .set({
+            coachingPausedAt:
+              existing.coachingPausedAt ?? guest.coachingPausedAt,
+            memoryOn: existing.memoryOn && guest.memoryOn,
+            keepTranscripts: existing.keepTranscripts && guest.keepTranscripts,
+          })
+          .where(eq(profile.userId, to));
       await tx.delete(profile).where(eq(profile.userId, from));
     } else {
       await tx

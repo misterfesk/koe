@@ -62,6 +62,7 @@ export function Conversation({
 
   function send(e?: React.FormEvent) {
     e?.preventDefault();
+    if (pending) return;
     const content = text.trim();
     if (!content) return setError("Write something first.");
     setError("");
@@ -79,6 +80,8 @@ export function Conversation({
         return setError(r.error);
       }
       setSafety(r.safety);
+      // Paused before anything was saved: keep the words for after "Carry on".
+      if (r.conversationId === null) return setText(content);
       if (r.unavailable)
         setNotice(
           "Koe can't reply right now. What you wrote is saved. Try again in a little while.",
@@ -161,10 +164,10 @@ export function Conversation({
         )}
       </ol>
       <div ref={end} />
-      {blocked && id ? (
+      {blocked ? (
         <SafetyCheck
           region={region}
-          resume={() => resumeConversation(id)}
+          resume={id ? () => resumeConversation(id) : undefined}
           onResume={() => setSafety("none")}
         />
       ) : (

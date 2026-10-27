@@ -85,7 +85,9 @@ export async function markSent(input: {
     ? input.personId
     : null;
   await recordReachOut(v.db, v.user.id, { personId, draft, status: "sent" });
+  const safety = await screen(v.db, v.user.id, "reach", [draft]);
   refresh();
+  return { safety };
 }
 
 export async function followUp(reachOutId: string, status: string) {

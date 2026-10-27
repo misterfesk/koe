@@ -3,7 +3,6 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { RiskLevel } from "@/domain/safety";
-import { highest } from "@/domain/safety";
 import { addDays } from "@/domain/time";
 import { conversation, talkModes } from "../db/schema";
 import { getCheckIn, recordSafetyEvent, updateProfile } from "../data/profile";
@@ -47,7 +46,8 @@ const input = z.object({
 export type SendResult =
   | {
       ok: true;
-      conversationId: string;
+      /** Null when nothing was saved because coaching is paused. */
+      conversationId: string | null;
       safety: RiskLevel;
       unavailable?: boolean;
     }
@@ -78,7 +78,7 @@ export async function sendMessage(
   let convo = id ? await getConversation(v.db, v.user.id, id) : null;
   if (id && !convo) return { ok: false, error: "This conversation is gone." };
   if (convo?.safetyPaused || v.profile.coachingPausedAt)
-    return { ok: true, conversationId: id!, safety: "concern" };
+    return { ok: true, conversationId: id ?? null, safety: "concern" };
   if (!id) {
     const title = text.length > 60 ? text.slice(0, 57).trimEnd() + "…" : text;
     id = await startConversation(v.db, v.user.id, mode, title);
@@ -103,11 +103,14 @@ export async function sendMessage(
 
   convo = await getConversation(v.db, v.user.id, id);
   const history = convo!.messages;
-  const [memory, steps, energy] = await Promise.all([
-    v.profile.memoryOn ? listMemory(v.db, v.user.id) : Promise.resolve([]),
-    listSteps(v.db, v.user.id),
-    getCheckIn(v.db, v.user.id, v.today),
-  ]);
+  // With memory off, nothing from the person's records goes to the model.
+  const [memory, steps, energy] = v.profile.memoryOn
+    ? await Promise.all([
+        listMemory(v.db, v.user.id),
+        listSteps(v.db, v.user.id),
+        getCheckIn(v.db, v.user.id, v.today),
+      ])
+    : [[], [], null];
   const weekAgo = addDays(v.today, -7);
   const recentSteps = steps
     .flatMap((s) =>
@@ -120,8 +123,9 @@ export async function sendMessage(
     )
     .slice(0, 10);
 
-  // Layer 2 (model check) runs alongside the reply to save time; a reply is
-  // only shown if the check comes back clear.
+  // Layer 2 (model check) runs alongside the reply to save time. A reply is
+  // only shown if the check comes back clear: an error or timeout counts as
+  // not cleared, so Koe says it can't reply rather than risk a normal answer.
   const chat = history.map((m) => ({
     role: m.role === "user" ? ("user" as const) : ("assistant" as const),
     content: m.content,
@@ -153,7 +157,7 @@ export async function sendMessage(
     await updateProfile(v.db, v.user.id, { coachingPausedAt: new Date() });
     return pause(risk);
   }
-  if (!answer) {
+  if (!answer || risk === null) {
     refresh();
     return { ok: true, conversationId: id, safety: "none", unavailable: true };
   }
@@ -165,11 +169,21 @@ export async function sendMessage(
     answer.text,
     answer.proposals,
   );
+  if (answer.risky) {
+    // The reply itself touched on risk: keep it, but treat it like a hit.
+    await recordSafetyEvent(v.db, v.user.id, {
+      level: "concern",
+      source: "model",
+      surface: "talk-reply",
+    });
+    await updateProfile(v.db, v.user.id, { coachingPausedAt: new Date() });
+    await setConversationPaused(v.db, v.user.id, id, true);
+  }
   refresh();
   return {
     ok: true,
     conversationId: id,
-    safety: highest(answer.risky ? "concern" : "none"),
+    safety: answer.risky ? "concern" : "none",
   };
 }
 
@@ -214,6 +228,7 @@ export async function keepMemory(
     sourceRef: conversationId,
   });
   await clearProposal(v.db, v.user.id, messageId, "memory");
+  await screen(v.db, v.user.id, "memory", [parsed.data.text]);
   refresh();
   return { ok: true };
 }
