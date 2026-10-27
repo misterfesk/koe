@@ -1,0 +1,38 @@
+.noticed {
+  margin-bottom: 36px;
+}
+.noticed h2,
+.day h2 {
+  font-size: 1.25rem;
+}
+.patterns {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+  display: grid;
+  gap: 12px;
+}
+.patterns li {
+  padding: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.patterns li p {
+  margin-bottom: 6px;
+}
+.day {
+  margin-bottom: 24px;
+}
+.entries {
+  list-style: none;
+  padding: 0 0 0 18px;
+  margin: 0;
+  border-left: 2px solid var(--line);
+}
+.entries li {
+  padding: 10px 0 14px;
+}
+.entries li p {
+  margin: 0 0 4px;
+}

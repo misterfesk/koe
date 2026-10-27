@@ -1,36 +1,33 @@
-import { z } from "zod";
-import type { ToneContext } from "./tone";
-export const contactMessage = z
-  .string()
-  .trim()
-  .min(1, "Write a message, or leave this for now.")
-  .max(1000, "Use 1000 characters or fewer.");
-export const careTasks = [
-  "Look for a local service",
-  "Check cost and access",
-  "Prepare a question",
-  "Choose whether to share notes",
-] as const;
-export const careInput = z.object({
-  originalNotes: z.string().max(3000),
-  editedSummary: z.string().max(4000),
-  inquiryDraft: z.string().max(2000),
-  questions: z.string().max(1500),
-  checklist: z.array(z.enum(careTasks)),
-});
-export function prepareCareExport(input: z.infer<typeof careInput>) {
-  const result = careInput.safeParse(input);
-  return result.success
-    ? {
-        success: true as const,
-        data: { kind: "synthetic-care-preparation", ...result.data },
-      }
-    : { success: false as const, error: result.error };
+// Reaching out: Koe drafts, the person edits and sends it themselves.
+// People tend to underestimate how much others welcome a small message.
+
+export type Purpose = "hello" | "meet" | "help" | "hard";
+
+export const purposeLabels: Record<Purpose, string> = {
+  hello: "Just say hi",
+  meet: "Suggest meeting up",
+  help: "Ask for a hand with something",
+  hard: "Say I'm having a hard time",
+};
+
+/** Used when the AI is off, and as a starting point the person can edit. */
+export function templateMessage(purpose: Purpose, name: string) {
+  const to = name.trim() ? " " + name.trim() : "";
+  switch (purpose) {
+    case "hello":
+      return `Hi${to}, I was thinking of you. How are things with you?`;
+    case "meet":
+      return `Hi${to}, would you be up for meeting up sometime soon? Even a quick coffee or a walk would be nice.`;
+    case "help":
+      return `Hi${to}, could I ask you for a hand with something? No worries if now isn't a good time.`;
+    case "hard":
+      return `Hi${to}, I've been having a hard time lately. Would you be up for a chat sometime this week?`;
+  }
 }
-export function contactContext(outcome: string): ToneContext {
-  return outcome === "No reply" || outcome === "Prefer not to say"
-    ? "setback"
-    : outcome === "Connected"
-      ? "done"
-      : "welcome";
-}
+
+export const channelLabels = {
+  message: "Message",
+  call: "Call",
+  email: "Email",
+  in_person: "In person",
+} as const;

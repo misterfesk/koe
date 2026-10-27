@@ -1,0 +1,141 @@
+.sectionTitle {
+  font-size: 1.25rem;
+  margin: 32px 0 12px;
+}
+.cards {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 32px;
+  display: grid;
+  gap: 16px;
+}
+.card {
+  padding: 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.card[data-reported="true"] {
+  border-color: var(--line);
+  background: transparent;
+}
+.card .eyebrow {
+  margin-bottom: 8px;
+}
+.title {
+  font-size: 1.5rem;
+  margin: 0 0 6px;
+}
+.title a {
+  text-decoration: none;
+}
+.title a:hover {
+  text-decoration: underline;
+}
+.cue {
+  color: var(--secondary);
+  margin: 0 0 12px;
+}
+.taps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.taps button {
+  flex: 1 1 8rem;
+}
+.after {
+  margin-top: 12px;
+}
+.after > p {
+  margin-bottom: 8px;
+}
+.checkIn {
+  border: 0;
+  padding: 0;
+  margin: 0 0 28px;
+}
+.checkIn legend {
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+.checkIn .meta {
+  margin: 8px 0 0;
+}
+.suggestion {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  max-width: 650px;
+  margin: 12px 0;
+  letter-spacing: -0.035em;
+}
+.because {
+  font-size: 0.9375rem;
+}
+.alternatives {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid #8f786b;
+}
+.alternatives button,
+.alternatives a {
+  font-size: 0.875rem;
+  padding: 10px 14px;
+}
+.planInPanel {
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--radius);
+  padding: 22px;
+  margin-top: 16px;
+}
+.planInPanel p {
+  color: var(--secondary);
+}
+.planInPanel button,
+.planInPanel .button {
+  background: var(--coffee);
+  color: var(--cream);
+}
+.planInPanel button.secondary,
+.planInPanel .chip {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.planInPanel .chip[aria-pressed="true"] {
+  background: var(--coffee);
+  color: var(--cream);
+}
+.quiet {
+  padding: 28px 0;
+  border-block: 1px solid var(--line);
+}
+.more {
+  margin: 0 0 24px;
+}
+.more summary {
+  font-weight: 500;
+}
+.below {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 32px;
+}
+.below p {
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .card {
+    padding: 18px;
+  }
+  .planInPanel {
+    padding: 16px;
+    margin-inline: -8px;
+  }
+}

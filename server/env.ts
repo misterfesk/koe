@@ -21,6 +21,10 @@ const schema = z.object({
   KOE_SAFETY_MODEL: z.string().default("deepseek-ai/DeepSeek-V4.1-Flash"),
   // Operator kill switch: "off" keeps Help, history and manual steps working.
   KOE_AI: z.enum(["on", "off"]).default("on"),
+  // Web Push for reminders. Without keys, reminders are simply unavailable.
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().default("mailto:koe-owner@example.invalid"),
 });
 
 export type Env = z.infer<typeof schema>;

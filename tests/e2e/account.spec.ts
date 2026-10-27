@@ -1,0 +1,60 @@
+import { expect, test } from "@playwright/test";
+import { chooseFirstSuggestion, startAsGuest } from "./helpers";
+
+test("a guest's steps move into a new account and survive sign-out", async ({
+  page,
+}, info) => {
+  await startAsGuest(page);
+  const title = await chooseFirstSuggestion(page);
+  const email = `e2e-${info.project.name}-${Date.now()}@example.com`;
+
+  await page.goto("/settings/account");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill("a-long-test-password");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByText("Account created")).toBeVisible();
+  await expect(page.getByText(email)).toBeVisible();
+
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto("/sign-in");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill("wrong-password-here");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator("p.error")).toContainText("don't match");
+  await page.getByLabel("Password").fill("a-long-test-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(
+    page.getByRole("heading", { level: 3, name: title }),
+  ).toBeVisible();
+});
+
+test("memory cards can be added, exported and everything deleted", async ({
+  page,
+}) => {
+  await startAsGuest(page);
+  await page.goto("/settings/memory");
+  await page
+    .getByLabel("Add a card")
+    .first()
+    .fill("Short walks outside help me");
+  await page.getByRole("button", { name: "Add" }).first().click();
+  await expect(page.getByText("Short walks outside help me")).toBeVisible();
+
+  await page.goto("/settings/privacy");
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: /Download my data/ }).click();
+  const file = await download;
+  const body = await (await file.createReadStream()).toArray();
+  const data = JSON.parse(Buffer.concat(body).toString("utf8"));
+  expect(data.memoryCards[0].text).toBe("Short walks outside help me");
+
+  await page.getByRole("button", { name: "Delete everything" }).click();
+  await expect(page.locator("p.error")).toContainText("Type DELETE");
+  await page.getByLabel("Type DELETE to confirm").fill("DELETE");
+  await page.getByRole("button", { name: "Delete everything" }).click();
+  await expect(page).toHaveURL(/\/\?deleted=1$/);
+  await page.goto("/today");
+  await expect(page).toHaveURL(/\/start$/);
+});

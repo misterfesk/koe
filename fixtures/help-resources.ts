@@ -192,3 +192,13 @@ export const regionOptions = [
   ...helpResources.map((r) => ({ value: r.region, label: r.country })),
   { value: "OTHER", label: "Another country / region" },
 ];
+
+export function resourceFor(region: string | null | undefined) {
+  return helpResources.find((r) => r.region === region) ?? null;
+}
+
+/** A tel: link for the first number in a listing like "999 or 112". */
+export function telHref(number: string) {
+  const first = number.match(/\+?\d[\d\s-]*\d|\d/)?.[0] ?? "";
+  return "tel:" + first.replace(/[^\d+]/g, "");
+}

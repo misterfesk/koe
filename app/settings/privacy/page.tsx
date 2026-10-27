@@ -1,4 +1,0 @@
-import { PrivacyControls } from "@/features/settings/privacy";
-export default function Page() {
-  return <PrivacyControls />;
-}

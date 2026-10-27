@@ -425,3 +425,147 @@ button.danger:not(.text) {
 [data-plain="true"] .dark-panel :focus-visible {
   outline-color: var(--focus);
 }
+
+/* --- Production additions --- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.plain-list {
+  margin: 0;
+  padding-left: 20px;
+}
+.plain-list li {
+  line-height: 1.6;
+  margin-bottom: 6px;
+}
+fieldset.chips,
+div.chips {
+  border: 0;
+  padding: 0;
+  margin: 0 0 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+fieldset.chips legend {
+  font-weight: 500;
+  margin-bottom: 10px;
+  padding: 0;
+  width: 100%;
+}
+fieldset.chips > p {
+  width: 100%;
+  margin: 4px 0 0;
+}
+.field div.chips {
+  margin: 10px 0 0;
+}
+.chip {
+  min-height: 44px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 9px 16px;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  line-height: 1.3;
+}
+.chip.small {
+  min-height: 40px;
+  padding: 7px 13px;
+  font-size: 0.875rem;
+}
+.chip[aria-pressed="true"],
+label.chip:has(input:checked) {
+  background: var(--coffee);
+  color: var(--cream);
+  border-color: var(--coffee);
+}
+label.chip input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+label.chip:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+.dark-panel .chip {
+  color: var(--cream);
+  border-color: #ae9586;
+}
+.dark-panel .chip[aria-pressed="true"],
+.dark-panel label.chip:has(input:checked) {
+  background: var(--rose);
+  color: var(--rose-ink);
+}
+.dark-panel .panel {
+  color: var(--ink);
+}
+.dark-panel .panel p {
+  color: var(--secondary);
+}
+.dark-panel .panel button,
+.dark-panel .panel .button {
+  background: var(--coffee);
+  color: var(--cream);
+}
+.dark-panel .panel button.secondary {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.dark-panel .panel .chip {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.dark-panel .panel label.chip:has(input:checked) {
+  background: var(--coffee);
+  color: var(--cream);
+}
+.safety {
+  border: 2px solid var(--wine);
+  border-radius: var(--radius);
+  padding: 26px;
+  margin: 16px 0 28px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.safety h2:focus {
+  outline: none;
+}
+.safety .panel {
+  margin: 16px 0;
+}
+.safety p {
+  color: var(--ink);
+}
+a.button.urgent {
+  background: #812c33;
+  color: var(--cream);
+  font-size: 1.125rem;
+  margin: 8px 0 16px;
+}
+.shrink {
+  margin: 16px 0;
+}
+/* Phones: keep focused and scrolled-to elements clear of the bottom tab bar. */
+@media (max-width: 800px) {
+  html:has([data-signed-in="true"]) {
+    scroll-padding-bottom: 96px;
+  }
+}

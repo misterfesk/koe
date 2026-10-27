@@ -1,24 +1,42 @@
-import type { Metadata } from "next";
-import { SessionProvider } from "@/components/session";
+import type { Metadata, Viewport } from "next";
 import { Shell } from "@/components/shell";
+import { getViewer } from "@/server/viewer";
 import "./globals.css";
+
 export const metadata: Metadata = {
-  title: { default: "Koe · A little room", template: "%s · Koe" },
+  title: { default: "Koe · small steps on low days", template: "%s · Koe" },
   description:
-    "A private, fictional-data review of small steps, reflection, and human connection.",
+    "Plan small, doable steps, talk things through and see what helps. For adults having a hard time.",
   robots: { index: false, follow: false },
 };
-export default function RootLayout({
+
+export const viewport: Viewport = { themeColor: "#f2ebe4" };
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const viewer = await getViewer();
+  const p = viewer?.profile;
   return (
     <html lang="en">
       <body>
-        <SessionProvider>
-          <Shell>{children}</Shell>
-        </SessionProvider>
+        <Shell
+          signedIn={!!p?.onboardedAt}
+          appearance={
+            p
+              ? {
+                  plain: p.plain,
+                  reducedMotion: p.reducedMotion,
+                  tone: p.tone,
+                  mascot: p.mascot,
+                }
+              : undefined
+          }
+        >
+          {children}
+        </Shell>
       </body>
     </html>
   );

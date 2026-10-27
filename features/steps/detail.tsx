@@ -1,309 +1,308 @@
 "use client";
-import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { useSession, useDraft } from "@/components/session";
+import { useState, useTransition } from "react";
+import { ConfirmDelete } from "@/components/ui";
+import type { RiskLevel } from "@/domain/safety";
 import {
-  PageHeading,
-  Field,
-  Select,
-  ActionLink,
-  Notice,
-  ConfirmDelete,
-  focusFirstInvalid,
-} from "@/components/ui";
-import { makeSmaller, currentReport, type Outcome } from "@/domain/state";
-import { tone } from "@/domain/tone";
+  expectationLabels,
+  helpedLabels,
+  isRepeating,
+  outcomeLabels,
+  type StepView,
+} from "@/domain/steps";
+import { readableDay, weekdayOptions } from "@/domain/time";
+import {
+  changeSchedule,
+  changeStep,
+  removeStep,
+  setStatus,
+} from "@/server/actions/steps";
+import { SafetyCheck } from "../safety/safety-check";
+import { Shrink } from "./shrink";
 import styles from "./steps.module.css";
-export function StepDetail({ id }: { id: string }) {
-  const { state, dispatch } = useSession();
+
+type Panel = "none" | "smaller" | "edit" | "when";
+
+export function StepManage({
+  step,
+  region,
+}: {
+  step: StepView;
+  region: string | null;
+}) {
   const router = useRouter();
-  const p = state.steps.find((p) => p.id === id);
-  const [outcome, setOutcome] = useDraft(
-    id + ".v" + (p?.version ?? 0) + ".outcome",
-    "",
-  );
-  const [barrier, setBarrier] = useDraft(id + ".barrier");
-  const [experience, setExperience] = useDraft(id + ".experience");
-  const [adjust, setAdjust] = useDraft(
-    id + ".adjust",
-    p ? makeSmaller(p.title) : "",
-  );
+  const [panel, setPanel] = useState<Panel>("none");
+  const [title, setTitle] = useState(step.title);
+  const [cue, setCue] = useState(step.cue ?? "");
+  const [days, setDays] = useState<number[]>(step.repeatDays ?? []);
   const [error, setError] = useState("");
-  const [reportError, setReportError] = useState("");
-  if (!p)
-    return (
-      <>
-        <PageHeading
-          eyebrow="Steps"
-          description="It was deleted, or it belonged to an earlier session."
-        >
-          This step no longer exists.
-        </PageHeading>
-        <ActionLink href="/steps">Back to Steps</ActionLink>
-      </>
-    );
-  const latest = currentReport(p);
-  const reported = !!latest;
-  const voice = tone(
-    state.appearance.tone,
-    latest ? (latest.outcome === "Done" ? "done" : "setback") : "chosen",
-    state.energy,
-  );
-  const onToday = p.id === state.activeId && !p.paused;
-  function report(e: FormEvent) {
-    e.preventDefault();
-    if (reported) return;
-    if (
-      !["Done", "Partly", "Not this time", "Prefer not to say"].includes(
-        outcome,
-      )
-    ) {
-      setReportError("Choose how it went, or leave without saying.");
-      focusFirstInvalid(e);
-      return;
-    }
-    setReportError("");
-    dispatch({
-      type: "report",
-      id,
-      outcome: outcome as Outcome,
-      barrier: barrier.trim(),
-      experience: experience.trim(),
+  const [safety, setSafety] = useState<RiskLevel>("none");
+  const [pending, startTransition] = useTransition();
+  const save = (change: { title: string; cue?: string }) =>
+    startTransition(async () => {
+      const r = await changeStep(step.id, change);
+      if (!r.ok) return setError(Object.values(r.errors)[0]);
+      setError("");
+      setSafety(r.safety ?? "none");
+      setPanel("none");
     });
-    dispatch({ type: "clearDraft", prefix: id + ".barrier" });
-    dispatch({ type: "clearDraft", prefix: id + ".experience" });
-    requestAnimationFrame(() =>
-      document.getElementById("report-feedback")?.focus(),
-    );
-  }
+  const stopped = step.status === "finished" || step.status === "archived";
+
   return (
-    <>
-      <PageHeading
-        eyebrow={p.area + (p.routine ? " · Routine" : "")}
-        description={reported ? undefined : voice.message}
-      >
-        {p.title}
-      </PageHeading>
-      {p.paused && (
-        <Notice>
-          This step is paused. Its reminder preview is paused too.
-        </Notice>
-      )}
-      {p.prediction && (
-        <div className="panel">
-          <p className="eyebrow">What you expected</p>
-          <p>{p.prediction}</p>
-        </div>
-      )}
-      {!reported ? (
-        <form onSubmit={report} className="prose">
-          <h2 className="divider">How did it go?</h2>
-          <p className="hint">
-            {onToday
-              ? "Whenever you've tried it. Until then it stays on Today."
-              : "Whenever you've tried it."}{" "}
-            Only the first question needs an answer.
-          </p>
-          <Select
-            label="How it went"
-            value={outcome}
-            onChange={setOutcome}
-            error={reportError}
-            options={[
-              { value: "", label: "Choose one" },
-              ...["Done", "Partly", "Not this time", "Prefer not to say"].map(
-                (x) => ({ value: x, label: x }),
-              ),
-            ]}
-          />
-          <Field
-            label="What got in the way?"
-            value={barrier}
-            onChange={setBarrier}
-            maxLength={1000}
-            multiline
-          />
-          <Field
-            label={
-              p.prediction
-                ? "How did it compare with what you expected?"
-                : "What was it like?"
-            }
-            value={experience}
-            onChange={setExperience}
-            maxLength={1000}
-            multiline
-            hint={
-              p.prediction
-                ? "In your own words. One try can't show what caused a difference."
-                : undefined
-            }
-          />
-          <button>Save how it went</button>
-        </form>
-      ) : (
-        <Notice id="report-feedback">{voice.message}</Notice>
-      )}
-      {p.versions?.some(
-        (v) =>
-          v.version !== p.version &&
-          !p.reports.some((r) => r.version === v.version),
-      ) && (
-        <details>
-          <summary>Earlier versions you didn&apos;t report on</summary>
-          <ul className="rows">
-            {p.versions
-              .filter(
-                (v) =>
-                  v.version !== p.version &&
-                  !p.reports.some((r) => r.version === v.version),
-              )
-              .map((v) => (
-                <li key={v.version}>
-                  <p className="meta">Version {v.version} · not reported</p>
-                  <h3>{v.title}</h3>
-                  {v.prediction && <p>{v.prediction}</p>}
-                </li>
-              ))}
-          </ul>
-        </details>
-      )}
-      {p.reports.length > 0 && (
-        <section className={styles.history} aria-label="Step history">
-          <h2>What you&apos;ve tried</h2>
-          {p.reports.map((r, i) => (
-            <div key={i}>
-              <p className="meta">
-                Version {r.version} · {r.at.slice(0, 10)} · {r.outcome}
-              </p>
-              <h3>{r.title}</h3>
-              <dl>
-                {r.prediction && (
-                  <>
-                    <dt>What you expected</dt>
-                    <dd>{r.prediction}</dd>
-                  </>
-                )}
-                {r.experience && (
-                  <>
-                    <dt>What it was like</dt>
-                    <dd>{r.experience}</dd>
-                  </>
-                )}
-                {r.barrier && (
-                  <>
-                    <dt>What got in the way</dt>
-                    <dd>{r.barrier}</dd>
-                  </>
-                )}
-              </dl>
-            </div>
-          ))}
-        </section>
-      )}
-      {reported && (
-        <section className="panel prose">
-          <h2>Change the step?</h2>
-          <p>
-            Write a smaller version of the same step, or start a different step.
-          </p>
-          {p.proposal ? (
-            <>
-              <p>
-                New version: <strong>{p.proposal}</strong>
-              </p>
-              <div className="actions">
-                <button
-                  onClick={() => {
-                    dispatch({ type: "acceptAdjustment", id });
-                    dispatch({ type: "clearDraft", prefix: id + ".adjust" });
-                  }}
-                >
-                  Use this version
-                </button>
-                <button
-                  className="secondary"
-                  onClick={() => {
-                    dispatch({ type: "rejectAdjustment", id });
-                    requestAnimationFrame(() =>
-                      document
-                        .querySelector<HTMLElement>("main input")
-                        ?.focus(),
-                    );
-                  }}
-                >
-                  Keep the current one
-                </button>
-              </div>
-            </>
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!adjust.trim()) {
-                  setError(
-                    "Write the smaller version, or keep the step as it is.",
-                  );
-                  focusFirstInvalid(e);
-                  return;
-                }
-                setError("");
-                dispatch({ type: "propose", id, title: adjust });
-              }}
-            >
-              <Field
-                label="Smaller version"
-                value={adjust}
-                onChange={setAdjust}
-                maxLength={240}
-                error={error}
-              />
-              <div className="actions">
-                <button>Preview the change</button>
-                <ActionLink href="/steps/new" secondary>
-                  Write a different step
-                </ActionLink>
-              </div>
-            </form>
-          )}
-        </section>
+    <section aria-label="Change this step">
+      {safety !== "none" && (
+        <SafetyCheck region={region} onResume={() => setSafety("none")} />
       )}
       <div className="actions">
         <button
+          type="button"
           className="secondary"
-          onClick={() => {
-            dispatch({
-              type: "draft",
-              key: "reminder.config.target",
-              value: id,
-            });
-            router.push("/settings/reminders");
-          }}
+          aria-expanded={panel === "smaller"}
+          onClick={() => setPanel(panel === "smaller" ? "none" : "smaller")}
         >
-          Preview a reminder
+          Make it smaller
         </button>
         <button
+          type="button"
           className="secondary"
-          onClick={() => dispatch({ type: "pauseStep", id })}
+          aria-expanded={panel === "edit"}
+          onClick={() => setPanel(panel === "edit" ? "none" : "edit")}
         >
-          {p.paused ? "Resume step" : "Pause step"}
+          Change the wording
         </button>
+        <button
+          type="button"
+          className="secondary"
+          aria-expanded={panel === "when"}
+          onClick={() => setPanel(panel === "when" ? "none" : "when")}
+        >
+          {stopped ? "Plan it again" : "Change the day"}
+        </button>
+      </div>
+
+      {panel === "smaller" && (
+        <Shrink
+          stepId={step.id}
+          title={step.title}
+          error={error}
+          onCancel={() => setPanel("none")}
+          onPick={(smaller) => save({ title: smaller })}
+        />
+      )}
+      {panel === "edit" && (
+        <form
+          className="panel"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save({ title, cue });
+          }}
+        >
+          <div className="field">
+            <label htmlFor="edit-title">Your step</label>
+            <input
+              id="edit-title"
+              value={title}
+              maxLength={160}
+              onChange={(e) => setTitle(e.target.value)}
+              aria-invalid={!!error}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="edit-cue">When will you do it?</label>
+            <input
+              id="edit-cue"
+              value={cue}
+              maxLength={120}
+              placeholder="After lunch"
+              onChange={(e) => setCue(e.target.value)}
+            />
+          </div>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          <p className="hint">
+            Earlier reports keep the wording you tried then.
+          </p>
+          <div className="actions">
+            <button disabled={pending}>Save the change</button>
+          </div>
+        </form>
+      )}
+      {panel === "when" && (
+        <div className="panel">
+          <div className="actions">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  await changeSchedule(step.id, { when: "today" });
+                  setPanel("none");
+                })
+              }
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  await changeSchedule(step.id, { when: "tomorrow" });
+                  setPanel("none");
+                })
+              }
+            >
+              Tomorrow
+            </button>
+          </div>
+          <fieldset className="chips">
+            <legend>Or repeat on</legend>
+            {weekdayOptions.map((d) => (
+              <label key={d.value} className="chip small">
+                <input
+                  type="checkbox"
+                  checked={days.includes(d.value)}
+                  onChange={(e) =>
+                    setDays((list) =>
+                      e.target.checked
+                        ? [...list, d.value]
+                        : list.filter((x) => x !== d.value),
+                    )
+                  }
+                />
+                <span>{d.label}</span>
+              </label>
+            ))}
+          </fieldset>
+          <button
+            type="button"
+            className="secondary"
+            disabled={pending || days.length === 0}
+            onClick={() =>
+              startTransition(async () => {
+                await changeSchedule(step.id, {
+                  when: "repeat",
+                  repeatDays: days,
+                });
+                setPanel("none");
+              })
+            }
+          >
+            Repeat on these days
+          </button>
+        </div>
+      )}
+
+      <div className="actions">
+        {step.status === "active" && (
+          <button
+            type="button"
+            className="text"
+            disabled={pending}
+            onClick={() => startTransition(() => setStatus(step.id, "paused"))}
+          >
+            Pause it
+          </button>
+        )}
+        {step.status === "paused" && (
+          <button
+            type="button"
+            className="text"
+            disabled={pending}
+            onClick={() => startTransition(() => setStatus(step.id, "active"))}
+          >
+            Resume it
+          </button>
+        )}
+        {!stopped && (
+          <button
+            type="button"
+            className="text"
+            disabled={pending}
+            onClick={() =>
+              startTransition(() => setStatus(step.id, "archived"))
+            }
+          >
+            Let it go
+          </button>
+        )}
         <ConfirmDelete
           label="Delete step"
           question="Delete this step?"
-          detail="Its history and any reminder preview go too. This can't be undone."
-          onConfirm={() => dispatch({ type: "deleteStep", id })}
+          detail="Its history goes too. To keep the history, choose Let it go instead."
+          onConfirm={() =>
+            startTransition(async () => {
+              await removeStep(step.id);
+              router.push("/steps");
+            })
+          }
         />
       </div>
-      {onToday ? (
-        <ActionLink href="/today" secondary>
-          Back to Today
-        </ActionLink>
-      ) : (
-        <ActionLink href="/steps" secondary>
-          Back to Steps
-        </ActionLink>
-      )}
-    </>
+    </section>
+  );
+}
+
+export function StepHistory({
+  step,
+  today,
+}: {
+  step: StepView;
+  today: string;
+}) {
+  if (!step.reports.length) return null;
+  const titleFor = (version: number) =>
+    step.versions.find((v) => v.version === version)?.title ?? step.title;
+  return (
+    <section aria-labelledby="history">
+      <h2 id="history">What you&apos;ve tried</h2>
+      <ol className={styles.history}>
+        {step.reports.map((r) => (
+          <li key={r.id}>
+            <p className="meta">
+              {readableDay(r.day, today)} · {outcomeLabels[r.outcome]}
+              {r.helped ? " · " + helpedLabels[r.helped] : ""}
+            </p>
+            {r.version !== step.version && <h3>{titleFor(r.version)}</h3>}
+            <dl>
+              {r.expectation && (
+                <>
+                  <dt>You expected</dt>
+                  <dd>
+                    {expectationLabels[r.expectation]}
+                    {r.helped
+                      ? ". It turned out: " +
+                        helpedLabels[r.helped].toLowerCase()
+                      : ""}
+                  </dd>
+                </>
+              )}
+              {r.barrier && (
+                <>
+                  <dt>What got in the way</dt>
+                  <dd>{r.barrier}</dd>
+                </>
+              )}
+              {r.note && (
+                <>
+                  <dt>Note</dt>
+                  <dd>{r.note}</dd>
+                </>
+              )}
+            </dl>
+          </li>
+        ))}
+      </ol>
+      {isRepeating(step) || step.versions.length > 1 ? (
+        <p className="meta">
+          {step.versions.length > 1
+            ? `Version ${step.version}. Earlier wordings are kept with their reports.`
+            : ""}
+        </p>
+      ) : null}
+    </section>
   );
 }

@@ -1,0 +1,187 @@
+import { expect, test } from "@playwright/test";
+import { chooseFirstSuggestion, startAsGuest } from "./helpers";
+
+test("setup can't be finished without confirming 18+", async ({ page }) => {
+  await page.goto("/start");
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page.locator("p.error")).toContainText("18 or older");
+  await expect(page).toHaveURL(/\/start$/);
+  // App pages send people without a session to setup.
+  await page.goto("/today");
+  await expect(page).toHaveURL(/\/start$/);
+});
+
+test("a step chosen on Today is still there after a reload", async ({
+  page,
+}) => {
+  await startAsGuest(page);
+  await page.getByRole("button", { name: "Low", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Low", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  const title = await chooseFirstSuggestion(page);
+
+  const card = page.locator("li", {
+    has: page.getByRole("heading", { level: 3, name: title }),
+  });
+  await card.getByRole("button", { name: "Done" }).click();
+  await card.getByRole("button", { name: "It helped" }).click();
+  await expect(card.getByRole("status")).toContainText("Done · It helped");
+
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { level: 3, name: title }),
+  ).toBeVisible();
+  await expect(page.getByRole("status").first()).toContainText("It helped");
+  await expect(
+    page.getByRole("button", { name: "Low", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  await page.goto("/reflect/journey");
+  await expect(page.getByRole("link", { name: title })).toBeVisible();
+});
+
+test("a report can be undone, and a partial one offers next moves", async ({
+  page,
+}) => {
+  await startAsGuest(page);
+  const title = await chooseFirstSuggestion(page);
+  const card = page.locator("li", {
+    has: page.getByRole("heading", { level: 3, name: title }),
+  });
+  await card.getByRole("button", { name: "Partly" }).click();
+  await expect(
+    card.getByRole("button", { name: "Make it smaller" }),
+  ).toBeVisible();
+  await expect(
+    card.getByRole("button", { name: "Try again tomorrow" }),
+  ).toBeVisible();
+  await card.getByRole("button", { name: "Undo" }).click();
+  await expect(card.getByRole("button", { name: "Done" })).toBeVisible();
+});
+
+test("plan a repeating step with an if-then cue", async ({ page }) => {
+  await startAsGuest(page);
+  await page.goto("/steps/new");
+  await page.getByRole("button", { name: "Get something done" }).click();
+  await page.getByLabel("Your step").fill("Water the plants");
+  await page.getByRole("button", { name: "After breakfast" }).click();
+  await page.getByRole("button", { name: "Repeat on days…" }).click();
+  await page.getByRole("button", { name: "Choose this step" }).click();
+  await expect(page.locator("p.error")).toContainText("Pick at least one day");
+  await page.getByText("Sat", { exact: true }).click();
+  await page.getByRole("button", { name: "Choose this step" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Water the plants" }),
+  ).toBeVisible();
+  await expect(page.getByText("When: After breakfast")).toBeVisible();
+
+  await page.goto("/steps");
+  await expect(
+    page.getByRole("link", { name: /Water the plants/ }),
+  ).toBeVisible();
+});
+
+test("problem solving ends in a planned step", async ({ page }) => {
+  await startAsGuest(page);
+  await page.goto("/steps/problem");
+  await page.getByLabel("What's the problem?").fill("I keep missing my bus");
+  await page.getByRole("button", { name: "Next: options" }).click();
+  await page.getByLabel("Option 1").fill("Set an alarm 10 minutes earlier");
+  await page.getByLabel("Option 2").fill("Lay out clothes the night before");
+  await page.getByRole("button", { name: "Next: choose one" }).click();
+  await page.getByText("Lay out clothes the night before").click();
+  await page.getByRole("button", { name: "Next: plan it" }).click();
+  await page.getByRole("button", { name: "Choose this step" }).click();
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Lay out clothes the night before",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("I keep missing my bus")).toBeVisible();
+});
+
+test("a worrying note gets the safety check and pauses coaching until resumed", async ({
+  page,
+}) => {
+  await startAsGuest(page, "GB");
+  await page.goto("/reflect");
+  await page.getByLabel("Write a note").fill("I just want to disappear");
+  await page.getByRole("button", { name: "Save note" }).click();
+  await expect(
+    page.getByRole("heading", { name: /are you safe right now/ }),
+  ).toBeVisible();
+  // No warm completion line after something alarming.
+  await expect(page.getByText("Nicely done")).toHaveCount(0);
+
+  await page.goto("/today");
+  await expect(
+    page.getByRole("heading", { name: /are you safe/ }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "I'm not safe" }).click();
+  await expect(
+    page.getByRole("link", { name: /Call emergency services: 999/ }),
+  ).toHaveAttribute("href", "tel:999");
+  await expect(
+    page.getByRole("link", { name: "Call 116 123" }),
+  ).toHaveAttribute("href", "tel:116123");
+  await page.goto("/today");
+  await page.getByRole("button", { name: "I'm safe for now" }).click();
+  await page.getByRole("button", { name: "Carry on with Koe" }).click();
+  await expect(
+    page.getByRole("button", { name: /Choose this step/ }),
+  ).toBeVisible();
+});
+
+test("Talk saves the conversation even when the AI is off", async ({
+  page,
+}) => {
+  await startAsGuest(page);
+  await page.goto("/reflect/talk");
+  await expect(page.getByText("Koe is an AI, not a person")).toBeVisible();
+  await page.getByLabel("Your message").fill("Work has been a lot this week");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page).toHaveURL(/\/reflect\/talk\/.+/);
+  await expect(
+    page
+      .getByRole("list", { name: "Conversation" })
+      .getByText("Work has been a lot this week"),
+  ).toBeVisible();
+  await page.goto("/reflect");
+  await expect(
+    page.getByRole("link", { name: "Work has been a lot this week" }),
+  ).toBeVisible();
+});
+
+test("a risky message in Talk is never answered by the model", async ({
+  page,
+}) => {
+  await startAsGuest(page);
+  await page.goto("/reflect/talk");
+  await page
+    .getByLabel("Your message")
+    .fill("they would be better off without me");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(
+    page.getByRole("heading", { name: /are you safe right now/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("the usual conversation is paused"),
+  ).toBeVisible();
+  await expect(page.getByLabel("Your message")).toHaveCount(0);
+});
+
+test("Help works signed out, with tap-to-call", async ({ page }) => {
+  await page.goto("/help?region=SG");
+  await expect(page.getByRole("link", { name: "Call 1767" })).toHaveAttribute(
+    "href",
+    "tel:1767",
+  );
+  await page.getByLabel("Country / region").selectOption("AU");
+  await expect(page.getByRole("link", { name: "Call 13 11 14" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Call 000/ })).toHaveAttribute(
+    "href",
+    "tel:000",
+  );
+});

@@ -1,15 +1,11 @@
 "use client";
-import { useSession, useDraft } from "@/components/session";
-import {
-  PageHeading,
-  Select,
-  Field,
-  Notice,
-  ActionLink,
-} from "@/components/ui";
-import { helpResources, regionOptions } from "@/fixtures/help-resources";
-import { copyText } from "@/services/export";
-import { tone } from "@/domain/tone";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import { Notice } from "@/components/ui";
+import { regionOptions, resourceFor, telHref } from "@/fixtures/help-resources";
+import { setRegion } from "@/server/actions/settings";
+import { copyText } from "@/services/clipboard";
+
 const languages: Record<string, string> = {
   JP: "ja",
   KR: "ko",
@@ -17,63 +13,72 @@ const languages: Record<string, string> = {
   LT: "lt",
   PL: "pl",
 };
-export function Help() {
-  const { state, dispatch } = useSession();
-  const [message, setMessage] = useDraft(
-    "help.message",
-    "I could use some company. Are you able to talk?",
+
+export function Help({ region }: { region: string }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [message, setMessage] = useState(
+    "I'm having a hard time. Are you able to talk?",
   );
-  const [status, setStatus] = useDraft("help.status");
-  const resource = helpResources.find((r) => r.region === state.region);
+  const [status, setStatus] = useState("");
+  const resource = resourceFor(region);
   return (
     <>
-      <PageHeading
-        eyebrow="Help & support"
-        description="If you are in immediate danger, call your local emergency number or go to the nearest emergency department, if you can."
-      >
-        {tone(state.appearance.tone, "help", state.energy).message}
-      </PageHeading>
-      {!state.providerEnabled && (
-        <Notice>
-          Suggestions are off. Everything on this page still works.
-        </Notice>
+      {resource?.emergency ? (
+        <a className="button urgent" href={telHref(resource.emergency)}>
+          In danger now? Call {resource.emergency}
+        </a>
+      ) : (
+        <p>
+          <strong>In danger now?</strong> Call your local emergency number or go
+          to the nearest emergency department.
+        </p>
       )}
-      {state.scenario === "coaching paused" && (
-        <Notice>
-          UX preview; not a validated safety response. Ordinary coaching is
-          paused. No real input was assessed.
-        </Notice>
-      )}
-      <p className="prose">
-        Koe can&apos;t check on you, assess danger or contact anyone. This page
-        is not a staffed service. It points you to people who are.
-      </p>
       <div className="split">
-        <section>
-          <Select
-            label="Country / region"
-            value={state.region}
-            onChange={(region) =>
-              dispatch({ type: "profile", value: { region } })
-            }
-            options={regionOptions}
-          />
+        <section aria-labelledby="line">
+          <div className="field">
+            <label htmlFor="region">Country / region</label>
+            <select
+              id="region"
+              value={region}
+              onChange={(e) => {
+                const next = e.target.value;
+                startTransition(async () => {
+                  await setRegion(next);
+                  router.replace("/help?region=" + next, { scroll: false });
+                });
+              }}
+            >
+              {regionOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
           {resource ? (
             <div className="panel">
-              <p className="eyebrow">{resource.country}</p>
+              <p className="eyebrow" id="line">
+                {resource.country}
+              </p>
               <h2>{resource.name}</h2>
               {resource.localName && (
                 <p lang={languages[resource.region]}>{resource.localName}</p>
               )}
-              <p style={{ fontSize: "1.8rem", fontWeight: 500 }}>
-                {resource.phone}
-              </p>
-              <p>
+              <a className="button" href={telHref(resource.phone)}>
+                Call {resource.phone}
+              </a>
+              <p style={{ marginTop: 16 }}>
                 {resource.channels} · {resource.hours ?? "Hours not confirmed"}
               </p>
               {resource.note && <p className="hint">{resource.note}</p>}
-              <p className="meta">Last checked {resource.retrievedAt}</p>
-              <p>Check locally before relying on this.</p>
+              {resource.emergency && (
+                <p>Emergency services: {resource.emergency}</p>
+              )}
+              <p className="meta">
+                Last checked {resource.retrievedAt}. Check locally before
+                relying on this.
+              </p>
               <a
                 href={resource.sourceUrl}
                 target="_blank"
@@ -84,32 +89,36 @@ export function Help() {
             </div>
           ) : (
             <div className="panel">
-              <h2>No verified resource listed yet.</h2>
+              <h2 id="line">No checked line for this region yet.</h2>
               <p>
-                Try official local health services, a nearby hospital or a
-                community support service. Koe doesn&apos;t guess numbers.
+                Try your local emergency number, a doctor, a nearby hospital or
+                a community support service. Koe doesn&apos;t guess numbers.
               </p>
             </div>
           )}
         </section>
-        <section>
-          <h2>Message someone you trust</h2>
+        <section aria-labelledby="message">
+          <h2 id="message">Message someone you trust</h2>
           <p>
-            Edit the words, copy them, and send them yourself to someone you
-            feel safe with. Koe sends nothing.
+            Edit the words, copy them, and send them yourself. Koe sends
+            nothing.
           </p>
-          <Field
-            label="Your message"
-            multiline
-            value={message}
-            onChange={(value) => {
-              setMessage(value);
-              setStatus("");
-            }}
-            maxLength={1000}
-          />
+          <div className="field">
+            <label htmlFor="help-message">Your message</label>
+            <textarea
+              id="help-message"
+              rows={4}
+              maxLength={1000}
+              value={message}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                setStatus("");
+              }}
+            />
+          </div>
           <div className="actions">
             <button
+              type="button"
               className="secondary"
               onClick={async () => {
                 try {
@@ -124,27 +133,15 @@ export function Help() {
             >
               Copy message
             </button>
+            <a
+              className="button secondary"
+              href={"sms:?&body=" + encodeURIComponent(message)}
+            >
+              Open in Messages
+            </a>
           </div>
-          <button
-            className="text"
-            onClick={() =>
-              setStatus(
-                "Noted that you reached someone. Koe didn't contact anyone or check this.",
-              )
-            }
-          >
-            I reached someone
-          </button>
           {status && <Notice>{status}</Notice>}
         </section>
-      </div>
-      <div className="actions">
-        <ActionLink href="/help/report" secondary>
-          Report a problem
-        </ActionLink>
-        <ActionLink href="/today" secondary>
-          Back to Today
-        </ActionLink>
       </div>
     </>
   );

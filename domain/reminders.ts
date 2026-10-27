@@ -1,190 +1,73 @@
-import { z } from "zod";
-import type { State } from "./state";
+import { isValidTimeZone } from "./time";
 
-function validTimezone(value: string): boolean {
-  try {
-    new Intl.DateTimeFormat("en", { timeZone: value }).format(0);
-    return true;
-  } catch {
-    return false;
-  }
+// Reminders the person set themselves: a local time on chosen weekdays.
+// Times are computed in the person's own timezone, across daylight saving.
+
+/** Offset of `timeZone` from UTC at `at`, in minutes (e.g. +480 for Singapore). */
+function offsetMinutes(timeZone: string, at: Date) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(at)
+      .map((x) => [x.type, x.value]),
+  );
+  const asUtc = Date.UTC(
+    +p.year,
+    +p.month - 1,
+    +p.day,
+    +p.hour,
+    +p.minute,
+    +p.second,
+  );
+  return Math.round((asUtc - at.getTime()) / 60000);
 }
 
-export const reminderInput = z
-  .object({
-    enabled: z.boolean(),
-    paused: z.boolean(),
-    timezone: z
-      .string()
-      .trim()
-      .min(1)
-      .refine(validTimezone, "Choose a valid IANA timezone."),
-    quietStart: z.number().int().min(0).max(23),
-    quietEnd: z.number().int().min(0).max(23),
-    hour: z.number().int().min(0).max(23),
-    frequency: z.enum(["daily", "weekly"]),
-    weekday: z.number().int().min(0).max(6),
-    targetId: z.string(),
-  })
-  .superRefine((value, context) => {
-    if (value.enabled && !value.targetId) {
-      context.addIssue({
-        code: "custom",
-        path: ["targetId"],
-        message: "Choose the step to be reminded about.",
-      });
-    }
-  });
+/** The UTC instant of a local wall-clock time on a local day. */
+export function zonedInstant(timeZone: string, day: string, minute: number) {
+  const [y, m, d] = day.split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, d, Math.floor(minute / 60), minute % 60);
+  let at = new Date(guess - offsetMinutes(timeZone, new Date(guess)) * 60000);
+  // Second pass settles days when the offset changes (daylight saving).
+  at = new Date(guess - offsetMinutes(timeZone, at) * 60000);
+  return at;
+}
 
-export type ReminderPreview =
-  | {
-      kind: "ready";
-      at: string;
-      local: string;
-      title: string;
-      targetId: string;
-      deferred: boolean;
-    }
-  | { kind: "idle"; reason: string }
-  | { kind: "invalid"; errors: Record<string, string> };
-
-const minute = 60_000;
-const weekdays: Record<string, number> = {
-  Sun: 0,
-  Mon: 1,
-  Tue: 2,
-  Wed: 3,
-  Thu: 4,
-  Fri: 5,
-  Sat: 6,
-};
-
-export function inQuietHours(
-  hour: number,
-  start: number,
-  end: number,
-): boolean {
+export function inQuietHours(minute: number, start: number, end: number) {
   if (start === end) return false;
   return start < end
-    ? hour >= start && hour < end
-    : hour >= start || hour < end;
+    ? minute >= start && minute < end
+    : minute >= start || minute < end;
 }
 
-/** A deterministic fixture preview, not a scheduler or delivery queue. */
-export function reminderPreview(
-  state: Pick<
-    State,
-    "reminders" | "clock" | "steps" | "memories" | "memoryConsent" | "temporary"
-  >,
-): ReminderPreview {
-  const parsed = reminderInput.safeParse(state.reminders);
-  if (!parsed.success) {
-    return {
-      kind: "invalid",
-      errors: Object.fromEntries(
-        parsed.error.issues.map((issue) => [
-          String(issue.path[0]),
-          issue.message,
-        ]),
-      ),
-    };
+/** The next time strictly after `now` that this reminder should fire. */
+export function nextReminderAt(
+  r: { minuteOfDay: number; days: number[] },
+  timeZone: string,
+  now: Date,
+): Date | null {
+  if (!r.days.length) return null;
+  const zone = isValidTimeZone(timeZone) ? timeZone : "UTC";
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(
+    now,
+  );
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(today + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + i);
+    const day = d.toISOString().slice(0, 10);
+    if (!r.days.includes(d.getUTCDay())) continue;
+    const at = zonedInstant(zone, day, r.minuteOfDay);
+    if (at.getTime() > now.getTime()) return at;
   }
-  const config = parsed.data;
-  const now = Date.parse(state.clock);
-  if (!Number.isFinite(now))
-    return {
-      kind: "invalid",
-      errors: { clock: "Use a valid ISO virtual time." },
-    };
-  if (!config.enabled)
-    return { kind: "idle", reason: "No reminder preview is turned on." };
-  if (config.paused)
-    return {
-      kind: "idle",
-      reason: "Reminder preview is paused. Nothing is pending.",
-    };
-  const target = state.steps.find((step) => step.id === config.targetId);
-  if (!target)
-    return {
-      kind: "idle",
-      reason: "That step no longer exists. Nothing is pending.",
-    };
-  if (target.paused)
-    return {
-      kind: "idle",
-      reason: "That step is paused. Nothing is pending.",
-    };
-  if (
-    "sourceMemoryId" in target &&
-    typeof target.sourceMemoryId === "string" &&
-    (!state.memoryConsent ||
-      state.temporary ||
-      !state.memories.some((memory) => memory.id === target.sourceMemoryId))
-  ) {
-    return {
-      kind: "idle",
-      reason:
-        "The memory card behind this step is deleted or paused. Nothing is pending.",
-    };
-  }
-
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: config.timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  });
-  const parts = (time: number) =>
-    Object.fromEntries(
-      formatter.formatToParts(time).map((part) => [part.type, part.value]),
-    );
-  const seenLocalDates = new Set<string>();
-  const start = Math.floor((now - 36 * 60 * minute) / minute) * minute;
-  const end = now + 9 * 24 * 60 * minute;
-  for (let scheduled = start; scheduled <= end; scheduled += minute) {
-    const local = parts(scheduled);
-    if (Number(local.hour) !== config.hour || Number(local.minute) !== 0)
-      continue;
-    if (
-      config.frequency === "weekly" &&
-      weekdays[local.weekday] !== config.weekday
-    )
-      continue;
-    const key = local.year + "-" + local.month + "-" + local.day;
-    // A fall-back clock may show the same hour twice. The first occurrence owns the date.
-    if (seenLocalDates.has(key)) continue;
-    seenLocalDates.add(key);
-    let at = scheduled;
-    for (
-      let count = 0;
-      count < 26 * 60 &&
-      inQuietHours(Number(parts(at).hour), config.quietStart, config.quietEnd);
-      count += 1
-    ) {
-      at += minute;
-    }
-    if (at <= now) continue;
-    const readable = new Intl.DateTimeFormat("en-GB", {
-      timeZone: config.timezone,
-      dateStyle: "full",
-      timeStyle: "short",
-      hourCycle: "h23",
-    }).format(at);
-    return {
-      kind: "ready",
-      at: new Date(at).toISOString(),
-      local: readable,
-      title: target.title,
-      targetId: target.id,
-      deferred: at !== scheduled,
-    };
-  }
-  return {
-    kind: "idle",
-    reason: "No preview falls in this virtual window. Try another time.",
-  };
+  return null;
 }
+
+/** After this many reminders in a row with no answer, Koe pauses them. */
+export const IGNORE_LIMIT = 3;

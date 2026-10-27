@@ -1,261 +1,132 @@
 "use client";
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
-import { useSession, useDraft } from "@/components/session";
-import {
-  PageHeading,
-  Field,
-  Toggle,
-  Notice,
-  ActionLink,
-  ConfirmDelete,
-  focusFirstInvalid,
-} from "@/components/ui";
-import { hasPlannerDraft } from "@/domain/state";
-import { careTasks, prepareCareExport } from "@/domain/connect";
-import { downloadJson, copyText } from "@/services/export";
-export function CarePreparation() {
-  const { state, dispatch } = useSession();
-  const router = useRouter();
-  const [original, setOriginal] = useDraft(
-    "care.original",
-    state.journal
-      .map((n) => n.text)
-      .filter(Boolean)
-      .join("\n"),
-  );
-  const [summary, setSummary] = useDraft("care.summary");
-  const [inquiry, setInquiry] = useDraft(
-    "care.inquiry",
-    "Hello, I would like information about accessing your service. Could you tell me about eligibility, costs and next steps?",
-  );
-  const [questions, setQuestions] = useDraft("care.questions");
-  const [status, setStatus] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  function exportCare(e: FormEvent) {
-    e.preventDefault();
-    const result = prepareCareExport({
-      originalNotes: original,
-      editedSummary: summary,
-      inquiryDraft: inquiry,
-      questions,
-      checklist: state.careChecklist.filter(
-        (x): x is (typeof careTasks)[number] =>
-          careTasks.includes(x as (typeof careTasks)[number]),
-      ),
-    });
-    if (!result.success) {
-      setErrors(
-        Object.fromEntries(
-          result.error.issues.map((i) => [String(i.path[0]), i.message]),
-        ),
-      );
-      focusFirstInvalid(e);
-      return;
-    }
-    setErrors({});
-    downloadJson("koe-care-preparation.json", result.data);
-    setStatus("Download requested. Nothing was shared.");
-  }
-  return (
-    <>
-      <PageHeading
-        eyebrow="Connect"
-        description={
-          state.journal.length
-            ? "Use your journal notes to prepare questions about care."
-            : "Start with a question about access, cost or what you need."
-        }
-      >
-        Prepare for care
-      </PageHeading>
-      <p className="prose">
-        Every question is optional. Koe cannot find appointments, book care or
-        contact a clinician.
-      </p>
-      <section style={{ marginBottom: 36 }}>
-        <h2>Before contacting a service</h2>
+import Link from "next/link";
+import { useMemo, useState, useTransition } from "react";
+import { Notice } from "@/components/ui";
+import type { RiskLevel } from "@/domain/safety";
+import { saveCarePrep } from "@/server/actions/connect";
+import { copyText } from "@/services/clipboard";
+import { SafetyCheck } from "../safety/safety-check";
 
-        {careTasks.map((task) => (
-          <Toggle
-            key={task}
-            label={task}
-            checked={state.careChecklist.includes(task)}
-            onChange={(checked) =>
-              dispatch({
-                type: "careChecklist",
-                value: checked
-                  ? [...state.careChecklist, task]
-                  : state.careChecklist.filter((x) => x !== task),
-              })
+export function CarePreparation({
+  facts,
+  region,
+}: {
+  /** Plain lines built from the person's own records, which they can edit. */
+  facts: string[];
+  region: string | null;
+}) {
+  const [summary, setSummary] = useState(facts.join("\n"));
+  const [say, setSay] = useState("");
+  const [ask, setAsk] = useState("");
+  const [easier, setEasier] = useState("");
+  const [status, setStatus] = useState("");
+  const [safety, setSafety] = useState<RiskLevel>("none");
+  const [pending, startTransition] = useTransition();
+  const text = useMemo(
+    () =>
+      [
+        summary.trim() && "How things have been:\n" + summary.trim(),
+        say.trim() && "What I want to say:\n" + say.trim(),
+        ask.trim() && "What I want to ask:\n" + ask.trim(),
+        easier.trim() && "What would make this easier:\n" + easier.trim(),
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+    [summary, say, ask, easier],
+  );
+  const field = (
+    id: string,
+    label: string,
+    value: string,
+    set: (v: string) => void,
+    hint?: string,
+  ) => (
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      {hint && <p className="hint">{hint}</p>}
+      <textarea
+        id={id}
+        rows={3}
+        maxLength={1500}
+        value={value}
+        onChange={(e) => {
+          set(e.target.value);
+          setStatus("");
+        }}
+      />
+    </div>
+  );
+  if (safety !== "none")
+    return <SafetyCheck region={region} onResume={() => setSafety("none")} />;
+  return (
+    <div className="prose">
+      {field(
+        "care-summary",
+        "How things have been",
+        summary,
+        setSummary,
+        "Filled in from what you've recorded in Koe. Change or remove anything; share only what you want.",
+      )}
+      {field(
+        "care-say",
+        "What you want to say",
+        say,
+        setSay,
+        "For example: how long you've felt this way, sleep, appetite, what's hardest.",
+      )}
+      {field("care-ask", "What you want to ask", ask, setAsk)}
+      {field(
+        "care-easier",
+        "What would make the appointment easier",
+        easier,
+        setEasier,
+        "For example: bringing someone, writing things down, a longer slot.",
+      )}
+      <h2>Your summary</h2>
+      <pre className="panel care-preview">{text || "Nothing yet."}</pre>
+      <div className="actions">
+        <button
+          type="button"
+          disabled={!text}
+          onClick={async () => {
+            try {
+              await copyText(text);
+              setStatus("Copied. Nothing was sent.");
+            } catch {
+              setStatus("Copying didn't work here. Select the text yourself.");
             }
-          />
-        ))}
-        <div className="actions">
-          <button
-            className="secondary"
-            onClick={() => {
-              if (hasPlannerDraft(state)) {
-                setStatus(
-                  "You already have a step draft. Open it before starting another.",
-                );
-                return;
-              }
-              dispatch({
-                type: "draft",
-                key: "step.title",
-                value: "Ask about service eligibility and cost",
-              });
-              dispatch({
-                type: "draft",
-                key: "step.area",
-                value: "Care access",
-              });
-              router.push("/steps/new");
-            }}
-          >
-            Write a care-access step
-          </button>
-        </div>
-      </section>
-      <form onSubmit={exportCare}>
-        <div className="split">
-          <section>
-            <h2>Your source notes</h2>
-            <Field
-              label="Original notes"
-              value={original}
-              onChange={(v) => {
-                setOriginal(v);
-                setStatus("");
-              }}
-              multiline
-              maxLength={3000}
-              error={errors.originalNotes}
-              hint="Journal text can be a starting point. These notes are never rewritten by a model."
-            />
-            {summary && summary !== original ? (
-              <ConfirmDelete
-                label="Replace summary with notes"
-                question="Replace your edited summary?"
-                detail="Your original notes stay."
-                onConfirm={() => {
-                  setSummary(original);
-                  setStatus("");
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  setSummary(original);
-                  setStatus("");
-                }}
-              >
-                Use notes as starting summary
-              </button>
-            )}
-          </section>
-          <section>
-            <h2>What you choose to share</h2>
-            <Field
-              label="Editable factual summary"
-              value={summary}
-              onChange={(v) => {
-                setSummary(v);
-                setStatus("");
-              }}
-              multiline
-              maxLength={4000}
-              error={errors.editedSummary}
-              hint="Compare with your original notes. Add only facts you want to include; nothing is inferred here."
-            />
-          </section>
-        </div>
-        <hr className="divider" />
-        <div className="split">
-          <section>
-            <h2>An inquiry you can edit</h2>
-            <Field
-              label="Inquiry draft"
-              value={inquiry}
-              onChange={(v) => {
-                setInquiry(v);
-                setStatus("");
-              }}
-              multiline
-              maxLength={2000}
-              error={errors.inquiryDraft}
-            />
-            <button
-              type="button"
-              className="secondary"
-              onClick={async () => {
-                try {
-                  await copyText(inquiry);
-                  setStatus("Copied. Nothing was sent.");
-                } catch {
-                  setStatus(
-                    "Clipboard unavailable. Select and copy the inquiry manually. Nothing was sent.",
-                  );
-                }
-              }}
-            >
-              Copy inquiry
-            </button>
-          </section>
-          <section>
-            <h2>Questions for a conversation</h2>
-            <Field
-              label="Appointment questions"
-              value={questions}
-              onChange={(v) => {
-                setQuestions(v);
-                setStatus("");
-              }}
-              multiline
-              maxLength={1500}
-              error={errors.questions}
-            />
-            <p className="hint">
-              For example: What does access involve? What costs should I expect?
-              What would I like help with?
-            </p>
-          </section>
-        </div>
-        <div className="actions">
-          <button>Export care preparation JSON</button>
-          <ActionLink href="/connect" secondary>
-            Keep draft & leave →
-          </ActionLink>
-          {hasPlannerDraft(state) && (
-            <ActionLink href="/steps/new" secondary>
-              Open step draft →
-            </ActionLink>
-          )}
-          <ConfirmDelete
-            label="Discard care draft"
-            question="Discard your care preparation?"
-            detail="Journal entries stay. Checklist choices are also cleared."
-            onConfirm={() => {
-              dispatch({ type: "clearDraft", prefix: "care." });
-              setOriginal("");
-              setSummary("");
-              setInquiry("");
-              setQuestions("");
-              dispatch({ type: "careChecklist", value: [] });
-              setStatus("Care draft discarded.");
-              setErrors({});
-            }}
-          />
-        </div>
-      </form>
+          }}
+        >
+          Copy
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={!text}
+          onClick={() => window.print()}
+        >
+          Print
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={!text || pending}
+          onClick={() =>
+            startTransition(async () => {
+              const r = await saveCarePrep(text);
+              setStatus("Saved to your Journey as a note.");
+              setSafety(r.safety ?? "none");
+            })
+          }
+        >
+          Save as a note
+        </button>
+      </div>
       {status && <Notice>{status}</Notice>}
       <p className="meta">
-        Export includes both source notes and your edited summary. Nothing is
-        shared with a service or clinician.
+        Want help working out what to say?{" "}
+        <Link href="/reflect/talk?mode=care">Talk it through with Koe</Link>
       </p>
-    </>
+    </div>
   );
 }

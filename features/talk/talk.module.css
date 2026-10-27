@@ -1,0 +1,98 @@
+.talk {
+  max-width: 760px;
+}
+.disclosure {
+  font-size: 0.875rem;
+  color: var(--secondary);
+  border-left: 3px solid var(--line-strong);
+  padding-left: 12px;
+}
+.messages {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 20px;
+  display: grid;
+  gap: 14px;
+}
+.messages li {
+  max-width: 90%;
+  padding: 14px 18px;
+  border-radius: 14px;
+}
+.messages li p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.who {
+  display: block;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--secondary);
+  margin-bottom: 4px;
+}
+.koe {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  justify-self: start;
+}
+.you {
+  background: var(--coffee);
+  color: var(--cream);
+  justify-self: end;
+}
+.you .who {
+  color: #d3c0b3;
+}
+.safetyNote {
+  border: 2px solid var(--wine);
+  background: var(--surface);
+  justify-self: stretch;
+  max-width: 100% !important;
+}
+.proposal {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.proposalTitle {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  margin: 4px 0 0 !important;
+  white-space: normal !important;
+}
+.composer textarea {
+  display: block;
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  resize: vertical;
+}
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.list a {
+  text-decoration: none;
+  font-weight: 500;
+}
+.list a:hover {
+  text-decoration: underline;
+}
+@media (max-width: 600px) {
+  .messages li {
+    max-width: 100%;
+  }
+}

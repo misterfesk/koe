@@ -30,12 +30,22 @@ export default defineConfig({
     },
   ],
   webServer: {
+    // Start from an empty database every run.
     command:
+      `node -e "require('fs').rmSync('.data/e2e-${port}',{recursive:true,force:true})" && ` +
       "node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port " +
       port,
     url: "http://127.0.0.1:" + port,
     reuseExistingServer: false,
     timeout: 60000,
+    // A throwaway database, the AI and reminders off: tests are repeatable
+    // and never call the provider.
+    env: {
+      DATABASE_URL: "file:./.data/e2e-" + port,
+      KOE_AI: "off",
+      KOE_SCHEDULER: "off",
+      APP_URL: "http://127.0.0.1:" + port,
+    },
   },
   reporter: [["list"]],
 });
