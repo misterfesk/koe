@@ -16,13 +16,21 @@ export function Welcome({
   children: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
+  const heading = useRef<HTMLHeadingElement>(null);
+  // A modal puts focus on its first control, which would be "Close". Start
+  // at the heading instead, so the dialog is read from its beginning.
+  const show = () => {
     const d = dialog.current;
-    if (autoOpen && d && !d.open) d.showModal();
+    if (!d || d.open) return;
+    d.showModal();
+    heading.current?.focus();
+  };
+  useEffect(() => {
+    if (autoOpen) show();
   }, [autoOpen]);
   return (
     <>
-      <button type="button" onClick={() => dialog.current?.showModal()}>
+      <button type="button" onClick={show}>
         {children}
       </button>
       <dialog
@@ -31,7 +39,9 @@ export function Welcome({
         aria-labelledby="welcome-title"
       >
         <div className={styles.top}>
-          <h2 id="welcome-title">Welcome to Koe</h2>
+          <h2 id="welcome-title" ref={heading} tabIndex={-1}>
+            Welcome to Koe
+          </h2>
           <button
             type="button"
             className="secondary"

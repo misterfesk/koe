@@ -569,3 +569,7 @@ a.button.urgent {
     scroll-padding-bottom: 96px;
   }
 }
+label.chip:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

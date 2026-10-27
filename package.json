@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "drizzle-kit generate",
-    "eval:safety": "vitest run --config vitest.eval.config.ts",
+    "eval:safety": "vitest run --config vitest.eval.config.ts tests/eval/talk.eval.ts",
+    "eval:plan": "vitest run --config vitest.eval.config.ts tests/eval/planner.eval.ts",
     "ai:usage": "tsx --conditions=react-server scripts/ai-usage.ts"
   },
   "engines": {

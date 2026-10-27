@@ -131,7 +131,9 @@ function Card({ card, region }: { card: MemoryView; region: string | null }) {
               ? "Kept from a conversation"
               : card.source === "report"
                 ? "Kept from your Journey"
-                : "Added by you"}
+                : card.source === "intro"
+                  ? "From your intro"
+                  : "Added by you"}
             {card.useForSuggestions ? "" : " · Not used for suggestions"}
           </p>
           <div className="row-actions">

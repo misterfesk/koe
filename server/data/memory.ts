@@ -10,7 +10,7 @@ export type MemoryView = {
   id: string;
   kind: MemoryKind;
   text: string;
-  source: "you" | "talk" | "report";
+  source: "you" | "talk" | "report" | "intro";
   useForSuggestions: boolean;
   createdAt: string;
 };

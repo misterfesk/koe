@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PlanKind, PlanOrigin, PlanSize } from "./plan-menu";
 import { weekday } from "./time";
 
 export type Area = "move" | "connect" | "care" | "do" | "enjoy";
@@ -64,6 +65,12 @@ export type StepView = {
   plannedFor: string | null;
   version: number;
   sourceMemoryId: string | null;
+  /** Day-plan fields: null on steps made before the plan menu existed. */
+  kind: PlanKind | null;
+  minuteOfDay: number | null;
+  why: string | null;
+  size: PlanSize | null;
+  origin: PlanOrigin | null;
   createdAt: string;
   /** Newest first. */
   reports: ReportView[];
@@ -143,6 +150,11 @@ export function todayPlan(steps: StepView[], today: string) {
       waiting.push(step);
     }
   }
+  // Planned items go in time order; older steps keep their order, after them.
+  const byTime = (a: StepView, b: StepView) =>
+    (a.minuteOfDay ?? Infinity) - (b.minuteOfDay ?? Infinity) || 0;
+  waiting.sort(byTime);
+  reported.sort((a, b) => byTime(a.step, b.step));
   return { waiting, reported };
 }
 

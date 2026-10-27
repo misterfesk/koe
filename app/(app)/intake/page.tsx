@@ -1,25 +1,23 @@
 import type { Metadata } from "next";
-import { ActionLink, PageHeading } from "@/components/ui";
+import { redirect } from "next/navigation";
+import { PageHeading } from "@/components/ui";
+import { IntakeFlow } from "@/features/intake/intake-flow";
+import { SafetyCheck } from "@/features/safety/safety-check";
+import { hasIntro } from "@/server/data/intake";
 import { requireViewer } from "@/server/viewer";
 
 export const metadata: Metadata = { title: "Get to know you" };
 
-// Placeholder: the real questions arrive in the next slice.
 export default async function Page() {
-  await requireViewer();
-  return (
-    <>
-      <PageHeading
-        eyebrow="Welcome"
-        description="A few quick questions so Koe can plan a day that fits you."
-      >
-        Let&apos;s get to know you
-      </PageHeading>
-      <div className="actions">
-        <ActionLink href="/today" secondary>
-          Skip for now
-        </ActionLink>
-      </div>
-    </>
-  );
+  const v = await requireViewer();
+  // Someone who has done the intro goes straight to their day.
+  if (await hasIntro(v.db, v.user.id)) redirect("/today");
+  if (v.profile.coachingPausedAt)
+    return (
+      <>
+        <PageHeading eyebrow="Welcome">Let&apos;s get to know you</PageHeading>
+        <SafetyCheck region={v.profile.region} />
+      </>
+    );
+  return <IntakeFlow region={v.profile.region} />;
 }

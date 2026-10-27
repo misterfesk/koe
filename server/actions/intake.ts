@@ -1,0 +1,168 @@
+"use server";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { fieldErrors, type ActionResult } from "@/domain/forms";
+import {
+  freeTexts,
+  intakeModel,
+  type IntakeModel,
+  type Reveal,
+} from "@/domain/intake";
+import {
+  breaksGuardrails,
+  checkComposition,
+  contextFor,
+  detectEatingConcern,
+  planItemSchema,
+} from "@/domain/plan-menu";
+import type { RiskLevel } from "@/domain/safety";
+import { commitIntro } from "../data/intake";
+import { screen } from "../safety";
+import { synthesiseIntake, templateResult } from "../llm/intake";
+import { requireViewer } from "../viewer";
+
+const refresh = () => revalidatePath("/", "layout");
+
+/**
+ * Screens free text with the rules check as soon as a question is answered,
+ * so the fixed safety flow appears right there. Words that trip it are
+ * dropped by the client and never reach the model.
+ */
+export async function checkIntakeText(
+  texts: string[],
+): Promise<{ safety: RiskLevel }> {
+  const v = await requireViewer();
+  const safe = z
+    .array(z.string().max(400))
+    .max(8)
+    .parse(texts)
+    .filter((t) => t.trim());
+  // No revalidation here: the intro shows the safety flow itself, and a
+  // refreshed page would swap it for a fresh start and lose the answers.
+  const level = safe.length
+    ? await screen(v.db, v.user.id, "intake", safe)
+    : "none";
+  return { safety: level };
+}
+
+/**
+ * Food and weight worry switches off food and exercise items. The words
+ * themselves are dropped from the saved model: the flag is enough to plan
+ * safely, and the person decides what Koe remembers.
+ */
+function withEatingFlag(model: IntakeModel): IntakeModel {
+  const texty = (t?: string) => !!t && detectEatingConcern(t);
+  const concern = freeTexts(model).some(texty) || model.eatingConcern;
+  if (!concern) return model;
+  const keep = (t?: string) => (texty(t) ? undefined : t);
+  return {
+    ...model,
+    eatingConcern: true,
+    puttingOff: keep(model.puttingOff),
+    notes: {
+      goals: keep(model.notes.goals),
+      day: keep(model.notes.day),
+      lifts: keep(model.notes.lifts),
+      people: keep(model.notes.people),
+    },
+  };
+}
+
+/** The one AI pass: answers in, a reveal to edit and approve out. */
+export async function buildReveal(
+  input: unknown,
+): Promise<ActionResult<{ reveal: Reveal | null }>> {
+  const v = await requireViewer();
+  const parsed = intakeModel.safeParse(input);
+  if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
+
+  // Screened again here: this action can be called without the screens above.
+  const safety = await screen(
+    v.db,
+    v.user.id,
+    "intake",
+    freeTexts(parsed.data),
+  );
+  if (safety !== "none") return { ok: true, safety, reveal: null };
+
+  const model = withEatingFlag(parsed.data);
+  // While coaching is paused no model is called for this person.
+  const synthesis = v.profile.coachingPausedAt
+    ? templateResult(model)
+    : await synthesiseIntake(model, v.user.id);
+  return {
+    ok: true,
+    safety: "none",
+    reveal: {
+      summary: synthesis.summary,
+      memories: v.profile.memoryOn ? synthesis.memories : [],
+      items: synthesis.items,
+      model,
+      eatingConcern: model.eatingConcern,
+      source: synthesis.source,
+    },
+  };
+}
+
+const startInput = z.object({
+  model: intakeModel,
+  summary: z.string().trim().max(400),
+  memories: z
+    .array(
+      z.object({
+        kind: z.enum(["helps", "hard", "people", "preference"]),
+        text: z.string().trim().min(1).max(120),
+      }),
+    )
+    .max(4),
+  savePeople: z.array(z.string().trim().min(1).max(40)).max(3),
+  items: z.array(planItemSchema).min(1).max(3),
+});
+
+/** "Start my day": writes exactly what the person approved, then opens Today. */
+export async function startMyDay(input: unknown): Promise<ActionResult> {
+  const v = await requireViewer();
+  const parsed = startInput.safeParse(input);
+  if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
+  const model = withEatingFlag(parsed.data.model);
+  const { summary, memories, items } = parsed.data;
+
+  // Everything the person typed or edited goes through the rules check first.
+  const level = await screen(v.db, v.user.id, "intake", [
+    summary,
+    ...memories.map((m) => m.text),
+    ...freeTexts(model),
+  ]);
+  if (level !== "none") return { ok: true, safety: level };
+
+  // The plan comes back from the browser, so it is checked again here.
+  const textBroken = items.some(
+    (i) => breaksGuardrails(i.title) || breaksGuardrails(i.why),
+  );
+  const ruleBroken = checkComposition(items, contextFor(model)).some(
+    (x) => !["count", "no_lift", "no_core"].includes(x.code),
+  );
+  if (textBroken || ruleBroken)
+    return {
+      ok: false,
+      errors: {
+        form: "Something in this plan can't be used. Go back and try again.",
+      },
+    };
+
+  const saveable = new Set(model.names.map((n) => n.name.trim().toLowerCase()));
+  await commitIntro(v.db, v.user.id, {
+    model,
+    summary,
+    memories,
+    people: parsed.data.savePeople.filter((n) =>
+      saveable.has(n.trim().toLowerCase()),
+    ),
+    items,
+    memoryOn: v.profile.memoryOn,
+    today: v.today,
+  });
+  refresh();
+  redirect("/today");
+}

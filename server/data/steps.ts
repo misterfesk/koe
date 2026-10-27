@@ -3,6 +3,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db";
 import { step, stepReport, stepVersion } from "../db/schema";
 import { open, seal } from "../crypto";
+import { asKind, type PlanOrigin, type PlanSize } from "@/domain/plan-menu";
 import { addDays } from "@/domain/time";
 import type {
   Helped,
@@ -62,6 +63,11 @@ async function hydrate(db: Db, userId: string, rows: StepRow[]) {
     plannedFor: r.plannedFor,
     version: r.version,
     sourceMemoryId: r.sourceMemoryId,
+    kind: asKind(r.kind),
+    minuteOfDay: r.minuteOfDay,
+    why: openOrNull(r.whyEnc),
+    size: r.size,
+    origin: r.origin,
     createdAt: r.createdAt.toISOString(),
     reports: reports.filter((x) => x.stepId === r.id).map(toReport),
     versions: versions
@@ -101,7 +107,59 @@ export type NewStep = {
   repeatDays?: number[];
   sourceMemoryId?: string | null;
   sourceConversationId?: string | null;
+  /** Day-plan fields, set for items that came from a plan. */
+  id?: string;
+  kind?: StepView["kind"];
+  minuteOfDay?: number | null;
+  why?: string | null;
+  size?: PlanSize | null;
+  origin?: PlanOrigin | null;
 };
+
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/** Inserts a step and its first version inside a transaction the caller owns. */
+export async function insertStep(
+  tx: Tx,
+  userId: string,
+  input: NewStep,
+  today: string,
+) {
+  const [row] = await tx
+    .insert(step)
+    .values({
+      ...(input.id ? { id: input.id } : {}),
+      userId,
+      area: input.area,
+      titleEnc: seal(input.title),
+      cueEnc: sealOrNull(input.cue),
+      expectation: input.expectation ?? null,
+      problemEnc: sealOrNull(input.problem),
+      repeatDays: input.when === "repeat" ? (input.repeatDays ?? []) : null,
+      plannedFor:
+        input.when === "repeat"
+          ? null
+          : input.when === "tomorrow"
+            ? addDays(today, 1)
+            : today,
+      sourceMemoryId: input.sourceMemoryId ?? null,
+      sourceConversationId: input.sourceConversationId ?? null,
+      kind: input.kind ?? null,
+      minuteOfDay: input.minuteOfDay ?? null,
+      whyEnc: sealOrNull(input.why),
+      size: input.size ?? null,
+      origin: input.origin ?? null,
+    })
+    .returning({ id: step.id });
+  await tx.insert(stepVersion).values({
+    userId,
+    stepId: row.id,
+    version: 1,
+    titleEnc: seal(input.title),
+    cueEnc: sealOrNull(input.cue),
+  });
+  return row.id;
+}
 
 export async function createStep(
   db: Db,
@@ -109,36 +167,7 @@ export async function createStep(
   input: NewStep,
   today: string,
 ) {
-  return db.transaction(async (tx) => {
-    const [row] = await tx
-      .insert(step)
-      .values({
-        userId,
-        area: input.area,
-        titleEnc: seal(input.title),
-        cueEnc: sealOrNull(input.cue),
-        expectation: input.expectation ?? null,
-        problemEnc: sealOrNull(input.problem),
-        repeatDays: input.when === "repeat" ? (input.repeatDays ?? []) : null,
-        plannedFor:
-          input.when === "repeat"
-            ? null
-            : input.when === "tomorrow"
-              ? addDays(today, 1)
-              : today,
-        sourceMemoryId: input.sourceMemoryId ?? null,
-        sourceConversationId: input.sourceConversationId ?? null,
-      })
-      .returning({ id: step.id });
-    await tx.insert(stepVersion).values({
-      userId,
-      stepId: row.id,
-      version: 1,
-      titleEnc: seal(input.title),
-      cueEnc: sealOrNull(input.cue),
-    });
-    return row.id;
-  });
+  return db.transaction((tx) => insertStep(tx, userId, input, today));
 }
 
 async function owned(db: Db, userId: string, id: string) {

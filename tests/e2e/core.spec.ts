@@ -19,6 +19,10 @@ test("a new visitor starts in the welcome dialog, then skips the intake", async 
   await page.goto("/");
   const dialog = page.getByRole("dialog", { name: "Welcome to Koe" });
   await expect(dialog).toBeVisible();
+  // Focus starts at the heading, not on the Close button.
+  await expect(
+    dialog.getByRole("heading", { name: "Welcome to Koe" }),
+  ).toBeFocused();
   // Esc returns to the landing page; the button brings the dialog back.
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();

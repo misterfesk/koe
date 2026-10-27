@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { agentRun, safetyEvent } from "@/server/db/schema";
+import { getUserModel, listPlanDays } from "@/server/data/intake";
 import { listMemory } from "@/server/data/memory";
 import {
   getWeeklyReview,
@@ -71,6 +72,9 @@ export async function GET() {
     notes: await listNotes(v.db, id),
     checkIns: await listCheckIns(v.db, id),
     memoryCards: await listMemory(v.db, id),
+    // What Koe knows from the intro, and each day it planned.
+    userModel: await getUserModel(v.db, id),
+    planDays: await listPlanDays(v.db, id),
     conversations: await Promise.all(
       talks.map((t) => getConversation(v.db, id, t.id)),
     ),

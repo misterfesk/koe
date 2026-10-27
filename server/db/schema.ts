@@ -11,6 +11,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { planKinds, planOrigins, planSizes } from "../../domain/plan-menu";
 
 // --- Better Auth core tables (field names must match its defaults) ---
 
@@ -166,7 +167,9 @@ export const memoryCard = pgTable(
     kind: text("kind", { enum: memoryKinds }).notNull(),
     textEnc: text("text_enc").notNull(),
     // Where it came from: the person typed it, or approved it in Talk or a report.
-    source: text("source", { enum: ["you", "talk", "report"] }).notNull(),
+    source: text("source", {
+      enum: ["you", "talk", "report", "intro"],
+    }).notNull(),
     sourceRef: text("source_ref"),
     useForSuggestions: boolean("use_for_suggestions").notNull().default(true),
     createdAt: created(),
@@ -231,6 +234,12 @@ export const step = pgTable(
     // For one-off steps: the first local day it shows on Today.
     plannedFor: day("planned_for"),
     version: integer("version").notNull().default(1),
+    // Day-plan fields. Null on steps made before the plan menu existed.
+    kind: text("kind", { enum: planKinds }),
+    minuteOfDay: integer("minute_of_day"),
+    whyEnc: text("why_enc"),
+    size: text("size", { enum: planSizes }),
+    origin: text("origin", { enum: planOrigins }),
     sourceMemoryId: text("source_memory_id").references(() => memoryCard.id, {
       onDelete: "set null",
     }),
@@ -285,6 +294,44 @@ export const stepReport = pgTable(
     // One answer per step per day; a second tap changes it.
     uniqueIndex("step_report_step_day_idx").on(t.stepId, t.day),
   ],
+);
+
+/**
+ * What Koe knows about a person, in one row: the answers from the intro
+ * (sealed JSON) and the summary they approved. Written only when they tap
+ * "Start my day".
+ */
+export const userModel = pgTable("user_model", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  dataEnc: text("data_enc").notNull(),
+  summaryEnc: text("summary_enc").notNull(),
+  version: integer("version").notNull().default(1),
+  createdAt: created(),
+  updatedAt: updated(),
+});
+
+/**
+ * One planned day. Each change to a day adds a new version, so a later
+ * adaptation can be shown as a diff and undone. `snapshotEnc` is sealed JSON
+ * of the item list as planned.
+ */
+export const planDay = pgTable(
+  "plan_day",
+  {
+    id: id(),
+    userId: owner(),
+    day: day("day").notNull(),
+    energy: text("energy", { enum: energies }),
+    mode: text("mode", { enum: ["normal", "lighter"] })
+      .notNull()
+      .default("normal"),
+    snapshotEnc: text("snapshot_enc").notNull(),
+    version: integer("version").notNull().default(1),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex("plan_day_user_day_idx").on(t.userId, t.day, t.version)],
 );
 
 export const note = pgTable(
@@ -455,6 +502,7 @@ export const movableTables = [
   step,
   stepVersion,
   stepReport,
+  planDay,
   note,
   weeklyReview,
   person,

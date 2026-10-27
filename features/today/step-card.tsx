@@ -12,7 +12,8 @@ import {
   type ReportView,
   type StepView,
 } from "@/domain/steps";
-import { describeDays } from "@/domain/time";
+import { kindLabel } from "@/domain/plan-menu";
+import { describeDays, formatMinutes } from "@/domain/time";
 import {
   addHowItWentDetail,
   changeSchedule,
@@ -56,12 +57,16 @@ export function StepCard({
   return (
     <li className={styles.card} data-reported={!!report}>
       <p className="eyebrow">
-        {areaLabels[step.area]}
+        {step.minuteOfDay !== null
+          ? formatMinutes(step.minuteOfDay) + " · "
+          : ""}
+        {step.kind ? kindLabel(step.kind) : areaLabels[step.area]}
         {isRepeating(step) ? " · " + describeDays(step.repeatDays!) : ""}
       </p>
       <h3 className={styles.title}>
         <Link href={"/steps/" + step.id}>{step.title}</Link>
       </h3>
+      {step.why && <p className={styles.cue}>{step.why}</p>}
       {step.cue && <p className={styles.cue}>When: {when}</p>}
 
       {!report ? (

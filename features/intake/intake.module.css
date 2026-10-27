@@ -1,0 +1,100 @@
+.progress {
+  margin: 0 0 6px;
+}
+.bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  margin: 0 0 20px;
+  overflow: hidden;
+}
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--coffee);
+  transition: width 0.25s ease;
+}
+.group {
+  margin: 0 0 24px;
+}
+.group > .hint {
+  margin: -4px 0 10px;
+}
+.nameRow {
+  display: grid;
+  gap: 4px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.nameRow .field {
+  margin-bottom: 4px;
+}
+.thinking {
+  display: grid;
+  gap: 10px;
+  padding: 32px 0;
+}
+.thinking p {
+  margin: 0;
+}
+.dots {
+  display: inline-flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.dots span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--wine);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 28px;
+  display: grid;
+  gap: 14px;
+}
+.item {
+  padding: 18px 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.item h3 {
+  font-size: 1.25rem;
+  margin: 0 0 4px;
+}
+.item p {
+  margin: 0 0 8px;
+}
+.itemActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 6px;
+}
+.summary {
+  min-height: 9rem;
+}
+.sectionTitle {
+  font-size: 1.25rem;
+  margin: 32px 0 12px;
+}
