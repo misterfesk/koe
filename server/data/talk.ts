@@ -175,7 +175,7 @@ export async function updateTool(
   messageId: string,
   toolId: string,
   from: ToolStatus,
-  patch: Partial<Pick<ToolProposal, "status" | "result">>,
+  patch: Partial<Pick<ToolProposal, "status" | "result" | "startedAt">>,
 ): Promise<ToolUpdate> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const msg = await getMessage(db, userId, messageId);
@@ -198,17 +198,30 @@ export async function updateTool(
  */
 export async function requestedSearches(db: Db, userId: string) {
   const rows = await db
-    .select({ id: message.id, enc: message.proposalsEnc })
+    .select({
+      id: message.id,
+      conversationId: message.conversationId,
+      enc: message.proposalsEnc,
+    })
     .from(message)
     .where(
       and(eq(message.userId, userId), sql`${message.proposalsEnc} is not null`),
     );
   return rows.flatMap((r) =>
     (readProposals(JSON.parse(open(r.enc!)))?.tools ?? [])
-      .filter((t) => t.name === "find_resources" && t.status === "done")
+      .filter(
+        (t) =>
+          t.name === "find_resources" &&
+          t.status === "done" &&
+          (t.result === "Koe will look for this and put it on your Shelf." ||
+            (t.result === "Working on it." &&
+              (!t.startedAt ||
+                Date.parse(t.startedAt) < Date.now() - 120_000))),
+      )
       .map((t) => ({
         messageId: r.id,
         proposalId: t.id,
+        requestId: `${r.conversationId}:${t.id}`,
         query: t.query ?? "",
         tags: t.args,
       })),

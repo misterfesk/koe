@@ -18,6 +18,10 @@ const viewer = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock("@/server/viewer", () => ({
   requireViewer: async () => viewer.current,
 }));
+const searches = vi.hoisted(() => ({
+  run: vi.fn(async () => ({ ok: true, count: 3 })),
+}));
+vi.mock("@/server/search/shelf", () => ({ refreshShelfFor: searches.run }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 vi.mock("next/navigation", () => ({
   redirect: (to: string) => {
@@ -75,6 +79,8 @@ beforeEach(() => {
   fake.risk = "none";
   fake.calls = 0;
   fake.options = [];
+  searches.run.mockClear();
+  searches.run.mockResolvedValue({ ok: true, count: 3 });
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -419,7 +425,7 @@ describe("Talk with tools", { timeout: 40_000 }, () => {
     ]);
   });
 
-  it("find_resources stores a request for the Shelf and sends nothing", async () => {
+  it("find_resources runs the shared pipeline once and handles the request", async () => {
     const s = await setup();
     fake.reply = async () => ({
       content: "Want me to look for that?",
@@ -429,22 +435,61 @@ describe("Talk with tools", { timeout: 40_000 }, () => {
     });
     const r = await say("find me something to read about sleep");
     const { messageId, tools } = await cards(s, r.conversationId!);
-    expect(tools[0].query).toBe("sleep and low mood practical guide");
+    expect(tools[0].query).toBe(
+      "tips for sleeping better when feeling low practical self-help guide for adults",
+    );
     const { confirmProposal } = await import("@/server/actions/talk");
     const done = await confirmProposal(messageId, tools[0].id);
     expect(done).toEqual({
       ok: true,
-      result: "Koe will look for this and put it on your Shelf.",
+      result: "Added 3 picks to your Shelf.",
     });
     const { requestedSearches } = await import("@/server/data/talk");
-    expect(await requestedSearches(s.db, "a")).toEqual([
-      {
-        messageId,
-        proposalId: tools[0].id,
-        query: "sleep and low mood practical guide",
-        tags: { goal: "sleep" },
-      },
-    ]);
+    expect(await requestedSearches(s.db, "a")).toEqual([]);
+    expect(await confirmProposal(messageId, tools[0].id)).toEqual(done);
+    expect(searches.run).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns failed searches to waiting and retries the same request key", async () => {
+    const s = await setup();
+    fake.reply = async () => ({
+      content: "Want to look for a read?",
+      toolCalls: [
+        { id: "s1", name: "find_resources", args: { goal: "sleep" } },
+      ],
+    });
+    const r = await say("find a read about sleep");
+    const { messageId, tools } = await cards(s, r.conversationId!);
+    const { confirmProposal } = await import("@/server/actions/talk");
+    searches.run.mockResolvedValueOnce({ ok: false, count: 0 });
+    expect((await confirmProposal(messageId, tools[0].id)).ok).toBe(false);
+    expect((await cards(s, r.conversationId!)).tools[0].status).toBe("pending");
+    expect((await confirmProposal(messageId, tools[0].id)).ok).toBe(true);
+    expect(searches.run.mock.calls[0]).toEqual(searches.run.mock.calls[1]);
+  });
+
+  it("recovers a search interrupted before the result was written", async () => {
+    const s = await setup();
+    fake.reply = async () => ({
+      content: "Want to look for a read?",
+      toolCalls: [
+        { id: "s1", name: "find_resources", args: { goal: "sleep" } },
+      ],
+    });
+    const r = await say("find a read about sleep");
+    const { messageId, tools } = await cards(s, r.conversationId!);
+    const { updateTool } = await import("@/server/data/talk");
+    await updateTool(s.db, "a", messageId, tools[0].id, "pending", {
+      status: "done",
+      result: "Working on it.",
+      startedAt: new Date(Date.now() - 180000).toISOString(),
+    });
+    const { confirmProposal } = await import("@/server/actions/talk");
+    expect(await confirmProposal(messageId, tools[0].id)).toEqual({
+      ok: true,
+      result: "Added 3 picks to your Shelf.",
+    });
+    expect(searches.run).toHaveBeenCalledTimes(1);
   });
 
   it("drops invalid and guardrail-breaking calls without a word, and counts only the rest", async () => {

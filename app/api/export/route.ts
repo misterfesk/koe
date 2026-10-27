@@ -14,6 +14,8 @@ import { listCheckInWords } from "@/server/data/plan";
 import { listSteps } from "@/server/data/steps";
 import { getConversation, listConversations } from "@/server/data/talk";
 import { getViewer } from "@/server/viewer";
+import { listShelfExport } from "@/server/data/shelf";
+import { shelfRefresh } from "@/server/db/schema";
 
 /** One file with everything the person has in Koe, readable and decrypted. */
 export async function GET() {
@@ -89,6 +91,11 @@ export async function GET() {
     people: await listPeople(v.db, id),
     reachOuts: await listReachOuts(v.db, id, 10_000),
     reminders: await listReminders(v.db, id),
+    shelf: await listShelfExport(v.db, id),
+    shelfRefreshes: await v.db
+      .select()
+      .from(shelfRefresh)
+      .where(eq(shelfRefresh.userId, id)),
   };
   return new Response(JSON.stringify(data, null, 2), {
     headers: {

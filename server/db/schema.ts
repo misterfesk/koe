@@ -510,7 +510,61 @@ export const agentRun = pgTable(
  * Tables whose rows move from a guest to their new account. Profile is
  * handled separately because an existing account's settings win.
  */
+export const shelfItem = pgTable(
+  "shelf_item",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    host: text("host").notNull(),
+    title: text("title").notNull(),
+    whyEnc: text("why_enc").notNull(),
+    tagsKey: text("tags_key").notNull(),
+    week: text("week").notNull(),
+    status: text("status", { enum: ["current", "saved", "not_for_me"] })
+      .notNull()
+      .default("current"),
+    foodOrExercise: boolean("food_or_exercise").notNull(),
+    aiScreened: boolean("ai_screened").notNull(),
+    feedbackAt: timestamp("feedback_at", { withTimezone: true }),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex("shelf_user_url_unique").on(t.userId, t.url)],
+);
+
+// A completed empty cache is meaningful too. No snippets or personal why lines.
+export const resourceCache = pgTable("resource_cache", {
+  key: text("key").primaryKey(),
+  results: jsonb("results").notNull(),
+  createdAt: created(),
+});
+
+// Records attempts, including empty ones; also supports Talk's idempotency keys.
+export const shelfRefresh = pgTable(
+  "shelf_refresh",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    requestKey: text("request_key").notNull(),
+    week: text("week").notNull(),
+    tagsKey: text("tags_key").notNull(),
+    count: integer("count").notNull().default(0),
+    outcome: text("outcome", { enum: ["done", "unavailable"] }).notNull(),
+    retryAt: timestamp("retry_at", { withTimezone: true }),
+    createdAt: created(),
+  },
+  (t) => [
+    uniqueIndex("shelf_refresh_request_unique").on(t.userId, t.requestKey),
+  ],
+);
+
 export const movableTables = [
+  shelfItem,
+  shelfRefresh,
   checkIn,
   memoryCard,
   conversation,

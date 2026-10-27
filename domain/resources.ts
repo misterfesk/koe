@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { goals, lifts, type Goal, type Lift } from "./intake";
 
 // Web search for the Shelf and for "find me something to read" in Talk.
@@ -15,7 +16,7 @@ export const resourceInterests = lifts.filter(
 
 const goalWords: Record<Goal, string> = {
   through_day: "getting through the day with low mood",
-  sleep: "sleep and low mood",
+  sleep: "tips for sleeping better when feeling low",
   energy: "low energy and low mood",
   less_alone: "feeling less alone with low mood",
   enjoy_again: "enjoying things again with low mood",
@@ -48,7 +49,10 @@ export const queryVocabulary = new Set(
     ...Object.values(interestWords),
     ...Object.values(formatWords),
     "practical",
+    "self-help",
     "guide",
+    "for",
+    "adults",
     "with",
   ].flatMap((phrase) => phrase.split(" ")),
 );
@@ -56,22 +60,32 @@ export const queryVocabulary = new Set(
 const has = <T extends object>(table: T, key: unknown): key is keyof T =>
   typeof key === "string" && Object.hasOwn(table, key);
 
-export type ResourceTags = {
-  goal: Goal;
-  interest?: Lift | null;
-  format?: ResourceFormat | null;
-};
+export const resourceTagsSchema = z.strictObject({
+  goal: z.enum(goals),
+  interest: z.enum(resourceInterests).nullish(),
+  format: z.enum(resourceFormats).nullish(),
+  region: z.enum(["GB", "US", "AU", "global"]).nullish(),
+});
+export type ResourceTags = z.infer<typeof resourceTagsSchema>;
+
+export function resourceTagsKey(input: ResourceTags): string {
+  const t = resourceTagsSchema.parse(input);
+  return [t.goal, t.interest ?? "", t.format ?? "", t.region ?? "global"].join(
+    ":",
+  );
+}
 
 /**
  * The exact query that would be sent. Only values from the fixed tables are
- * used; anything else (including a stray string) is ignored.
+ * used; invalid tags are rejected before any external request.
  */
 export function buildResourceQuery(tags: ResourceTags): string {
+  tags = resourceTagsSchema.parse(tags);
   const parts: string[] = [];
   parts.push(has(goalWords, tags.goal) ? goalWords[tags.goal] : "low mood");
   if (has(interestWords, tags.interest))
     parts.push("with " + interestWords[tags.interest]);
-  parts.push("practical guide");
+  parts.push("practical self-help guide for adults");
   if (has(formatWords, tags.format)) parts.push(formatWords[tags.format]);
   return parts.join(" ");
 }

@@ -99,15 +99,13 @@ test("a search card shows the exact words it would use", async ({ page }) => {
   const card = page.getByRole("group", { name: "Look for something to read" });
   await expect(
     card.getByText(
-      "Koe would search for: “sleep and low mood practical guide article”.",
+      "Koe would search for: “tips for sleeping better when feeling low practical self-help guide for adults article”.",
       { exact: false },
     ),
   ).toBeVisible();
   await clean(page, "search card");
   await card.getByRole("button", { name: "Look for this" }).click();
-  await expect(
-    page.getByText("Koe will look for this and put it on your Shelf."),
-  ).toBeVisible();
+  await expect(page.getByText("Added 3 picks to your Shelf.")).toBeVisible();
 });
 
 test("a rough morning is listened to, with no card", async ({ page }) => {

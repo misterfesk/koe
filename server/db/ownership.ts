@@ -6,6 +6,8 @@ import {
   planDay,
   profile,
   reminder,
+  shelfItem,
+  shelfRefresh,
   userModel,
   weeklyReview,
 } from "./schema";
@@ -97,6 +99,23 @@ export async function transferOwnership(db: Db, from: string, to: string) {
         .update(userModel)
         .set({ userId: to })
         .where(eq(userModel.userId, from));
+    // The account's saved/hidden URL and completed refresh win on clashes.
+    await tx
+      .delete(shelfItem)
+      .where(
+        and(
+          eq(shelfItem.userId, from),
+          sql`${shelfItem.url} in (select "url" from "shelf_item" where "user_id" = ${to})`,
+        ),
+      );
+    await tx
+      .delete(shelfRefresh)
+      .where(
+        and(
+          eq(shelfRefresh.userId, from),
+          sql`${shelfRefresh.requestKey} in (select "request_key" from "shelf_refresh" where "user_id" = ${to})`,
+        ),
+      );
     for (const table of movableTables) {
       await tx.execute(
         sql`update ${table} set "user_id" = ${to} where "user_id" = ${from}`,

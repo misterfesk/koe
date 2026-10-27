@@ -61,7 +61,7 @@ const call = (name: string, args: unknown) => ({ name, args });
 describe("buildResourceQuery", () => {
   it("is built from fixed phrases for every enum combination", () => {
     for (const goal of goals)
-      for (const interest of [...lifts, null])
+      for (const interest of [...lifts.filter((l) => l !== "other"), null])
         for (const format of [...resourceFormats, null]) {
           const q = buildResourceQuery({ goal, interest, format });
           for (const word of q.split(" "))
@@ -71,25 +71,23 @@ describe("buildResourceQuery", () => {
 
   it("cannot carry anything the person wrote", () => {
     const secret = "my-landlord-Dave-owes-me-500";
-    const clean = buildResourceQuery({ goal: "sleep" });
-    const junk = buildResourceQuery({
-      goal: "sleep",
-      interest: secret as never,
-      format: secret as never,
-      // @ts-expect-error extra keys are ignored
-      note: secret,
-    });
-    expect(junk).toBe(clean);
-    expect(buildResourceQuery({ goal: secret as never })).not.toContain(secret);
-    expect(buildResourceQuery({ goal: "__proto__" as never })).not.toContain(
-      "__proto__",
-    );
+    for (const tags of [
+      { goal: secret },
+      { goal: "sleep", interest: secret },
+      { goal: "sleep", format: secret },
+      { goal: "sleep", note: secret },
+      { goal: "__proto__" },
+    ]) {
+      expect(() => buildResourceQuery(tags as never)).toThrow();
+    }
   });
 
   it("reads like a search", () => {
     expect(
       buildResourceQuery({ goal: "sleep", interest: "music", format: "video" }),
-    ).toBe("sleep and low mood with music practical guide short video");
+    ).toBe(
+      "tips for sleeping better when feeling low with music practical self-help guide for adults short video",
+    );
   });
 });
 

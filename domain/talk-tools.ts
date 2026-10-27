@@ -122,6 +122,7 @@ export type ToolProposal = {
   status: ToolStatus;
   /** The line shown on the card after Confirm (a template, never model text). */
   result?: string;
+  startedAt?: string;
   /** For find_resources: the exact query that would be sent. */
   query?: string;
   meta?: ToolMeta;
@@ -146,6 +147,7 @@ const stored = z.object({
         args: z.record(z.string(), z.unknown()),
         status: z.enum(["pending", "done", "dismissed"]),
         result: z.string().optional(),
+        startedAt: z.string().optional(),
         query: z.string().optional(),
         meta: z
           .object({
@@ -434,7 +436,10 @@ export const resultLines = {
   reminderItem: (time: string) => `Reminder set for ${time}.`,
   reminderMorning: (time: string) => `Morning plan reminder on at ${time}.`,
   save_memory: () => "Saved to what Koe knows.",
-  find_resources: () => "Koe will look for this and put it on your Shelf.",
+  find_resources: (count = 0) =>
+    count
+      ? `Added ${count} ${count === 1 ? "pick" : "picks"} to your Shelf.`
+      : "No new picks this time. You can check your Shelf later.",
   draftCopied: () => "Copied. Nothing was sent.",
   draftSms: () => "Opened in Messages. Nothing was sent.",
   draftEmail: () => "Opened in email. Nothing was sent.",

@@ -49,6 +49,7 @@ export default defineConfig({
       KOE_PUSH_STUB: "on",
       // Talk answers from a script (tests only; refused unless APP_URL is local).
       KOE_AI_STUB: "on",
+      KOE_SEARCH_STUB: "on",
       APP_URL: "http://127.0.0.1:" + port,
     },
   },

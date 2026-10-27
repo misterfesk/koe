@@ -35,6 +35,7 @@ import { screen } from "../safety";
 import { requireViewer, type Viewer } from "../viewer";
 import { formatClock, uses12Hour } from "@/domain/time";
 import { remindMe, turnOnMorningPlan } from "./settings";
+import { refreshShelfFor } from "../search/shelf";
 
 const refresh = () => revalidatePath("/", "layout");
 
@@ -315,10 +316,20 @@ async function run(
       await screen(v.db, v.user.id, "memory", [text.data]);
       return { ok: true, result: resultLines.save_memory() };
     }
-    case "find_resources":
-      // The Shelf reads confirmed requests (requestedSearches) and runs the
-      // search with the stored query. Until then this is only a request.
-      return { ok: true, result: resultLines.find_resources() };
+    case "find_resources": {
+      const tags = toolSchemas.find_resources.parse(a);
+      const found = await refreshShelfFor(
+        v,
+        tags,
+        `${conversationId}:${tool.id}`,
+      );
+      return found.ok
+        ? { ok: true, result: resultLines.find_resources(found.count) }
+        : {
+            ok: false,
+            error: "Search is unavailable. Try again later from your Shelf.",
+          };
+    }
     case "draft_message":
       return {
         ok: true,
@@ -355,13 +366,31 @@ export async function confirmProposal(
   const more = confirmInput.safeParse(extra);
   if (!ids.success || !more.success)
     return { ok: false, error: "That card is gone." };
+  const stored = (
+    await getMessage(v.db, v.user.id, ids.data.messageId)
+  )?.proposals?.tools.find((t) => t.id === ids.data.proposalId);
+  // A process interrupted during search can retry its durable request key.
+  if (
+    stored?.name === "find_resources" &&
+    stored.status === "done" &&
+    stored.result === WORKING &&
+    (!stored.startedAt || Date.parse(stored.startedAt) < Date.now() - 120_000)
+  )
+    await updateTool(
+      v.db,
+      v.user.id,
+      ids.data.messageId,
+      ids.data.proposalId,
+      "done",
+      { status: "pending", result: undefined, startedAt: undefined },
+    );
   const mine = await updateTool(
     v.db,
     v.user.id,
     ids.data.messageId,
     ids.data.proposalId,
     "pending",
-    { status: "done", result: WORKING },
+    { status: "done", result: WORKING, startedAt: new Date().toISOString() },
   );
   if (!mine.ok) {
     let t: ToolProposal | null | undefined = mine.tool;
@@ -378,6 +407,11 @@ export async function confirmProposal(
       )?.proposals?.tools.find((x) => x.id === ids.data.proposalId);
     }
     if (!t) return { ok: false, error: "That card is gone." };
+    if (t.status === "done" && t.result === WORKING)
+      return {
+        ok: false,
+        error: "Still looking. Open your Shelf in a moment.",
+      };
     if (t.status === "done") return { ok: true, result: t.result ?? "Done." };
     if (t.status === "pending")
       return { ok: false, error: "That didn't go through. Try again." };
@@ -403,6 +437,7 @@ export async function confirmProposal(
       {
         status: "pending",
         result: undefined,
+        startedAt: undefined,
       },
     );
     refresh();
@@ -416,6 +451,7 @@ export async function confirmProposal(
     "done",
     {
       result: done.result,
+      startedAt: undefined,
     },
   );
   refresh();
