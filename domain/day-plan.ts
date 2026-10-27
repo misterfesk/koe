@@ -579,10 +579,40 @@ export function noteIsClean(note: string, diff?: PlanDiff): boolean {
   });
 }
 
+/** True when the change breaks a composition rule the plan did not already break. */
+export function introduces(
+  before: Pick<DayItem, "kind" | "title" | "size" | "minuteOfDay">[],
+  after: Pick<DayItem, "kind" | "title" | "size" | "minuteOfDay">[],
+  ctx: CompositionContext,
+  ignore: readonly string[] = [],
+) {
+  const had = new Set(checkComposition(before, ctx).map((v) => v.code));
+  return checkComposition(after, ctx).some(
+    (v) => !had.has(v.code) && !ignore.includes(v.code),
+  );
+}
+
 // --- Repairing a model's plan -------------------------------------------------
 
 const riskyText = (t: string) =>
   breaksGuardrails(t) || detectRisk(t) !== "none";
+
+/**
+ * The one check on the words of a plan item, whoever wrote them (the planner,
+ * a repair, or a Talk tool): no guardrail or safety hit, and no food or
+ * exercise words when food or weight worry is flagged.
+ */
+export function itemTextOk(
+  item: { title: string; why: string },
+  eatingConcern: boolean,
+) {
+  const words = item.title + " " + item.why;
+  return !(
+    riskyText(item.title) ||
+    riskyText(item.why) ||
+    (eatingConcern && (mentionsFood(words) || mentionsExercise(words)))
+  );
+}
 
 function spread(
   items: DayItem[],
@@ -633,12 +663,7 @@ export function repairDayPlan(a: {
     ...current.filter((x) => !isLocked(x, locked)).map(stripId),
   ];
 
-  const badWords = (x: DayItem) =>
-    riskyText(x.title) ||
-    riskyText(x.why) ||
-    (eating &&
-      (mentionsFood(x.title + " " + x.why) ||
-        mentionsExercise(x.title + " " + x.why)));
+  const badWords = (x: DayItem) => !itemTextOk(x, eating);
 
   const pick = (
     items: DayItem[],

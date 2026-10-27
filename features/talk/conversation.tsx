@@ -12,7 +12,8 @@ import { resumeConversation, sendMessage } from "@/server/actions/talk";
 import { modeLabels, type TalkMode } from "@/domain/talk";
 import type { MessageView } from "@/server/data/talk";
 import { SafetyCheck } from "../safety/safety-check";
-import { MemoryProposal, StepProposal } from "./proposals";
+import type { PushState } from "../reminders/remind-control";
+import { ToolCard } from "./proposals";
 import styles from "./talk.module.css";
 
 const openers: Record<TalkMode, string> = {
@@ -31,12 +32,16 @@ export function Conversation({
   messages,
   paused,
   region,
+  push,
+  hour12,
 }: {
   id: string | null;
   mode: TalkMode;
   messages: MessageView[];
   paused: boolean;
   region: string | null;
+  push: PushState;
+  hour12: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<TalkMode>(initialMode);
@@ -90,9 +95,6 @@ export function Conversation({
     });
   }
 
-  const lastAssistant = [...shown]
-    .reverse()
-    .find((m) => m.role === "assistant");
   const blocked = safety !== "none" || paused;
 
   return (
@@ -136,24 +138,17 @@ export function Conversation({
               {m.role === "user" ? "You" : "Koe"}
             </span>
             <p>{m.content}</p>
-            {id && m.role === "assistant" && m.proposals?.step && (
-              <StepProposal
-                conversationId={id}
-                messageId={m.id}
-                step={m.proposals.step}
-                region={region}
-              />
-            )}
             {id &&
               m.role === "assistant" &&
-              m.proposals?.memory &&
-              m === lastAssistant && (
-                <MemoryProposal
-                  conversationId={id}
+              m.proposals?.tools.map((t) => (
+                <ToolCard
+                  key={t.id}
                   messageId={m.id}
-                  memory={m.proposals.memory}
+                  tool={t}
+                  push={push}
+                  hour12={hour12}
                 />
-              )}
+              ))}
           </li>
         ))}
         {pending && (

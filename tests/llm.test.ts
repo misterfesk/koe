@@ -343,6 +343,26 @@ describe("tool calls", () => {
     expect(row.toolCallsDropped).toBe(3);
   });
 
+  it("drops, and counts, a valid call the caller's own check refuses", async () => {
+    const { nebius } = await load();
+    fetchMock.mockImplementation(async () =>
+      reply(null, {
+        tool_calls: [
+          call("c1", "add_step", { title: "Walk" }),
+          call("c2", "add_step", { title: "Diet plan" }),
+        ],
+      }),
+    );
+    const out = await nebius.completeWithTools([user], tools, {
+      purpose: "talk",
+      userId: "u1",
+      accept: (c) => (c.args as { title: string }).title !== "Diet plan",
+    });
+    expect(out.toolCalls.map((c) => c.id)).toEqual(["c1"]);
+    const [row] = await runs();
+    expect(row.toolCallsDropped).toBe(1);
+  });
+
   it("returns plain text when no tool is called", async () => {
     const { nebius } = await load();
     fetchMock.mockImplementation(async () => reply(" Hello "));

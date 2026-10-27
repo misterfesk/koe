@@ -49,6 +49,9 @@ type Options = {
   timeoutMs?: number;
   // Name for the JSON schema sent to the provider (completeJson only).
   schemaName?: string;
+  // A further check on each tool call that passed its schema (completeWithTools
+  // only). A call it refuses is dropped and counted with the invalid ones.
+  accept?: (call: ToolCall) => boolean;
 };
 
 type Usage = {
@@ -365,11 +368,16 @@ export async function completeWithTools(
         dropped++;
         continue;
       }
-      toolCalls.push({
+      const kept: ToolCall = {
         id: call.id || `call_${i}`,
         name: tool.name,
         args: checked.data,
-      });
+      };
+      if (options.accept && !options.accept(kept)) {
+        dropped++;
+        continue;
+      }
+      toolCalls.push(kept);
     }
     return {
       value: { content: message.content?.trim() || null, toolCalls },

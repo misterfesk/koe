@@ -71,3 +71,23 @@ export function highest(...levels: RiskLevel[]): RiskLevel {
   if (levels.includes("concern")) return "concern";
   return "none";
 }
+
+// Helplines the model might still write despite instructions. Numbers shown
+// to people come only from the verified Help listings.
+/** True if text names a helpline, a phone number or a web address. */
+export function mentionsContact(text: string) {
+  const digits = (m: string) => m.replace(/\D/g, "").length;
+  const long = text.match(/\+?\d[\d\s().-]{5,}\d/g) ?? [];
+  if (long.some((m) => digits(m) >= 7)) return true;
+  if (/https?:\/\/|www\.|\.(org|com|net|gov)\b/i.test(text)) return true;
+  if (
+    /\b(hotline|helpline|lifeline|samaritans|crisis (line|text|team))\b/i.test(
+      text,
+    )
+  )
+    return true;
+  // Short emergency and crisis numbers, only next to a calling word.
+  return /\b(call|text|dial|ring|phone|contact)\b[^.\n]{0,25}\b(988|911|999|112|000|111|1737|116\s?123|13\s?11\s?14)\b/i.test(
+    text,
+  );
+}

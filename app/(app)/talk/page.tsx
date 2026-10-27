@@ -7,6 +7,7 @@ import { listConversations, purgeOldConversations } from "@/server/data/talk";
 import type { TalkMode } from "@/server/data/talk";
 import { Conversation } from "@/features/talk/conversation";
 import styles from "@/features/talk/talk.module.css";
+import { talkScreenState } from "@/server/talk-page";
 import { requireViewer } from "@/server/viewer";
 
 export const metadata: Metadata = { title: "Talk" };
@@ -22,7 +23,10 @@ export default async function Page({
     ? (asked as TalkMode)
     : "talk";
   if (!v.profile.keepTranscripts) await purgeOldConversations(v.db, v.user.id);
-  const talks = await listConversations(v.db, v.user.id, 8);
+  const [talks, screen] = await Promise.all([
+    listConversations(v.db, v.user.id, 8),
+    talkScreenState(v),
+  ]);
   return (
     <>
       <PageHeading eyebrow="Talk">Talk it through</PageHeading>
@@ -32,6 +36,7 @@ export default async function Page({
         messages={[]}
         paused={!!v.profile.coachingPausedAt}
         region={v.profile.region}
+        {...screen}
       />
       {talks.length > 0 && (
         <section aria-labelledby="recent" style={{ marginTop: 32 }}>

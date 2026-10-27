@@ -47,6 +47,8 @@ export default defineConfig({
       KOE_RATE_LIMIT: "off",
       // Pushes are recorded, not sent.
       KOE_PUSH_STUB: "on",
+      // Talk answers from a script (tests only; refused unless APP_URL is local).
+      KOE_AI_STUB: "on",
       APP_URL: "http://127.0.0.1:" + port,
     },
   },

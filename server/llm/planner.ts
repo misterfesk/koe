@@ -7,7 +7,9 @@ import {
   constrainSizes,
   keepAnchor,
   diffPlans,
+  introduces,
   isEmptyDiff,
+  itemTextOk,
   noteIsClean,
   plainDay,
   repairDayPlan,
@@ -99,6 +101,8 @@ export type PlanRun = {
   itemId?: string;
   /** For "move": the new time. */
   minute?: number;
+  /** For a shrink: the smaller title the person agreed to (checked like the model's). */
+  title?: string;
 };
 
 export type PlanOutcome = {
@@ -541,16 +545,6 @@ async function aiOne(
   }
 }
 
-/** True when the change breaks a composition rule the plan did not already break. */
-function introduces(
-  before: DayItem[],
-  after: DayItem[],
-  ctx: CompositionContext,
-) {
-  const had = new Set(checkComposition(before, ctx).map((v) => v.code));
-  return checkComposition(after, ctx).some((v) => !had.has(v.code));
-}
-
 // --- The entry points ---------------------------------------------------------
 
 /**
@@ -692,19 +686,31 @@ async function changeOne(sit: Situation, run: PlanRun): Promise<PlanOutcome> {
   let next: DayItem | null = null;
   let note: string | null = null;
   let source: PlanOutcome["source"] = "rules";
-  const ai = await aiOne(sit, run, item, ctx);
-  if (ai) {
-    next = ai.item;
-    note = ai.note;
-    source = "ai";
-  } else if (shrink) {
-    next = smallerVersion(item, sit.model);
+  // A title the person agreed to in Talk: it replaces the item only if it is
+  // a smaller version that passes the same word checks as the model's.
+  const base = shrink && run.title ? smallerVersion(item, sit.model) : null;
+  const hinted = base && { ...base, title: run.title! };
+  if (
+    hinted &&
+    itemTextOk(hinted, sit.model.eatingConcern) &&
+    hinted.title.trim().toLowerCase() !== item.title.trim().toLowerCase()
+  ) {
+    next = hinted;
   } else {
-    next = swapVersion(
-      item,
-      sit.model,
-      cur.items.map((x) => x.title),
-    );
+    const ai = await aiOne(sit, run, item, ctx);
+    if (ai) {
+      next = ai.item;
+      note = ai.note;
+      source = "ai";
+    } else if (shrink) {
+      next = smallerVersion(item, sit.model);
+    } else {
+      next = swapVersion(
+        item,
+        sit.model,
+        cur.items.map((x) => x.title),
+      );
+    }
   }
   if (next) {
     const after = cur.items.map((x) => (x === item ? next! : x));

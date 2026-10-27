@@ -7,14 +7,13 @@ import { open, seal } from "../crypto";
 export type { TalkMode } from "@/domain/talk";
 import type { TalkMode } from "@/domain/talk";
 
-export type Proposals = {
-  step?: {
-    title: string;
-    area: "move" | "connect" | "care" | "do" | "enjoy";
-    cue?: string;
-  };
-  memory?: { kind: "helps" | "hard" | "people" | "preference"; text: string };
-};
+export type { Proposals, ToolProposal } from "@/domain/talk-tools";
+import {
+  readProposals,
+  type Proposals,
+  type ToolProposal,
+  type ToolStatus,
+} from "@/domain/talk-tools";
 
 export type MessageView = {
   id: string;
@@ -70,7 +69,7 @@ export async function getConversation(db: Db, userId: string, id: string) {
       role: m.role,
       content: open(m.contentEnc),
       proposals: m.proposalsEnc
-        ? (JSON.parse(open(m.proposalsEnc)) as Proposals)
+        ? readProposals(JSON.parse(open(m.proposalsEnc)))
         : null,
       createdAt: m.createdAt.toISOString(),
     })),
@@ -105,10 +104,9 @@ export async function addMessage(
       conversationId,
       role,
       contentEnc: seal(content),
-      proposalsEnc:
-        proposals && (proposals.step || proposals.memory)
-          ? seal(JSON.stringify(proposals))
-          : null,
+      proposalsEnc: proposals?.tools.length
+        ? seal(JSON.stringify(proposals))
+        : null,
     })
     .returning({ id: message.id, createdAt: message.createdAt });
   await db
@@ -118,29 +116,103 @@ export async function addMessage(
   return row;
 }
 
-/** Marks an offer as answered so it isn't offered again. */
-export async function clearProposal(
-  db: Db,
-  userId: string,
-  messageId: string,
-  which: keyof Proposals,
-) {
+/** One message with its offers, for the person who owns it. */
+export async function getMessage(db: Db, userId: string, messageId: string) {
   const [row] = await db
     .select()
     .from(message)
     .where(and(eq(message.userId, userId), eq(message.id, messageId)));
-  if (!row?.proposalsEnc) return;
-  const proposals = JSON.parse(open(row.proposalsEnc)) as Proposals;
-  delete proposals[which];
-  await db
+  if (!row) return null;
+  return {
+    id: row.id,
+    conversationId: row.conversationId,
+    role: row.role,
+    sealed: row.proposalsEnc,
+    proposals: row.proposalsEnc
+      ? readProposals(JSON.parse(open(row.proposalsEnc)))
+      : null,
+  };
+}
+
+/**
+ * Replaces a message's offers only if they are still exactly what the caller
+ * read (compared as the stored ciphertext). Two requests racing to answer the
+ * same card therefore have one winner; the other sees `false` and writes nothing.
+ */
+export async function swapProposals(
+  db: Db,
+  userId: string,
+  messageId: string,
+  expected: string | null,
+  next: Proposals,
+) {
+  if (expected === null) return false;
+  const rows = await db
     .update(message)
-    .set({
-      proposalsEnc:
-        proposals.step || proposals.memory
-          ? seal(JSON.stringify(proposals))
-          : null,
-    })
-    .where(eq(message.id, messageId));
+    .set({ proposalsEnc: seal(JSON.stringify(next)) })
+    .where(
+      and(
+        eq(message.userId, userId),
+        eq(message.id, messageId),
+        eq(message.proposalsEnc, expected),
+      ),
+    )
+    .returning({ id: message.id });
+  return rows.length === 1;
+}
+
+export type ToolUpdate =
+  { ok: true; tool: ToolProposal } | { ok: false; tool: ToolProposal | null };
+
+/**
+ * Changes one card on a message, but only while it is still `from`. A card
+ * can be answered once: of two requests racing to answer it, one gets
+ * `ok: true` and the other gets the card as it now stands.
+ */
+export async function updateTool(
+  db: Db,
+  userId: string,
+  messageId: string,
+  toolId: string,
+  from: ToolStatus,
+  patch: Partial<Pick<ToolProposal, "status" | "result">>,
+): Promise<ToolUpdate> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const msg = await getMessage(db, userId, messageId);
+    const tool = msg?.proposals?.tools.find((t) => t.id === toolId);
+    if (!msg?.proposals || !tool) return { ok: false, tool: null };
+    if (tool.status !== from) return { ok: false, tool };
+    const next = { ...tool, ...patch };
+    const won = await swapProposals(db, userId, messageId, msg.sealed, {
+      tools: msg.proposals.tools.map((t) => (t.id === toolId ? next : t)),
+    });
+    if (won) return { ok: true, tool: next };
+  }
+  return { ok: false, tool: null };
+}
+
+/**
+ * Searches the person agreed to (find_resources cards they confirmed). The
+ * Shelf reads these, runs the search with the stored query and fills the
+ * Shelf; until then a confirmed card is only a request.
+ */
+export async function requestedSearches(db: Db, userId: string) {
+  const rows = await db
+    .select({ id: message.id, enc: message.proposalsEnc })
+    .from(message)
+    .where(
+      and(eq(message.userId, userId), sql`${message.proposalsEnc} is not null`),
+    );
+  return rows.flatMap((r) =>
+    (readProposals(JSON.parse(open(r.enc!)))?.tools ?? [])
+      .filter((t) => t.name === "find_resources" && t.status === "done")
+      .map((t) => ({
+        messageId: r.id,
+        proposalId: t.id,
+        query: t.query ?? "",
+        tags: t.args,
+      })),
+  );
 }
 
 export async function setConversationPaused(

@@ -2,8 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { fieldErrors, type ActionResult } from "@/domain/forms";
-import { assignTimes, breaksGuardrails, planKinds } from "@/domain/plan-menu";
-import { getUserModel, getPlanDay } from "../data/intake";
+import { planKinds } from "@/domain/plan-menu";
+import { getPlanDay } from "../data/intake";
 import {
   keepDraft,
   saveCheckIn,
@@ -15,6 +15,7 @@ import { reportStep } from "../data/steps";
 import { diffPlans, templateNote, type DayItem } from "@/domain/day-plan";
 import { openToday, planToday } from "../llm/planner";
 import { screen } from "../safety";
+import { addToToday, moveItemTo } from "../plan-edit";
 import { requireViewer } from "../viewer";
 
 const refresh = () => revalidatePath("/", "layout");
@@ -119,29 +120,28 @@ export async function notToday(
   }
 
   // Moving or letting go are the person's own edits, written the same way.
+  if (c.choice === "later") {
+    const r = await moveItemTo(v, stepId, c.minute);
+    refresh();
+    return r.ok
+      ? { ok: true, changed: r.changed, note: r.note }
+      : { ok: false, errors: { form: r.error } };
+  }
   await openToday(v.user.id, options);
   const plan = await getPlanDay(v.db, v.user.id, v.today);
   const item = plan?.items.find((i) => i.stepId === stepId);
   if (!plan || !item)
     return { ok: true, changed: false, note: "That item is already gone." };
-  const items: DayItem[] =
-    c.choice === "later"
-      ? plan.items.map((i) =>
-          i === item ? { ...i, minuteOfDay: c.minute } : i,
-        )
-      : plan.items.filter((i) => i !== item);
-  if (c.choice === "let_go")
-    await reportStep(v.db, v.user.id, stepId, "not", v.today);
+  const items: DayItem[] = plan.items.filter((i) => i !== item);
+  await reportStep(v.db, v.user.id, stepId, "not", v.today);
   const diff = diffPlans(plan.items, items);
-  const note = templateNote(diff, {
-    reason: c.choice === "later" ? "not_today_move" : "not_today_let_go",
-  });
+  const note = templateNote(diff, { reason: "not_today_let_go" });
   const written = await writePlanVersion(v.db, v.user.id, {
     day: v.today,
     items,
     energy: plan.energy,
     mode: plan.mode,
-    reason: c.choice === "later" ? "not_today_move" : "not_today_let_go",
+    reason: "not_today_let_go",
     note,
     origin: "you",
     expectVersion: plan.version + 1,
@@ -174,51 +174,19 @@ export async function addPlanItem(input: {
   const parsed = addInput.safeParse(input);
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
   const { kind, title, minute } = parsed.data;
-  await openToday(v.user.id, { db: v.db, today: v.today });
-  const plan = await getPlanDay(v.db, v.user.id, v.today);
-  if (!plan) return { ok: false, errors: { form: "Today is not ready yet." } };
-  if (plan.items.length >= 5)
-    return {
-      ok: false,
-      errors: { form: "Your day already has five things. That is plenty." },
-    };
-  const model = v.profile.memoryOn
-    ? (await getUserModel(v.db, v.user.id))?.model
-    : undefined;
-  const times = assignTimes(
-    [...plan.items.map((i) => i.kind), kind],
-    model?.wake,
-  );
-  const item: DayItem = {
+  // Their own words are kept, but a worrying one shows the safety flow.
+  const safety = await screen(v.db, v.user.id, "plan-item", [title]);
+  const r = await addToToday(v, {
     kind,
     title,
     why: "You added this yourself",
     size: "small",
-    minuteOfDay: minute ?? times[times.length - 1],
-  };
-  const items = [...plan.items, item].sort(
-    (a, b) => a.minuteOfDay - b.minuteOfDay,
-  );
-  // Their own words are kept, but a worrying one shows the safety flow.
-  const safety = await screen(v.db, v.user.id, "plan-item", [title]);
-  const note = `Added "${title}" to today.`;
-  const written = await writePlanVersion(v.db, v.user.id, {
-    day: v.today,
-    items,
-    energy: plan.energy,
-    mode: plan.mode,
-    reason: "add",
-    note: breaksGuardrails(title) ? null : note,
+    minute,
     origin: "you",
-    expectVersion: plan.version + 1,
   });
   refresh();
-  return {
-    ok: true,
-    safety,
-    changed: written.ok,
-    note: written.ok ? note : "Your plan was just changed. Have a look.",
-  };
+  if (!r.ok) return { ok: false, errors: { form: r.error } };
+  return { ok: true, safety, changed: r.changed, note: r.note };
 }
 
 /** Takes back the latest change to today's plan. */

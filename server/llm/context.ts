@@ -31,7 +31,7 @@ export type ContextPacket = {
   today: {
     day: string;
     mode: string;
-    items: Partial<PlanItem>[];
+    items: (Partial<PlanItem> & { id?: string })[];
   } | null;
 };
 
@@ -106,13 +106,19 @@ export async function buildContext(
     items: plan.items.map((i) =>
       memoryOn
         ? {
+            id: i.stepId,
             kind: i.kind,
             title: i.title,
             why: i.why,
             size: i.size,
             minuteOfDay: i.minuteOfDay,
           }
-        : { kind: i.kind, size: i.size, minuteOfDay: i.minuteOfDay },
+        : {
+            id: i.stepId,
+            kind: i.kind,
+            size: i.size,
+            minuteOfDay: i.minuteOfDay,
+          },
     ),
   };
   if (!memoryOn)

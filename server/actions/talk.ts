@@ -1,28 +1,40 @@
 "use server";
 import { and, eq } from "drizzle-orm";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { RiskLevel } from "@/domain/safety";
-import { addDays } from "@/domain/time";
+import {
+  clockToMinutes,
+  resultLines,
+  toolSchemas,
+  vetCall,
+  type ToolProposal,
+} from "@/domain/talk-tools";
 import { conversation, talkModes } from "../db/schema";
-import { getCheckIn, recordSafetyEvent, updateProfile } from "../data/profile";
-import { addMemory, listMemory } from "../data/memory";
-import { listSteps } from "../data/steps";
+import { recordSafetyEvent, updateProfile } from "../data/profile";
+import { addMemory } from "../data/memory";
 import {
   addMessage,
-  clearProposal,
   countUserMessagesSince,
   deleteConversation,
   getConversation,
+  getMessage,
   setConversationPaused,
   startConversation,
+  updateTool,
 } from "../data/talk";
 import { env } from "../env";
 import { AiUnavailable } from "../llm/nebius";
+import { planToday } from "../llm/planner";
 import { classifyRisk, reply } from "../llm/talk";
+import { buildTalkContext } from "../llm/talk-context";
+import { talkStubbed } from "../llm/talk-stub";
+import { addToToday, moveItemTo } from "../plan-edit";
 import { screen } from "../safety";
-import { requireViewer } from "../viewer";
-import { outcomeLabels, helpedLabels } from "@/domain/steps";
+import { requireViewer, type Viewer } from "../viewer";
+import { formatClock, uses12Hour } from "@/domain/time";
+import { remindMe, turnOnMorningPlan } from "./settings";
 
 const refresh = () => revalidatePath("/", "layout");
 
@@ -71,7 +83,7 @@ export async function sendMessage(
     return {
       ok: false,
       error:
-        "You've talked a lot with Koe today, so chat is resting until tomorrow. Your steps and Help now still work.",
+        "You've talked a lot with Koe today, so chat is resting until tomorrow. Your day and Help still work.",
     };
 
   let id = parsed.data.conversationId;
@@ -96,32 +108,14 @@ export async function sendMessage(
   const rules = await screen(v.db, v.user.id, "talk", [text]);
   if (rules !== "none") return pause(rules);
 
-  if (env().KOE_AI === "off") {
+  // The scripted stand-in (tests only) replaces the model, not the checks.
+  if (env().KOE_AI === "off" && !talkStubbed()) {
     refresh();
     return { ok: true, conversationId: id, safety: "none", unavailable: true };
   }
 
   convo = await getConversation(v.db, v.user.id, id);
   const history = convo!.messages;
-  // With memory off, nothing from the person's records goes to the model.
-  const [memory, steps, energy] = v.profile.memoryOn
-    ? await Promise.all([
-        listMemory(v.db, v.user.id),
-        listSteps(v.db, v.user.id),
-        getCheckIn(v.db, v.user.id, v.today),
-      ])
-    : [[], [], null];
-  const weekAgo = addDays(v.today, -7);
-  const recentSteps = steps
-    .flatMap((s) =>
-      s.reports
-        .filter((r) => r.day >= weekAgo)
-        .map(
-          (r) =>
-            `"${s.title}": ${outcomeLabels[r.outcome].toLowerCase()}${r.helped ? ", " + helpedLabels[r.helped].toLowerCase() : ""} (${r.day})`,
-        ),
-    )
-    .slice(0, 10);
 
   // Layer 2 (model check) runs alongside the reply to save time. A reply is
   // only shown if the check comes back clear: an error or timeout counts as
@@ -132,21 +126,15 @@ export async function sendMessage(
   }));
   const [risk, answer] = await Promise.all([
     classifyRisk(chat, v.user.id),
-    reply(
-      convo!.mode,
-      history,
-      {
-        energy,
-        memory: memory.filter((m) => m.useForSuggestions),
-        recentSteps,
-        turn: history.filter((m) => m.role === "user").length,
-      },
-      v.profile.memoryOn,
-      v.user.id,
-    ).catch((error: unknown) => {
-      if (error instanceof AiUnavailable) return null;
-      throw error;
-    }),
+    buildTalkContext(v, history.filter((m) => m.role === "user").length).then(
+      (context) =>
+        reply(convo!.mode, history, context, v.user.id).catch(
+          (error: unknown) => {
+            if (error instanceof AiUnavailable) return null;
+            throw error;
+          },
+        ),
+    ),
   ]);
 
   if (risk && risk !== "none") {
@@ -156,6 +144,7 @@ export async function sendMessage(
       surface: "talk",
     });
     await updateProfile(v.db, v.user.id, { coachingPausedAt: new Date() });
+    // Whatever the model proposed with its reply is thrown away with it.
     return pause(risk);
   }
   if (!answer || risk === null) {
@@ -188,61 +177,269 @@ export async function sendMessage(
   };
 }
 
-const ids = z.object({
-  conversationId: z.string().max(64),
-  messageId: z.string().max(64),
+// --- Cards ------------------------------------------------------------------------
+
+const cardIds = z.object({
+  messageId: z.string().min(1).max(64),
+  proposalId: z.string().min(1).max(64),
 });
 
-async function ownedMessage(conversationId: string, messageId: string) {
+const confirmInput = z
+  .object({
+    /** The person's edit of a memory card. */
+    text: z.string().trim().max(200).optional(),
+    /** How a draft was taken: copied, or opened in messages or email. */
+    via: z.enum(["copy", "sms", "email"]).optional(),
+  })
+  .optional();
+
+export type CardResult =
+  { ok: true; result: string } | { ok: false; error: string };
+
+const memoryText = z
+  .string()
+  .trim()
+  .min(3, "Write a few words, or choose No thanks.")
+  .max(200, "Use 200 characters or fewer.");
+
+/** What a card says while it is being carried out. */
+const WORKING = "Working on it.";
+
+const NO_LONGER_FITS =
+  "That doesn't fit your day any more. You can ask Koe again.";
+
+type Done = { ok: true; result: string } | { ok: false; error: string };
+
+/** The person's clock, so a result line reads like the card: "5:00 pm" or "17:00". */
+async function clockFor() {
+  let hour12 = false;
+  try {
+    hour12 = uses12Hour((await headers()).get("accept-language"));
+  } catch {
+    // Outside a request there is no locale: 24-hour.
+  }
+  return (minutes: number) => formatClock(minutes, hour12);
+}
+
+/** Runs what a confirmed card stands for, through the same actions as the rest of the app. */
+async function run(
+  v: Viewer,
+  conversationId: string,
+  tool: ToolProposal,
+  extra: z.output<typeof confirmInput>,
+): Promise<Done> {
+  const a = tool.args;
+  const clock = await clockFor();
+  // Today's plan may have changed since the card was made: check it again.
+  if (
+    ["add_item", "move_item", "shrink_item", "set_reminder"].includes(tool.name)
+  ) {
+    const { vet } = await buildTalkContext(v, 0);
+    if (!vetCall(tool.name, a, vet))
+      return { ok: false, error: NO_LONGER_FITS };
+  }
+  switch (tool.name) {
+    case "add_item": {
+      const x = toolSchemas.add_item.parse(a);
+      const r = await addToToday(v, {
+        kind: x.kind,
+        title: x.title,
+        why: x.why || "You asked for this in Talk",
+        size: x.size,
+        minute: x.minuteOfDay,
+        origin: "talk",
+      });
+      if (!r.ok) return { ok: false, error: r.error };
+      return r.changed
+        ? { ok: true, result: resultLines.add_item() }
+        : { ok: false, error: r.note };
+    }
+    case "move_item": {
+      const minute = Number(a.minuteOfDay);
+      const r = await moveItemTo(v, String(a.itemId), minute);
+      if (!r.ok) return { ok: false, error: r.error };
+      return r.changed
+        ? { ok: true, result: resultLines.move_item(clock(minute)) }
+        : { ok: false, error: r.note };
+    }
+    case "shrink_item": {
+      const r = await planToday(
+        v.user.id,
+        {
+          reason: "not_today_shrink",
+          itemId: String(a.itemId),
+          title:
+            typeof a.smallerTitle === "string" ? a.smallerTitle : undefined,
+        },
+        { db: v.db, today: v.today },
+      );
+      return r.changed
+        ? { ok: true, result: resultLines.shrink_item() }
+        : { ok: false, error: r.note };
+    }
+    case "set_reminder": {
+      if (typeof a.morningPlan === "string") {
+        const r = await turnOnMorningPlan({
+          minuteOfDay: clockToMinutes(a.morningPlan),
+        });
+        return r.ok
+          ? {
+              ok: true,
+              result: resultLines.reminderMorning(
+                clock(clockToMinutes(a.morningPlan)),
+              ),
+            }
+          : { ok: false, error: r.error ?? "Couldn't set that reminder." };
+      }
+      const r = await remindMe({ stepId: String(a.itemId) });
+      return r.ok && r.minuteOfDay !== undefined
+        ? { ok: true, result: resultLines.reminderItem(clock(r.minuteOfDay)) }
+        : { ok: false, error: r.error ?? "Couldn't set that reminder." };
+    }
+    case "save_memory": {
+      if (!v.profile.memoryOn)
+        return {
+          ok: false,
+          error: "Memory is off. You can turn it on in You.",
+        };
+      const text = memoryText.safeParse(extra?.text ?? a.text);
+      if (!text.success)
+        return { ok: false, error: text.error.issues[0].message };
+      // The person's own edit is kept as they wrote it; the safety rules still read it.
+      await addMemory(v.db, v.user.id, {
+        kind: toolSchemas.save_memory.parse(a).kind,
+        text: text.data,
+        source: "talk",
+        sourceRef: conversationId,
+      });
+      await screen(v.db, v.user.id, "memory", [text.data]);
+      return { ok: true, result: resultLines.save_memory() };
+    }
+    case "find_resources":
+      // The Shelf reads confirmed requests (requestedSearches) and runs the
+      // search with the stored query. Until then this is only a request.
+      return { ok: true, result: resultLines.find_resources() };
+    case "draft_message":
+      return {
+        ok: true,
+        result:
+          extra?.via === "sms"
+            ? resultLines.draftSms()
+            : extra?.via === "email"
+              ? resultLines.draftEmail()
+              : resultLines.draftCopied(),
+      };
+    case "prepare_appointment":
+      return { ok: true, result: resultLines.prepare_appointment() };
+  }
+}
+
+/**
+ * The person confirmed a card. Runs the matching action once: a second
+ * confirm (a double tap, two tabs) returns the same result line and changes
+ * nothing. A card that can't be carried out goes back to waiting.
+ */
+export async function confirmProposal(
+  messageId: string,
+  proposalId: string,
+  extra?: z.input<typeof confirmInput>,
+): Promise<CardResult> {
   const v = await requireViewer();
-  const p = ids.parse({ conversationId, messageId });
-  const convo = await getConversation(v.db, v.user.id, p.conversationId);
-  const msg = convo?.messages.find((m) => m.id === p.messageId);
-  return { v, convo, msg };
+  // While coaching is paused after a safety check, nothing from Talk runs.
+  if (v.profile.coachingPausedAt)
+    return {
+      ok: false,
+      error: "This is on hold for now. Help is at the top of the screen.",
+    };
+  const ids = cardIds.safeParse({ messageId, proposalId });
+  const more = confirmInput.safeParse(extra);
+  if (!ids.success || !more.success)
+    return { ok: false, error: "That card is gone." };
+  const mine = await updateTool(
+    v.db,
+    v.user.id,
+    ids.data.messageId,
+    ids.data.proposalId,
+    "pending",
+    { status: "done", result: WORKING },
+  );
+  if (!mine.ok) {
+    let t: ToolProposal | null | undefined = mine.tool;
+    if (!t) return { ok: false, error: "That card is gone." };
+    // Someone else (a second tap, another tab) is carrying it out: wait for the outcome.
+    for (
+      let i = 0;
+      i < 40 && t?.status === "done" && t.result === WORKING;
+      i++
+    ) {
+      await new Promise((r) => setTimeout(r, 100));
+      t = (
+        await getMessage(v.db, v.user.id, ids.data.messageId)
+      )?.proposals?.tools.find((x) => x.id === ids.data.proposalId);
+    }
+    if (!t) return { ok: false, error: "That card is gone." };
+    if (t.status === "done") return { ok: true, result: t.result ?? "Done." };
+    if (t.status === "pending")
+      return { ok: false, error: "That didn't go through. Try again." };
+    return { ok: false, error: "You already said no to this one." };
+  }
+  const convo =
+    (await getMessage(v.db, v.user.id, ids.data.messageId))?.conversationId ??
+    "";
+  let done: Done;
+  try {
+    done = await run(v, convo, mine.tool, more.data);
+  } catch {
+    done = { ok: false, error: "Something went wrong. Try again in a moment." };
+  }
+  if (!done.ok) {
+    // Nothing happened, so the card goes back to waiting.
+    await updateTool(
+      v.db,
+      v.user.id,
+      ids.data.messageId,
+      ids.data.proposalId,
+      "done",
+      {
+        status: "pending",
+        result: undefined,
+      },
+    );
+    refresh();
+    return done;
+  }
+  await updateTool(
+    v.db,
+    v.user.id,
+    ids.data.messageId,
+    ids.data.proposalId,
+    "done",
+    {
+      result: done.result,
+    },
+  );
+  refresh();
+  return done;
 }
 
-const memoryInput = z.object({
-  kind: z.enum(["helps", "hard", "people", "preference"]),
-  text: z
-    .string()
-    .trim()
-    .min(3, "Write a few words, or choose No.")
-    .max(200, "Use 200 characters or fewer."),
-});
-
-/** The person approved (and maybe edited) a memory card Koe proposed. */
-export async function keepMemory(
-  conversationId: string,
+/** The person said no to a card. Nothing is written except that the card is answered. */
+export async function dismissProposal(
   messageId: string,
-  card: z.input<typeof memoryInput>,
-): Promise<{ ok: boolean; error?: string }> {
-  const { v, msg } = await ownedMessage(conversationId, messageId);
-  if (!msg?.proposals?.memory) return { ok: false, error: "Already answered." };
-  const parsed = memoryInput.safeParse(card);
-  if (!parsed.success)
-    return { ok: false, error: parsed.error.issues[0].message };
-  if (!v.profile.memoryOn)
-    return { ok: false, error: "Memory is off. You can turn it on in You." };
-  await addMemory(v.db, v.user.id, {
-    ...parsed.data,
-    source: "talk",
-    sourceRef: conversationId,
-  });
-  await clearProposal(v.db, v.user.id, messageId, "memory");
-  await screen(v.db, v.user.id, "memory", [parsed.data.text]);
+  proposalId: string,
+): Promise<{ ok: boolean }> {
+  const v = await requireViewer();
+  const ids = cardIds.safeParse({ messageId, proposalId });
+  if (!ids.success) return { ok: false };
+  const r = await updateTool(
+    v.db,
+    v.user.id,
+    ids.data.messageId,
+    ids.data.proposalId,
+    "pending",
+    { status: "dismissed" },
+  );
   refresh();
-  return { ok: true };
-}
-
-export async function declineProposal(
-  conversationId: string,
-  messageId: string,
-  which: "step" | "memory",
-) {
-  const { v, msg } = await ownedMessage(conversationId, messageId);
-  if (!msg) return;
-  await clearProposal(v.db, v.user.id, messageId, which);
-  refresh();
+  return { ok: r.ok || r.tool?.status === "dismissed" };
 }
 
 export async function removeConversation(conversationId: string) {

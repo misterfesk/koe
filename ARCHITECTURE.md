@@ -132,6 +132,8 @@ The risk patterns and the crisis-flow wording are engineering defaults and have 
 - With memory off, nothing from the person's records goes to the model. With chat history off, conversations are purged hourly.
 - Export everything (`/api/export`) and delete everything (cascade) are in You → Your data.
 
+**Talk tools (`domain/talk-tools.ts`).** Talk calls `completeWithTools` with eight tools (add, move, shrink, reminder, memory, find resources, draft, appointment). A call is only ever a proposal: it is checked (schema, words, rules, at most two cards, none on a risky turn) and stored with the reply as a card. Confirm runs the existing action (`server/plan-edit.ts`, `planToday`, `remindMe`, `turnOnMorningPlan`, `addMemory`) once; No thanks writes nothing. `find_resources` stores a confirmed request that the Shelf reads with `requestedSearches`; its query comes only from `buildResourceQuery` (enum tags).
+
 ## 8. Reminders
 
 Web Push with VAPID. The person turns a reminder on for a timed entry, or for the morning plan (the one Koe reminder per day, within the daily nudge budget). Permission is requested only at that moment. A minute scheduler in `instrumentation.ts` sends due reminders. It respects quiet hours and the daily nudge budget, skips reminders that are overdue rather than sending them late, and pauses a reminder after 3 are ignored. Lock-screen text is neutral. Push endpoints are restricted to the browsers' push services. "Send a test now" reports a plain result and is rate-limited. `.ics` calendar files are available for one entry or the whole day (`/api/calendar/*`). Reminders follow plan changes: moving an entry moves its reminder; a swapped-out entry's reminder is parked and comes back on undo.
@@ -144,6 +146,7 @@ Web Push with VAPID. The person turns a reminder on for a timed entry, or for th
 | `KOE_SEARCH=off` | No web search. The Shelf shows saved items only. |
 | `KOE_AI_DAILY_CALLS` | Per-user daily model-call budget (default 200). |
 | `KOE_SCHEDULER=off` | Stops the in-process scheduler (tests, or a separate worker). |
+| `KOE_AI_STUB=on` | **Tests only.** Talk answers from a script (`server/llm/talk-stub.ts`) instead of the model. Refused unless `APP_URL` is `127.0.0.1` or `localhost`, so a hosted app ignores it. Set only in `playwright.config.ts`. |
 | `NEBIUS_API_KEY`, `TAVILY_API_KEY`, `DATA_ENCRYPTION_KEY`, `AUTH_SECRET`, `VAPID_*`, `DATABASE_URL`, `APP_URL` | See `.env.example`. |
 
 **Single-instance assumption:** the scheduler and the rate limits live in memory. Several instances would need a shared job runner and a shared rate-limit store.
