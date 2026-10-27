@@ -49,7 +49,7 @@ export function StepManage({
   const stopped = step.status === "finished" || step.status === "archived";
 
   return (
-    <section aria-label="Change this step">
+    <section aria-label="Change this">
       {safety !== "none" && (
         <SafetyCheck region={region} onResume={() => setSafety("none")} />
       )}
@@ -98,7 +98,7 @@ export function StepManage({
           }}
         >
           <div className="field">
-            <label htmlFor="edit-title">Your step</label>
+            <label htmlFor="edit-title">Title</label>
             <input
               id="edit-title"
               value={title}
@@ -231,8 +231,8 @@ export function StepManage({
           </button>
         )}
         <ConfirmDelete
-          label="Delete step"
-          question="Delete this step?"
+          label="Delete this"
+          question="Delete this?"
           detail="Its history goes too. To keep the history, choose Let it go instead."
           onConfirm={() =>
             startTransition(async () => {

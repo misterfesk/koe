@@ -27,6 +27,7 @@ import {
   mentionsFood,
   neverSuggest,
   planItemSchema,
+  titleRulesPromptText,
   wakeStart,
   type PlanItem,
   type PlanKind,
@@ -36,7 +37,7 @@ import { formatMinutes } from "@/domain/time";
 import { completeJson } from "./nebius";
 
 /** Bump when the prompt or the reply shape changes; evals report it. */
-export const INTAKE_PROMPT_VERSION = "intake-1";
+export const INTAKE_PROMPT_VERSION = "intake-2";
 
 /** How long the person waits before Koe gives up on the model and starts simply. */
 export const INTAKE_TIMEOUT_MS = 40_000;
@@ -64,7 +65,7 @@ export type Synthesis = {
   replaced: number;
 };
 
-const toneWording = {
+export const toneWording = {
   calm: "Gentle: quiet, unhurried, soft words.",
   expressive: "Upbeat: warm and encouraging, never gushing.",
   plain: "Straight-talking: short, plain, no padding.",
@@ -89,7 +90,9 @@ function systemPrompt(model: IntakeModel) {
     "",
     "THE MENU (kind: when to pick it)",
     menuPromptText(),
-    "The examples show how big each step is, not the exact words. Write your own titles, fitted to what the person said: their interest, the person they named, the job they keep putting off.",
+    "",
+    "TITLES",
+    titleRulesPromptText(),
     "",
     "COMPOSITION RULES",
     compositionPromptText(ctx),
@@ -151,7 +154,7 @@ function answersForPrompt(model: IntakeModel) {
 const badText = (text: string) =>
   breaksGuardrails(text) || detectRisk(text) !== "none";
 
-function within<T>(promise: Promise<T>, ms: number) {
+export function within<T>(promise: Promise<T>, ms: number) {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("timeout")), ms);
     promise.then(

@@ -29,6 +29,13 @@
       "when": 1793090085965,
       "tag": "0003_day_zero_model",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793092375527,
+      "tag": "0004_plan_versions",
+      "breakpoints": true
     }
   ]
 }

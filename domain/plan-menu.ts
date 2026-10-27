@@ -58,6 +58,11 @@ type KindMeta = {
   /** When the planner may pick this kind. */
   pick: string;
   examples: Record<PlanSize, Example[]>;
+  /**
+   * Kinds of action, as bare nouns for prompts. Prompts use these instead of
+   * the example sentences, which models copy word for word.
+   */
+  ideas: string;
   /** The size used first. Everything is tiny or small on the first day. */
   preferred: PlanSize;
 };
@@ -69,6 +74,8 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "evening",
     pick: "Always one when the person said something used to lift them (never promise enjoyment); if nothing did, one small thing to try and see. Afternoon or evening.",
     preferred: "tiny",
+    ideas:
+      "music, a record, a show, a game, a craft, a pet, a book, time somewhere they like",
     examples: {
       tiny: [
         { title: "Put on one song you used to like" },
@@ -84,6 +91,8 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "morning",
     pick: "When the person named a job they keep putting off or are stuck on. Morning.",
     preferred: "tiny",
+    ideas:
+      "a letter, an email, a form, a call, one chore, the first step of a stuck job",
     examples: {
       tiny: [
         { title: "Open the letter or message you have been avoiding" },
@@ -101,6 +110,8 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "morning",
     pick: "When the person asked for help with the basics, or on the lowest energy. Morning.",
     preferred: "tiny",
+    ideas:
+      "water, washing, clothes, a drink or snack, tidying a corner, a shower, laundry",
     examples: {
       tiny: [
         { title: "Drink a glass of water" },
@@ -121,6 +132,7 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "morning",
     pick: "Unless the person said no, and never when food or weight worry is flagged. Morning or midday.",
     preferred: "tiny",
+    ideas: "stretching, shoulders, a short walk, moving in a way they choose",
     examples: {
       tiny: [
         { title: "Stretch for two minutes", exercise: true },
@@ -141,6 +153,8 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "midday",
     pick: "Daytime, when the person can go out; pairs well with moving or something enjoyed. Never as light therapy.",
     preferred: "tiny",
+    ideas:
+      "a window, the doorstep, the balcony, a bench, a park, a hot drink outdoors",
     examples: {
       tiny: [
         { title: "Open a window for a minute" },
@@ -159,6 +173,8 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "midday",
     pick: "Only when the person named someone safe. Midday or evening. One at most.",
     preferred: "small",
+    ideas:
+      "a reaction, a short hello, one low-stakes message, a call or meet-up with the named person",
     examples: {
       tiny: [{ title: "Send {name} a thumbs-up" }],
       small: [
@@ -174,6 +190,7 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "midday",
     pick: "A recurring practical block; not on the lowest energy. Midday.",
     preferred: "tiny",
+    ideas: "naming it, listing options, picking one and its first step",
     examples: {
       tiny: [{ title: "Name the problem in one line" }],
       small: [{ title: "Write down two or three options and pick one" }],
@@ -186,6 +203,7 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "evening",
     pick: "When the person asked about sleep. Evening, or one morning anchor.",
     preferred: "tiny",
+    ideas: "dimmer lights, phone away, something quiet, a steady wake time",
     examples: {
       tiny: [
         { title: "Dim the lights and put your phone down for a few minutes" },
@@ -201,6 +219,7 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "evening",
     pick: "Optional on hard days or after something did not go to plan.",
     preferred: "tiny",
+    ideas: "one line a friend would say, a short gentle break",
     examples: {
       tiny: [{ title: "Say one line to yourself that a friend would say" }],
       small: [
@@ -215,6 +234,7 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "midday",
     pick: "When the person mentioned work or study. Midday.",
     preferred: "small",
+    ideas: "opening the document, a short timed block, then a break",
     examples: {
       tiny: [{ title: "Open the document you need to work on" }],
       small: [{ title: "Work for 15 minutes, then take a 5-minute break" }],
@@ -227,6 +247,7 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "midday",
     pick: "When a plan is not enough, the person has no care in place, or they asked.",
     preferred: "tiny",
+    ideas: "noting a question for a doctor, drafting an appointment message",
     examples: {
       tiny: [{ title: "Note one question you would like to ask a doctor" }],
       small: [{ title: "Draft a message to book an appointment" }],
@@ -467,6 +488,12 @@ export type CompositionContext = {
   /** Food or weight worry was flagged: no food items, no movement. */
   eatingConcern: boolean;
   wake?: Wake;
+  /**
+   * The day was made lighter on purpose (a low check-in, "too much", or a
+   * quiet few days): 1 to 3 items, and an anchor (an enjoy item or one of
+   * the basics) stands in for the usual "something that lifts" rule.
+   */
+  lighter?: boolean;
 };
 
 export function contextFor(
@@ -500,7 +527,7 @@ export type Violation = {
   index?: number;
 };
 
-const coreKinds: PlanKind[] = [
+export const coreKinds: PlanKind[] = [
   "task",
   "basics",
   "work_chunk",
@@ -517,7 +544,12 @@ export function checkComposition(
   const add = (code: ViolationCode, message: string, index?: number) =>
     out.push({ code, message, index });
 
-  if (ctx.firstDay ? items.length !== 3 : items.length < 3 || items.length > 5)
+  if (ctx.lighter) {
+    if (items.length < 1 || items.length > 3)
+      add("count", "A lighter day has 1 to 3 items.");
+  } else if (
+    ctx.firstDay ? items.length !== 3 : items.length < 3 || items.length > 5
+  )
     add(
       "count",
       ctx.firstDay
@@ -555,6 +587,14 @@ export function checkComposition(
         i,
       );
   });
+  if (ctx.lighter) {
+    if (!items.some((x) => x.kind === "enjoy" || coreKinds.includes(x.kind)))
+      add(
+        "no_core",
+        "A lighter day keeps one anchor: the basics or something enjoyed.",
+      );
+    return out;
+  }
   if (ctx.hasLifts && !items.some((x) => x.kind === "enjoy"))
     add("no_lift", "One item should come from what used to lift them.");
   if (!items.some((x) => coreKinds.includes(x.kind)))
@@ -629,7 +669,7 @@ const liftExamples: Record<
   },
 };
 
-function whyFor(kind: PlanKind, model: IntakeModel): string {
+export function whyFor(kind: PlanKind, model: IntakeModel): string {
   const goal = model.goals[0];
   const said = (g: keyof typeof goalPhrases) =>
     `Because you said ${goalPhrases[g]} would help most`;
@@ -676,7 +716,7 @@ function whyFor(kind: PlanKind, model: IntakeModel): string {
 const fill = (title: string, name: string) => title.replace("{name}", name);
 
 /** Names the person gave that are safe to put in a title. */
-function usableNames(model: IntakeModel) {
+export function usableNames(model: IntakeModel) {
   return namedPeople(model).filter((n) => !breaksGuardrails(n));
 }
 
@@ -780,7 +820,7 @@ function pickFirst(kind: PlanKind, model: IntakeModel): Candidate | null {
 }
 
 /** Kinds for a first day, in the order they are decided. */
-function chooseKinds(model: IntakeModel): PlanKind[] {
+export function chooseKinds(model: IntakeModel): PlanKind[] {
   const eating = model.eatingConcern;
   const goals = new Set(model.goals);
   const named = usableNames(model).length > 0;
@@ -882,36 +922,87 @@ export function alternativeFor(
   return { ...next, minuteOfDay: item.minuteOfDay };
 }
 
+// --- Menu examples (for prompts and for measuring copied wording) -----------
+
+const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+let exampleMatchers: RegExp[] | undefined;
+
+/**
+ * True when a title is one of the menu's or the fallback's own example
+ * sentences word for word (a person's name may fill the {name} slot). Used
+ * by the live eval to see whether the model wrote its own wording.
+ */
+export function isMenuExample(title: string): boolean {
+  exampleMatchers ??= [
+    ...planKinds.flatMap((k) =>
+      Object.values(planMenu[k].examples).flatMap((list) =>
+        list.map((e) => e.title),
+      ),
+    ),
+    ...Object.values(liftExamples).flatMap((e) => [e.tiny, e.small]),
+  ].map(
+    (t) =>
+      new RegExp(
+        "^" + escapeRe(normalise(t)).replace("\\{name\\}", ".{1,40}") + "$",
+      ),
+  );
+  const t = normalise(title);
+  return exampleMatchers.some((re) => re.test(t));
+}
+
 // --- Prompt text, generated from the menu -----------------------------------
 
-const exampleLine = (kind: PlanKind) => {
-  const e = planMenu[kind].examples;
-  const one = (s: PlanSize) => `"${e[s][0].title}"`;
-  return `tiny ${one("tiny")}; small ${one("small")}; medium ${one("medium")}`;
-};
+const sizeGuide =
+  "tiny is 1 to 2 minutes and a single action; small is about 10 minutes; medium is 20 to 30 minutes";
 
-/** The menu as prompt text: label, when to pick it, example sizes. */
+/**
+ * The menu as prompt text: label, when to pick it, and the kinds of action it
+ * covers. It deliberately holds no example sentences: models copy them word
+ * for word (see titleRulesPromptText).
+ */
 export function menuPromptText(): string {
-  return planKinds
-    .map(
+  return [
+    `Sizes: ${sizeGuide}.`,
+    ...planKinds.map(
       (k) =>
-        `- ${k} (shown as "${planMenu[k].label}"; usually ${planMenu[k].band}): ${planMenu[k].pick} Examples: ${exampleLine(k)}.`,
-    )
-    .join("\n");
+        `- ${k} (shown as "${planMenu[k].label}"; usually ${planMenu[k].band}): ${planMenu[k].pick} Kinds of action: ${planMenu[k].ideas}.`,
+    ),
+  ].join("\n");
+}
+
+/**
+ * How a title is written. Shared by the intake and planner prompts so the
+ * rule cannot drift: titles come from the person's own words, and the menu's
+ * illustrations are never repeated.
+ */
+export function titleRulesPromptText(): string {
+  return [
+    "The menu lists kinds of action, not sentences. Write every title yourself in fresh words; never reach for a stock phrase.",
+    "Build every title from the person's own words: their interests, the job they keep putting off, the person they named, the place or time they mentioned. Name the actual thing (which song or record, which letter or task, which person, which room or walk).",
+    "If they gave you nothing for a kind, still choose your own concrete wording and object; do not fall back on a menu sentence.",
+    "Each title starts with a verb, is at most 80 characters, and is one action the person can start now.",
+  ].join("\n");
 }
 
 /** The composition rules for this person, as prompt text. */
 export function compositionPromptText(ctx: CompositionContext): string {
   const start = formatMinutes(wakeStart(ctx.wake));
   const rules = [
-    ctx.firstDay
-      ? "Exactly 3 items (this is the first day), each tiny or small."
-      : "3 to 5 items.",
+    ctx.lighter
+      ? "This is a lighter day: 1 to 3 items in all, every new or changed item tiny. Keep one anchor (an enjoy item or the basics)."
+      : ctx.firstDay
+        ? "Exactly 3 items (this is the first day), each tiny or small."
+        : "3 to 5 items.",
     "At most one reach_out and at most one move.",
-    ctx.hasLifts
-      ? "Include one enjoy item built from what the person said used to lift them."
-      : "The person named nothing that used to lift them: do not promise fun; lead with basics or mastery.",
-    "Include at least one of task, basics, work_chunk, problem or wind_down.",
+    ctx.lighter
+      ? null
+      : ctx.hasLifts
+        ? "Include one enjoy item built from what the person said used to lift them."
+        : "The person named nothing that used to lift them: do not promise fun; lead with basics or mastery.",
+    ctx.lighter
+      ? null
+      : "Include at least one of task, basics, work_chunk, problem or wind_down.",
     ctx.namedPerson
       ? "reach_out is allowed, only for someone the person named."
       : "Do not use reach_out: the person named no one.",

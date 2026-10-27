@@ -44,6 +44,7 @@ function report(over: Partial<ReportView> = {}): ReportView {
     day: "2026-10-26",
     outcome: "done",
     helped: null,
+    vsExpected: null,
     expectation: null,
     barrier: null,
     note: null,

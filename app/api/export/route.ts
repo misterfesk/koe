@@ -10,6 +10,7 @@ import {
 } from "@/server/data/notes";
 import { listPeople, listReachOuts } from "@/server/data/people";
 import { listReminders } from "@/server/data/reminders";
+import { listCheckInWords } from "@/server/data/plan";
 import { listSteps } from "@/server/data/steps";
 import { getConversation, listConversations } from "@/server/data/talk";
 import { getViewer } from "@/server/viewer";
@@ -75,6 +76,8 @@ export async function GET() {
     // What Koe knows from the intro, and each day it planned.
     userModel: await getUserModel(v.db, id),
     planDays: await listPlanDays(v.db, id),
+    // The one word that came with a check-in, when there was one.
+    checkInWords: await listCheckInWords(v.db, id),
     conversations: await Promise.all(
       talks.map((t) => getConversation(v.db, id, t.id)),
     ),

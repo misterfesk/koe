@@ -7,6 +7,7 @@ import { alternativeFor, sizeLabels, type PlanItem } from "@/domain/plan-menu";
 import { formatMinutes } from "@/domain/time";
 import { startMyDay } from "@/server/actions/intake";
 import { SafetyCheck } from "../safety/safety-check";
+import { clearDraft } from "./draft-store";
 import styles from "./intake.module.css";
 
 type Card = Reveal["memories"][number] & { keep: boolean };
@@ -64,6 +65,7 @@ export function RevealScreen({
       });
       // On success the server sends the person to Today.
       if (!r.ok) return setError(Object.values(r.errors)[0]);
+      clearDraft();
       if (r.safety && r.safety !== "none") setFlagged(true);
     });
   };

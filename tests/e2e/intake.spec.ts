@@ -232,3 +232,36 @@ test("the questions work at 320px and by keyboard", async ({ page }) => {
   await noHorizontalScroll(page);
   await clean(page, "reveal 320");
 });
+
+test("a reload picks up the intake where it was", async ({ page }) => {
+  await startIntake(page);
+  await begin(page);
+  await chip(page, "Sleep").click();
+  await page.getByLabel("Add a few words (optional)").fill("Mornings are hard");
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(heading(page, "What does a usual day look like?")).toBeVisible();
+  await chip(page, "Between 7 and 9").click();
+  await page.reload();
+  // Back on the second question, with the earlier answers kept.
+  await expect(heading(page, "What does a usual day look like?")).toBeVisible();
+  await expect(
+    page.getByRole("radio", { name: "Between 7 and 9" }),
+  ).toBeChecked();
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByRole("checkbox", { name: "Sleep" })).toBeChecked();
+  await expect(page.getByLabel("Add a few words (optional)")).toHaveValue(
+    "Mornings are hard",
+  );
+  // Words that trip the safety check are never kept.
+  await page
+    .getByLabel("Add a few words (optional)")
+    .fill("I want to end it all");
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "I'm safe for now" }).click();
+  await page.getByRole("button", { name: "Carry on with Koe" }).click();
+  await page.reload();
+  const kept = await page.evaluate(() =>
+    window.sessionStorage.getItem("koe.intake.draft.v1"),
+  );
+  expect(kept).not.toContain("end it all");
+});

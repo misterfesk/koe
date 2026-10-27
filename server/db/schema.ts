@@ -101,6 +101,8 @@ export const areas = ["move", "connect", "care", "do", "enjoy"] as const;
 export const energies = ["low", "okay", "more"] as const;
 export const outcomes = ["done", "partly", "not", "skip"] as const;
 export const helpedValues = ["helped", "same", "harder"] as const;
+// "Compared with what you expected" after Done or Partly on a plan item.
+export const vsExpectedValues = ["better", "same", "worse"] as const;
 export const expectations = ["low", "unsure", "good"] as const;
 export const memoryKinds = ["helps", "hard", "people", "preference"] as const;
 export const talkModes = [
@@ -154,6 +156,8 @@ export const checkIn = pgTable(
     userId: owner(),
     day: day("day").notNull(),
     energy: text("energy", { enum: energies }).notNull(),
+    // The optional one word that came with it (sealed).
+    wordEnc: text("word_enc"),
     createdAt: created(),
   },
   (t) => [uniqueIndex("check_in_user_day_idx").on(t.userId, t.day)],
@@ -282,6 +286,7 @@ export const stepReport = pgTable(
     day: day("day").notNull(),
     outcome: text("outcome", { enum: outcomes }).notNull(),
     helped: text("helped", { enum: helpedValues }),
+    vsExpected: text("vs_expected", { enum: vsExpectedValues }),
     // Copied from the step when reported, so later edits don't rewrite history.
     expectation: text("expectation", { enum: expectations }),
     barrierEnc: text("barrier_enc"),
@@ -329,6 +334,9 @@ export const planDay = pgTable(
       .default("normal"),
     snapshotEnc: text("snapshot_enc").notNull(),
     version: integer("version").notNull().default(1),
+    // Why this version was written, and Koe's one line about the change (sealed).
+    reason: text("reason"),
+    noteEnc: text("note_enc"),
     createdAt: created(),
   },
   (t) => [uniqueIndex("plan_day_user_day_idx").on(t.userId, t.day, t.version)],

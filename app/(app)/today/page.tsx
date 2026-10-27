@@ -1,54 +1,40 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { PageHeading } from "@/components/ui";
-import { suggestions } from "@/domain/activities";
-import { todayPlan, upcoming } from "@/domain/steps";
-import { daysBetween, localDay } from "@/domain/time";
+import {
+  diffLines,
+  diffPlans,
+  laterOptions,
+  templateNote,
+} from "@/domain/day-plan";
+import { kindLabel } from "@/domain/plan-menu";
+import { isDue, isRepeating, reportOn, type StepView } from "@/domain/steps";
+import {
+  daysBetween,
+  describeDays,
+  formatClock,
+  localDay,
+  uses12Hour,
+} from "@/domain/time";
 import { tone } from "@/domain/tone";
 import { SafetyCheck } from "@/features/safety/safety-check";
+import { ChangeBanner } from "@/features/today/change-banner";
 import { CheckIn } from "@/features/today/check-in";
-import { StepCard } from "@/features/today/step-card";
-import { SuggestionCard } from "@/features/today/suggestion";
+import type { Banner, Entry } from "@/features/today/model";
+import { Timeline } from "@/features/today/timeline";
 import { WelcomeBack } from "@/features/today/welcome-back";
 import styles from "@/features/today/today.module.css";
-import { getCheckIn } from "@/server/data/profile";
+import { getCheckInView, previousVersion } from "@/server/data/plan";
 import { listSteps } from "@/server/data/steps";
+import { openToday } from "@/server/llm/planner";
 import { requireViewer } from "@/server/viewer";
 
 export const metadata: Metadata = { title: "Today" };
 
-// One small thing is the point. Past this many, Koe stops offering more.
-const ENOUGH = 3;
-
 export default async function Page() {
   const v = await requireViewer();
   const p = v.profile;
-  const [steps, energy] = await Promise.all([
-    listSteps(v.db, v.user.id),
-    getCheckIn(v.db, v.user.id, v.today),
-  ]);
-  const { waiting, reported } = todayPlan(steps, v.today);
-  const later = upcoming(steps, v.today);
-  const away =
-    p.lastSeenAt &&
-    daysBetween(localDay(p.timezone, p.lastSeenAt), v.today) >= 7;
-  const oldSteps = steps.filter(
-    (s) =>
-      s.status === "active" &&
-      !s.repeatDays &&
-      (s.plannedFor ?? "") < v.today &&
-      s.reports.length === 0,
-  ).length;
-
-  // Everything planned for today has an answer: close the day, gently.
-  const context = waiting.length
-    ? "chosen"
-    : reported.length
-      ? reported.some((r) => r.report.outcome === "done")
-        ? "enough"
-        : "setback"
-      : "welcome";
-  const voice = tone(p.tone, context, energy);
 
   if (p.coachingPausedAt)
     return (
@@ -59,70 +45,119 @@ export default async function Page() {
       </>
     );
 
-  const offer = suggestions(
-    steps,
-    energy,
-    steps.length + reported.length,
-    v.today,
+  // The first time today is opened, the day is planned (once, even if two
+  // requests arrive together).
+  const plan = await openToday(v.user.id, { db: v.db, today: v.today });
+  const [steps, checkIn, before, accept] = await Promise.all([
+    listSteps(v.db, v.user.id),
+    getCheckInView(v.db, v.user.id, v.today),
+    plan.version > 1
+      ? previousVersion(v.db, v.user.id, v.today, plan.version)
+      : Promise.resolve(null),
+    headers(),
+  ]);
+  const hour12 = uses12Hour(accept.get("accept-language"));
+  const clock = (m: number) => formatClock(m, hour12);
+
+  const toEntry = (s: StepView, inPlan: boolean): Entry => {
+    const r = reportOn(s, v.today);
+    const minute = s.minuteOfDay;
+    return {
+      id: s.id,
+      title: s.title,
+      why: s.why,
+      kind: s.kind,
+      kindLabel: s.kind ? kindLabel(s.kind) : "Something of your own",
+      size: s.size,
+      time: minute === null ? null : clock(minute),
+      minute,
+      inPlan,
+      repeats: isRepeating(s) ? describeDays(s.repeatDays!) : null,
+      report: r
+        ? { id: r.id, outcome: r.outcome, vsExpected: r.vsExpected }
+        : null,
+      later:
+        inPlan && minute !== null
+          ? laterOptions(minute).map((o) => ({ ...o, time: clock(o.minute) }))
+          : [],
+    };
+  };
+
+  const byId = new Map(steps.map((s) => [s.id, s]));
+  const inPlan = new Set(plan.items.map((i) => i.stepId));
+  const planned = plan.items.flatMap((i) => {
+    const s = i.stepId ? byId.get(i.stepId) : undefined;
+    return s && (s.status === "active" || s.status === "finished")
+      ? [toEntry(s, true)]
+      : [];
+  });
+  // Entries from before the day plan: repeating ones due today, and one-offs
+  // set for today. Nothing older comes back.
+  const own = steps
+    .filter(
+      (s) =>
+        !inPlan.has(s.id) &&
+        (s.status === "active" || s.status === "finished") &&
+        (isRepeating(s) ? isDue(s, v.today) : s.plannedFor === v.today),
+    )
+    .map((s) => toEntry(s, false));
+  const entries = [...planned, ...own].sort(
+    (a, b) => (a.minute ?? Infinity) - (b.minute ?? Infinity),
   );
-  const planned = waiting.length + reported.length;
+
+  let banner: Banner | null = null;
+  if (plan.version > 1 && plan.reason !== "intro" && before) {
+    const diff = diffPlans(before, plan.items);
+    banner = {
+      note:
+        plan.note ??
+        templateNote(diff, { reason: plan.reason ?? "", energy: plan.energy }),
+      lines: diffLines(diff, clock),
+      canUndo: true,
+    };
+  } else if (plan.note) {
+    banner = { note: plan.note, lines: [], canUndo: false };
+  }
+
+  const waiting = entries.filter((e) => !e.report);
+  const answered = entries.filter((e) => e.report);
+  const context = waiting.length
+    ? "chosen"
+    : answered.length
+      ? answered.some((e) => e.report!.outcome === "done")
+        ? "enough"
+        : "setback"
+      : "welcome";
+  const voice = tone(p.tone, context, checkIn?.energy ?? null);
+
+  const away =
+    p.lastSeenAt &&
+    daysBetween(localDay(p.timezone, p.lastSeenAt), v.today) >= 7;
+  const older = steps.filter(
+    (s) =>
+      s.status === "active" &&
+      !s.repeatDays &&
+      s.origin === null &&
+      (s.plannedFor ?? "") < v.today &&
+      s.reports.length === 0,
+  ).length;
 
   return (
     <>
       <PageHeading eyebrow="Today">{voice.message}</PageHeading>
-      {away && <WelcomeBack oldSteps={oldSteps} />}
-      <CheckIn energy={energy} />
-
-      {(waiting.length > 0 || reported.length > 0) && (
-        <section aria-labelledby="today-steps">
-          <h2 id="today-steps" className={styles.sectionTitle}>
-            Your steps today
-          </h2>
-          <ul className={styles.cards}>
-            {waiting.map((s) => (
-              <StepCard key={s.id} step={s} region={p.region} />
-            ))}
-            {reported.map(({ step, report }) => (
-              <StepCard
-                key={step.id}
-                step={step}
-                report={report}
-                region={p.region}
-              />
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {waiting.length === 0 && planned < ENOUGH && (
-        <SuggestionCard
-          suggestions={offer}
-          region={p.region}
-          heading={planned ? "One more, if you like" : "A step for today"}
-        />
-      )}
-      {waiting.length > 0 && planned < ENOUGH && (
-        <details className={styles.more}>
-          <summary>Add another step</summary>
-          <SuggestionCard
-            suggestions={offer}
-            region={p.region}
-            heading="Another step"
-          />
-        </details>
-      )}
-
-      {later.length > 0 && (
-        <p className="meta">
-          {later.length} more {later.length === 1 ? "step is" : "steps are"}{" "}
-          planned for other days.
-        </p>
-      )}
-
+      {away && <WelcomeBack older={older} />}
+      <CheckIn checkIn={checkIn} region={p.region} />
+      {banner && <ChangeBanner banner={banner} />}
+      <Timeline
+        entries={entries}
+        canAdd={plan.items.length < 5}
+        region={p.region}
+      />
+      {/* Slots for the next reminder (S4) and the shelf card (S6). */}
       <div className={styles.below}>
-        <p className="meta">Not a step kind of day?</p>
+        <p className="meta">Rather talk it through?</p>
         <Link className="button secondary" href="/talk">
-          Talk it through <span aria-hidden="true">→</span>
+          Open Talk <span aria-hidden="true">→</span>
         </Link>
       </div>
     </>

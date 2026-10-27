@@ -1,22 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ActionLink, PageHeading } from "@/components/ui";
-import {
-  areaLabels,
-  expectationLabels,
-  isDue,
-  isRepeating,
-  reportOn,
-} from "@/domain/steps";
+import { kindLabel } from "@/domain/plan-menu";
+import { areaLabels, expectationLabels, isRepeating } from "@/domain/steps";
 import { describeDays, readableDay } from "@/domain/time";
 import { StepHistory, StepManage } from "@/features/steps/detail";
 import styles from "@/features/steps/steps.module.css";
-import { StepCard } from "@/features/today/step-card";
-import todayStyles from "@/features/today/today.module.css";
 import { getStep } from "@/server/data/steps";
 import { requireViewer } from "@/server/viewer";
 
-export const metadata: Metadata = { title: "Step" };
+export const metadata: Metadata = { title: "Details" };
 
 const statusLine = {
   active: null,
@@ -36,13 +29,12 @@ export default async function Page({
   if (!step)
     return (
       <>
-        <PageHeading eyebrow="Steps" description="It may have been deleted.">
-          This step isn&apos;t here.
+        <PageHeading eyebrow="Today" description="It may have been deleted.">
+          This isn&apos;t here.
         </PageHeading>
         <ActionLink href="/today">Back to Today</ActionLink>
       </>
     );
-  const report = reportOn(step, v.today);
   const when = isRepeating(step)
     ? describeDays(step.repeatDays!)
     : step.plannedFor
@@ -50,7 +42,12 @@ export default async function Page({
       : null;
   return (
     <>
-      <PageHeading eyebrow={areaLabels[step.area] + (when ? " · " + when : "")}>
+      <PageHeading
+        eyebrow={
+          (step.kind ? kindLabel(step.kind) : areaLabels[step.area]) +
+          (when ? " · " + when : "")
+        }
+      >
         {step.title}
       </PageHeading>
       <div className={styles.facts}>
@@ -66,20 +63,15 @@ export default async function Page({
       )}
       {step.problem && (
         <div className="panel">
-          <p className="eyebrow">The problem it&apos;s for</p>
+          <p className="eyebrow">What it is for</p>
           <p>{step.problem}</p>
         </div>
-      )}
-      {(isDue(step, v.today) || report) && (
-        <ul className={todayStyles.cards}>
-          <StepCard step={step} report={report} region={v.profile.region} />
-        </ul>
       )}
       <StepManage step={step} region={v.profile.region} />
       {step.status === "active" && (
         <p>
           <Link href={"/you/reminders?step=" + step.id + "#step-" + step.id}>
-            Set a reminder for this step <span aria-hidden="true">→</span>
+            Set a reminder for this <span aria-hidden="true">→</span>
           </Link>
         </p>
       )}

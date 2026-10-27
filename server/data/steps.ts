@@ -26,6 +26,7 @@ function toReport(r: ReportRow): ReportView {
     day: r.day,
     outcome: r.outcome,
     helped: r.helped,
+    vsExpected: r.vsExpected,
     expectation: r.expectation,
     barrier: openOrNull(r.barrierEnc),
     note: openOrNull(r.noteEnc),

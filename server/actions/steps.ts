@@ -12,7 +12,7 @@ import {
 } from "@/domain/steps";
 import { addDays } from "@/domain/time";
 import { conversation } from "../db/schema";
-import { setCheckIn, updateProfile } from "../data/profile";
+import { updateProfile } from "../data/profile";
 import {
   addReportDetail,
   createStep,
@@ -196,13 +196,6 @@ export async function changeSchedule(
 export async function removeStep(stepId: string) {
   const v = await requireViewer();
   await deleteStep(v.db, v.user.id, id.parse(stepId));
-  refresh();
-}
-
-export async function checkIn(energy: string | null) {
-  const v = await requireViewer();
-  const value = z.enum(["low", "okay", "more"]).nullable().parse(energy);
-  await setCheckIn(v.db, v.user.id, v.today, value);
   refresh();
 }
 

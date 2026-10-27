@@ -7,6 +7,8 @@ export type Energy = "low" | "okay" | "more";
 export type Outcome = "done" | "partly" | "not" | "skip";
 export type Helped = "helped" | "same" | "harder";
 export type Expectation = "low" | "unsure" | "good";
+/** After Done or Partly on a plan item: how it was compared with what they expected. */
+export type VsExpected = "better" | "same" | "worse";
 export type StepStatus = "active" | "paused" | "finished" | "archived";
 
 export const areaLabels: Record<Area, string> = {
@@ -30,6 +32,19 @@ export const helpedLabels: Record<Helped, string> = {
   harder: "It made things harder",
 };
 
+export const vsExpectedLabels: Record<VsExpected, string> = {
+  better: "Better",
+  same: "About the same",
+  worse: "Worse",
+};
+
+/** How the answer reads once it is given. */
+export const vsExpectedPhrases: Record<VsExpected, string> = {
+  better: "Better than expected",
+  same: "About what you expected",
+  worse: "Worse than expected",
+};
+
 export const expectationLabels: Record<Expectation, string> = {
   low: "Probably won't help",
   unsure: "Not sure",
@@ -42,6 +57,7 @@ export type ReportView = {
   day: string;
   outcome: Outcome;
   helped: Helped | null;
+  vsExpected: VsExpected | null;
   expectation: Expectation | null;
   barrier: string | null;
   note: string | null;

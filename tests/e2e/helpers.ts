@@ -12,20 +12,18 @@ export async function startAsGuest(page: Page, region = "SG") {
   await expect(page).toHaveURL(/\/today$/);
 }
 
-/** Chooses Today's first suggestion as a step for today. */
-export async function chooseFirstSuggestion(page: Page) {
-  await page
-    .getByRole("button", { name: /Choose this step/ })
-    .first()
-    .click();
-  const form = page.locator("form.plan-form");
-  const title = await form.getByLabel("Your step").inputValue();
-  await form.getByRole("button", { name: "Choose this step" }).click();
-  await expect(
-    page.getByRole("heading", { level: 3, name: title }),
-  ).toBeVisible();
-  return title;
+/** The title of the first entry on Today's timeline (the day is planned when Today opens). */
+export async function firstEntryTitle(page: Page) {
+  const heading = page.getByRole("heading", { level: 3 }).first();
+  await expect(heading).toBeVisible();
+  return (await heading.textContent())!;
 }
+
+/** The timeline card with this title. */
+export const entry = (page: Page, title: string) =>
+  page.locator("li", {
+    has: page.getByRole("heading", { level: 3, name: title }),
+  });
 
 export async function noHorizontalScroll(page: Page) {
   const overflow = await page.evaluate(

@@ -100,3 +100,24 @@ export function formatMinutes(minutes: number) {
   const m = minutes % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
+
+/** "08:00" or "8:00 am", the way the person's locale writes the time. */
+export function formatClock(minutes: number, hour12: boolean) {
+  if (!hour12) return formatMinutes(minutes);
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
+}
+
+/** Whether a locale (an Accept-Language value or tag) writes times on a 12-hour clock. */
+export function uses12Hour(acceptLanguage?: string | null) {
+  const tag = acceptLanguage?.split(",")[0]?.split(";")[0]?.trim() || "en-US";
+  try {
+    const cycle = new Intl.DateTimeFormat(tag, {
+      hour: "numeric",
+    }).resolvedOptions().hourCycle;
+    return cycle === "h12" || cycle === "h11";
+  } catch {
+    return false;
+  }
+}

@@ -34,6 +34,7 @@ import {
 import type { RiskLevel } from "@/domain/safety";
 import { buildReveal, checkIntakeText } from "@/server/actions/intake";
 import { SafetyCheck } from "../safety/safety-check";
+import { loadDraft, saveDraft, storable } from "./draft-store";
 import { ChipGroup } from "./parts";
 import { RevealScreen } from "./reveal";
 import styles from "./intake.module.css";
@@ -172,6 +173,29 @@ export function IntakeFlow({ region }: { region: string | null }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
+
+  // A reload picks up where the person was (sessionStorage, nothing risky kept).
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    const saved = loadDraft<Draft>();
+    // Storage is only readable in the browser, so it is read after hydration.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (saved) {
+      setDraft({ ...blank, ...saved.draft });
+      setStage(saved.stage);
+    }
+    setRestored(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
+  useEffect(() => {
+    if (!restored) return;
+    // The reveal and the wait before it resume at the last question.
+    const at: Stage = stage === "thinking" || stage === "reveal" ? 5 : stage;
+    saveDraft({
+      stage: at as 1 | 2 | 3 | 4 | 5 | "intro",
+      draft: storable(draft),
+    });
+  }, [restored, stage, draft]);
 
   // Each new screen starts at its heading, for keyboard and screen reader users.
   useEffect(() => {

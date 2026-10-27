@@ -27,8 +27,8 @@ const calmContexts: ToneContext[] = [
 
 const copy = {
   expressive: {
-    welcome: "Good to see you. Here's one small thing.",
-    chosen: "This one's yours. Try it whenever suits you.",
+    welcome: "Good to see you. Here's your day.",
+    chosen: "Take your day at your own pace.",
     done: "You did it. That counts.",
     setback: "That's useful to know. Leave it there, or try a smaller version.",
     enough: "That's enough for today, if you want it to be.",
@@ -41,7 +41,7 @@ const copy = {
   },
   calm: {
     welcome: "One thing at a time.",
-    chosen: "Your step is here when you want it.",
+    chosen: "Your day is here when you want it.",
     done: "Recorded. That counts.",
     setback: "That's useful to know. Leave it there, or try a smaller version.",
     enough: "That's enough for today, if you want it to be.",
@@ -54,9 +54,9 @@ const copy = {
   },
   plain: {
     welcome: "Today",
-    chosen: "Step chosen.",
+    chosen: "Today's plan.",
     done: "Recorded.",
-    setback: "Recorded. You can change the step.",
+    setback: "Recorded. You can change today's plan.",
     enough: "Nothing else is planned today.",
     reflection: "Optional reflection.",
     conversation: "Talk",

@@ -3,18 +3,18 @@ import { useTransition } from "react";
 import { welcomeBack } from "@/server/actions/steps";
 
 /** After a week or more away. No backlog, no guilt, no "we missed you". */
-export function WelcomeBack({ oldSteps }: { oldSteps: number }) {
+export function WelcomeBack({ older }: { older: number }) {
   const [pending, startTransition] = useTransition();
   return (
     <section className="panel" aria-labelledby="welcome-back">
       <h2 id="welcome-back">Welcome back.</h2>
       <p>
         There&apos;s nothing to catch up on.
-        {oldSteps > 0 &&
-          ` You have ${oldSteps} older ${oldSteps === 1 ? "step" : "steps"} from before. You can clear them for a fresh start; they stay in your history.`}
+        {older > 0 &&
+          ` ${older} older ${older === 1 ? "entry" : "entries"} from before ${older === 1 ? "is" : "are"} still around. Clear ${older === 1 ? "it" : "them"} for a fresh start; ${older === 1 ? "it stays" : "they stay"} in your history.`}
       </p>
       <div className="actions">
-        {oldSteps > 0 && (
+        {older > 0 && (
           <button
             type="button"
             disabled={pending}
@@ -25,11 +25,11 @@ export function WelcomeBack({ oldSteps }: { oldSteps: number }) {
         )}
         <button
           type="button"
-          className={oldSteps > 0 ? "secondary" : undefined}
+          className={older > 0 ? "secondary" : undefined}
           disabled={pending}
           onClick={() => startTransition(() => welcomeBack(false))}
         >
-          {oldSteps > 0 ? "Keep them" : "Carry on"}
+          {older > 0 ? "Keep them" : "Carry on"}
         </button>
       </div>
     </section>

@@ -139,3 +139,67 @@
     margin-inline: -8px;
   }
 }
+
+.arrived {
+  margin: 0 0 20px;
+}
+.arrived p {
+  margin: 0;
+}
+.size {
+  margin: 0 0 8px;
+}
+.banner {
+  border: 1px solid var(--line-strong);
+  border-left: 4px solid var(--wine);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 16px 18px;
+  margin: 0 0 24px;
+}
+.bannerNote {
+  margin: 0 0 8px;
+  font-weight: 500;
+}
+.bannerLines {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  color: var(--secondary);
+}
+.sheet {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+}
+.sheetTitle {
+  margin: 0 0 12px;
+  font-weight: 500;
+}
+.sheet .chips {
+  margin-top: 12px;
+}
+.dayActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 24px;
+}
+.add {
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.add fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.add legend {
+  font-weight: 500;
+  margin-bottom: 10px;
+}

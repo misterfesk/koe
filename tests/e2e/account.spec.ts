@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { chooseFirstSuggestion, startAsGuest } from "./helpers";
+import { firstEntryTitle, startAsGuest } from "./helpers";
 
 test("a guest's steps move into a new account and survive sign-out", async ({
   page,
 }, info) => {
   await startAsGuest(page);
-  const title = await chooseFirstSuggestion(page);
+  const title = await firstEntryTitle(page);
   const email = `e2e-${info.project.name}-${Date.now()}@example.com`;
 
   await page.goto("/you/account");

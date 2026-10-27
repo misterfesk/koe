@@ -1,10 +1,18 @@
 import "server-only";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { emptyModel, storedModel, type IntakeModel } from "@/domain/intake";
+import type { DayItem } from "@/domain/day-plan";
 import { kindAreas, planItemSchema, type PlanItem } from "@/domain/plan-menu";
 import type { Db } from "../db";
-import { memoryCard, person, planDay, profile, userModel } from "../db/schema";
+import {
+  memoryCard,
+  person,
+  planDay,
+  profile,
+  step,
+  userModel,
+} from "../db/schema";
 import { open, seal } from "../crypto";
 import { insertStep } from "./steps";
 
@@ -41,7 +49,7 @@ const snapshot = z.object({
   items: z.array(planItemSchema.extend({ stepId: z.string().optional() })),
 });
 
-export type PlanDayItem = PlanItem & { stepId?: string };
+export type PlanDayItem = DayItem;
 export type PlanDayView = {
   id: string;
   day: string;
@@ -49,6 +57,9 @@ export type PlanDayView = {
   mode: "normal" | "lighter";
   version: number;
   items: PlanDayItem[];
+  /** Why this version was written, and Koe's one line about it. */
+  reason: string | null;
+  note: string | null;
   createdAt: string;
 };
 
@@ -61,6 +72,8 @@ function toView(r: typeof planDay.$inferSelect): PlanDayView {
     mode: r.mode,
     version: r.version,
     items: parsed.success ? parsed.data.items : [],
+    reason: r.reason,
+    note: r.noteEnc ? open(r.noteEnc) : null,
     createdAt: r.createdAt.toISOString(),
   };
 }
@@ -91,10 +104,11 @@ export async function hasIntro(db: Db, userId: string) {
     .from(userModel)
     .where(eq(userModel.userId, userId));
   if (model) return true;
+  // Memory off keeps no model, but the intro's steps are marked as its own.
   const [first] = await db
-    .select({ id: planDay.id })
-    .from(planDay)
-    .where(and(eq(planDay.userId, userId), eq(planDay.version, 1)))
+    .select({ id: step.id })
+    .from(step)
+    .where(and(eq(step.userId, userId), eq(step.origin, "intro")))
     .limit(1);
   return !!first;
 }
@@ -123,13 +137,38 @@ export type IntroCommit = {
 export async function commitIntro(db: Db, userId: string, c: IntroCommit) {
   return db.transaction(async (tx) => {
     const ids = c.items.map(() => crypto.randomUUID());
+    // Someone who skipped the intro and opened Today already has a plan for
+    // today. The intro's plan replaces it as the next version.
+    const [latest] = await tx
+      .select()
+      .from(planDay)
+      .where(and(eq(planDay.userId, userId), eq(planDay.day, c.today)))
+      .orderBy(desc(planDay.version))
+      .limit(1);
+    if (latest) {
+      const [done] = await tx
+        .select({ id: step.id })
+        .from(step)
+        .where(and(eq(step.userId, userId), eq(step.origin, "intro")))
+        .limit(1);
+      if (done) return { already: true as const };
+      const old = toView(latest).items.flatMap((i) =>
+        i.stepId ? [i.stepId] : [],
+      );
+      if (old.length)
+        await tx
+          .update(step)
+          .set({ status: "archived", updatedAt: new Date() })
+          .where(and(eq(step.userId, userId), inArray(step.id, old)));
+    }
     const planned = await tx
       .insert(planDay)
       .values({
         userId,
         day: c.today,
         mode: "normal",
-        version: 1,
+        version: (latest?.version ?? 0) + 1,
+        reason: "intro",
         snapshotEnc: seal(
           JSON.stringify({
             items: c.items.map((it, i) => ({ ...it, stepId: ids[i] })),

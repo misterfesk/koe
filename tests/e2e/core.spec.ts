@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { chooseFirstSuggestion, startAsGuest } from "./helpers";
+import { entry, firstEntryTitle, startAsGuest } from "./helpers";
 
 test("setup can't be finished without confirming 18+", async ({ page }) => {
   await page.goto("/");
@@ -79,51 +79,37 @@ test("old addresses go to the new ones", async ({ page }) => {
   }
 });
 
-test("a step chosen on Today is still there after a reload", async ({
-  page,
-}) => {
+test("an answer on Today is still there after a reload", async ({ page }) => {
   await startAsGuest(page);
-  await page.getByRole("button", { name: "Low", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Low", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
-  const title = await chooseFirstSuggestion(page);
+  // Skipping the intake still gives a day: it is planned when Today opens.
+  await expect(page.getByRole("heading", { level: 3 })).toHaveCount(3);
+  const title = await firstEntryTitle(page);
 
-  const card = page.locator("li", {
-    has: page.getByRole("heading", { level: 3, name: title }),
-  });
+  const card = entry(page, title);
   await card.getByRole("button", { name: "Done" }).click();
-  await card.getByRole("button", { name: "It helped" }).click();
-  await expect(card.getByRole("status")).toContainText("Done · It helped");
+  await card.getByRole("button", { name: "About the same" }).click();
+  await expect(card.getByRole("status")).toContainText(
+    "Done · About what you expected",
+  );
 
   await page.reload();
   await expect(
     page.getByRole("heading", { level: 3, name: title }),
   ).toBeVisible();
-  await expect(page.getByRole("status").first()).toContainText("It helped");
-  await expect(
-    page.getByRole("button", { name: "Low", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("status").first()).toContainText("Done");
 
   await page.goto("/you/look-back/journey");
   await expect(page.getByRole("link", { name: title })).toBeVisible();
 });
 
-test("a report can be undone, and a partial one offers next moves", async ({
+test("an answer can be undone, and Partly is its own answer", async ({
   page,
 }) => {
   await startAsGuest(page);
-  const title = await chooseFirstSuggestion(page);
-  const card = page.locator("li", {
-    has: page.getByRole("heading", { level: 3, name: title }),
-  });
+  const title = await firstEntryTitle(page);
+  const card = entry(page, title);
   await card.getByRole("button", { name: "Partly" }).click();
-  await expect(
-    card.getByRole("button", { name: "Make it smaller" }),
-  ).toBeVisible();
-  await expect(
-    card.getByRole("button", { name: "Try again tomorrow" }),
-  ).toBeVisible();
+  await expect(card.getByRole("status")).toContainText("Partly");
   await card.getByRole("button", { name: "Undo" }).click();
   await expect(card.getByRole("button", { name: "Done" })).toBeVisible();
 });
@@ -195,9 +181,7 @@ test("a worrying note gets the safety check and pauses coaching until resumed", 
   await page.goto("/today");
   await page.getByRole("button", { name: "I'm safe for now" }).click();
   await page.getByRole("button", { name: "Carry on with Koe" }).click();
-  await expect(
-    page.getByRole("button", { name: /Choose this step/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3 }).first()).toBeVisible();
 });
 
 test("Talk saves the conversation even when the AI is off", async ({
