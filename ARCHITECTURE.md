@@ -106,7 +106,7 @@ Model IDs are configuration (`KOE_CHAT_MODEL`, `KOE_FAST_MODEL`, `KOE_SAFETY_MOD
 | Agent | When | Output and checks |
 |---|---|---|
 | Intake synthesiser (`intake.ts`) | End of the 5-question intake | Summary, up to 4 memory proposals, 3 plan items. Checked against zod, the composition rules, the guardrails and the safety rules. Failing items are swapped for rules-based ones. AI off: `fallbackPlan`. |
-| Planner **(in progress)** | First open of the day, check-in, "Not today" (smaller/swap), lighter day | A new plan version, plus a one-line note on what changed. Same checks. AI off: deterministic adaptation. |
+| Planner (`planner.ts`) | First open of the day, check-in, "Not today" (smaller/swap), lighter day | A new plan version, plus a one-line note on what changed. Same checks. AI off: deterministic adaptation. |
 | Talk | Each message | Reply text plus tool proposals: add, move or shrink an entry, set a reminder, save a memory, find resources, draft a message, prepare for an appointment **(in progress)**. Proposals are written only when the person confirms them. |
 | Resource screener **(in progress)** | Weekly Shelf refresh, or a Talk request | Keep/drop and a "why this might help you" line for each allowlisted search result. |
 | Safety classifier | Every Talk turn | Fail-closed: if the classifier errors or times out, no normal reply is shown. |
@@ -134,7 +134,7 @@ The risk patterns and the crisis-flow wording are engineering defaults and have 
 
 ## 8. Reminders
 
-Web Push with VAPID. The person turns a reminder on for a timed entry, or for the morning plan **(in progress)**. Permission is requested only at that moment. A minute scheduler in `instrumentation.ts` sends due reminders. It respects quiet hours and the daily nudge budget, skips reminders that are overdue rather than sending them late, and pauses a reminder after 3 are ignored. Lock-screen text is neutral. Push endpoints are restricted to the browsers' push services. **(In progress:)** "Send a test now" and `.ics` calendar files.
+Web Push with VAPID. The person turns a reminder on for a timed entry, or for the morning plan (the one Koe reminder per day, within the daily nudge budget). Permission is requested only at that moment. A minute scheduler in `instrumentation.ts` sends due reminders. It respects quiet hours and the daily nudge budget, skips reminders that are overdue rather than sending them late, and pauses a reminder after 3 are ignored. Lock-screen text is neutral. Push endpoints are restricted to the browsers' push services. "Send a test now" reports a plain result and is rate-limited. `.ics` calendar files are available for one entry or the whole day (`/api/calendar/*`). Reminders follow plan changes: moving an entry moves its reminder; a swapped-out entry's reminder is parked and comes back on undo.
 
 ## 9. Operations
 
