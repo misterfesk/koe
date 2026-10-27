@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { detectRisk } from "@/domain/safety";
+import { env } from "../env";
 import { completeJson } from "./nebius";
 
 const ideasShape = z.object({
@@ -11,7 +12,11 @@ const ideasShape = z.object({
  * Practical options for one problem, for the brainstorm stage of problem
  * solving. The person chooses; Koe never picks for them.
  */
-export async function brainstorm(problem: string, own: string[]) {
+export async function brainstorm(
+  problem: string,
+  own: string[],
+  userId?: string,
+) {
   try {
     const { ideas } = await completeJson(
       [
@@ -33,7 +38,14 @@ export async function brainstorm(problem: string, own: string[]) {
         },
       ],
       ideasShape,
-      { temperature: 0.7, timeoutMs: 20_000 },
+      {
+        purpose: "coach",
+        userId,
+        model: env().KOE_FAST_MODEL,
+        schemaName: "ideas",
+        temperature: 0.7,
+        timeoutMs: 20_000,
+      },
     );
     const seen = new Set(own.map((o) => o.trim().toLowerCase()));
     return ideas
@@ -53,11 +65,10 @@ export async function brainstorm(problem: string, own: string[]) {
 const draftShape = z.object({ message: z.string().trim().min(5).max(600) });
 
 /** A short message in the person's voice. They edit and send it themselves. */
-export async function draftMessage(input: {
-  name: string;
-  purpose: string;
-  detail: string;
-}) {
+export async function draftMessage(
+  input: { name: string; purpose: string; detail: string },
+  userId?: string,
+) {
   try {
     const { message } = await completeJson(
       [
@@ -74,7 +85,13 @@ export async function draftMessage(input: {
         { role: "user", content: JSON.stringify(input) },
       ],
       draftShape,
-      { temperature: 0.7, timeoutMs: 20_000 },
+      {
+        purpose: "coach",
+        userId,
+        schemaName: "draft",
+        temperature: 0.7,
+        timeoutMs: 20_000,
+      },
     );
     return detectRisk(message) === "none" ? message : null;
   } catch {
@@ -91,7 +108,11 @@ const shrinkShape = z.object({
  * edits one; nothing is saved without them. Returns [] when the AI is off or
  * fails, so callers fall back to the library or the person's own words.
  */
-export async function shrinkStep(title: string, cue: string | null) {
+export async function shrinkStep(
+  title: string,
+  cue: string | null,
+  userId?: string,
+) {
   try {
     const { options } = await completeJson(
       [
@@ -112,7 +133,14 @@ export async function shrinkStep(title: string, cue: string | null) {
         },
       ],
       shrinkShape,
-      { temperature: 0.4, timeoutMs: 20_000 },
+      {
+        purpose: "coach",
+        userId,
+        model: env().KOE_FAST_MODEL,
+        schemaName: "options",
+        temperature: 0.4,
+        timeoutMs: 20_000,
+      },
     );
     const seen = new Set([title.trim().toLowerCase()]);
     return options

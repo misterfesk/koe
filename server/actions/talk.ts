@@ -131,7 +131,7 @@ export async function sendMessage(
     content: m.content,
   }));
   const [risk, answer] = await Promise.all([
-    classifyRisk(chat),
+    classifyRisk(chat, v.user.id),
     reply(
       convo!.mode,
       history,
@@ -142,6 +142,7 @@ export async function sendMessage(
         turn: history.filter((m) => m.role === "user").length,
       },
       v.profile.memoryOn,
+      v.user.id,
     ).catch((error: unknown) => {
       if (error instanceof AiUnavailable) return null;
       throw error;

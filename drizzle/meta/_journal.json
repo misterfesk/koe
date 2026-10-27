@@ -15,6 +15,13 @@
       "when": 1793070632549,
       "tag": "0001_one_report_per_day",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793087532045,
+      "tag": "0002_ai_usage_log",
+      "breakpoints": true
     }
   ]
 }

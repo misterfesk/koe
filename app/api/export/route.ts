@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { safetyEvent } from "@/server/db/schema";
+import { agentRun, safetyEvent } from "@/server/db/schema";
 import { listMemory } from "@/server/data/memory";
 import {
   getWeeklyReview,
@@ -52,6 +52,21 @@ export async function GET() {
       })
       .from(safetyEvent)
       .where(eq(safetyEvent.userId, id)),
+    // Counts and cost of AI calls made for this person. No prompts or replies.
+    aiUsage: await v.db
+      .select({
+        purpose: agentRun.purpose,
+        model: agentRun.model,
+        tokensIn: agentRun.tokensIn,
+        tokensOut: agentRun.tokensOut,
+        latencyMs: agentRun.latencyMs,
+        estCostUsd: agentRun.estCostUsd,
+        ok: agentRun.ok,
+        fellBack: agentRun.fellBack,
+        at: agentRun.createdAt,
+      })
+      .from(agentRun)
+      .where(eq(agentRun.userId, id)),
     steps: await listSteps(v.db, id),
     notes: await listNotes(v.db, id),
     checkIns: await listCheckIns(v.db, id),

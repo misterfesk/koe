@@ -16,11 +16,20 @@ const schema = z.object({
   DATABASE_URL: z.string().default("file:./.data/pglite"),
   APP_URL: z.url().default("http://127.0.0.1:3100"),
   // Model routing is configuration, not code: swap without a release.
-  KOE_CHAT_MODEL: z.string().default("deepseek-ai/DeepSeek-V4.1-Flash"),
-  KOE_DEEP_MODEL: z.string().default("moonshotai/Kimi-K3"),
-  KOE_SAFETY_MODEL: z.string().default("deepseek-ai/DeepSeek-V4.1-Flash"),
+  // Talk and anything the person reads as Koe's voice.
+  KOE_CHAT_MODEL: z.string().default("nvidia/Nemotron-3-Ultra-550b-a55b"),
+  // Short, cheap, high-volume calls: suggestions, drafts, screening.
+  KOE_FAST_MODEL: z.string().default("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"),
+  KOE_SAFETY_MODEL: z.string().default("nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"),
+  // One retry here when the primary model errors, times out or is rate limited.
+  KOE_FALLBACK_MODEL: z.string().default("nvidia/nemotron-3-super-120b-a12b"),
   // Operator kill switch: "off" keeps Help, history and manual steps working.
   KOE_AI: z.enum(["on", "off"]).default("on"),
+  // Per person per UTC day, counted from the agent_run log. Search calls count.
+  KOE_AI_DAILY_CALLS: z.coerce.number().int().positive().default(200),
+  // Operator kill switch for web search; the key stays unused when "off".
+  KOE_SEARCH: z.enum(["on", "off"]).default("on"),
+  TAVILY_API_KEY: z.string().optional(),
   // Web Push for reminders. Without keys, reminders are simply unavailable.
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),

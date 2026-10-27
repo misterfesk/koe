@@ -225,7 +225,7 @@ export async function smallerVersions(input: {
     !input.stepId &&
     (await screen(v.db, v.user.id, "step", [title])) !== "none";
   if (!risky && !v.profile.coachingPausedAt) {
-    const options = await shrinkStep(title, cue);
+    const options = await shrinkStep(title, cue, v.user.id);
     if (options.length) return { options, source: "ai" };
   }
   const fallback = librarySmaller(title);
@@ -253,7 +253,7 @@ export async function problemIdeas(
   }
   if (v.profile.coachingPausedAt)
     return { ideas: [], safety, available: false };
-  const ideas = await brainstorm(text.data, mine);
+  const ideas = await brainstorm(text.data, mine, v.user.id);
   return { ideas, safety, available: ideas.length > 0 };
 }
 

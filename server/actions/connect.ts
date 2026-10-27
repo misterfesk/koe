@@ -63,11 +63,10 @@ export async function draftReachOut(
   const safety = await screen(v.db, v.user.id, "reach", [p.detail]);
   if (safety !== "none" || v.profile.coachingPausedAt)
     return { message: fallback, source: "template", safety };
-  const ai = await draftMessage({
-    name,
-    purpose: p.purpose,
-    detail: p.detail,
-  });
+  const ai = await draftMessage(
+    { name, purpose: p.purpose, detail: p.detail },
+    v.user.id,
+  );
   return ai
     ? { message: ai, source: "ai", safety }
     : { message: fallback, source: "template", safety };

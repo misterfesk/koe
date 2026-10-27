@@ -4,6 +4,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -416,6 +417,33 @@ export const safetyEvent = pgTable(
 );
 
 /**
+ * One row per call to the AI provider or the search provider. Counts and
+ * cost only: never prompts, replies or search queries. userId is null for
+ * operator-run calls such as evals; it feeds the per-user daily budget.
+ */
+export const agentRun = pgTable(
+  "agent_run",
+  {
+    id: id(),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    purpose: text("purpose").notNull(),
+    model: text("model").notNull(),
+    tokensIn: integer("tokens_in").notNull().default(0),
+    tokensOut: integer("tokens_out").notNull().default(0),
+    latencyMs: integer("latency_ms").notNull().default(0),
+    // Null when the model has no entry in the price map.
+    estCostUsd: numeric("est_cost_usd", { precision: 12, scale: 6 }),
+    ok: boolean("ok").notNull(),
+    // True when this call was the retry on the fallback model.
+    fellBack: boolean("fell_back").notNull().default(false),
+    // Tool calls the model made that were unknown or had invalid arguments.
+    toolCallsDropped: integer("tool_calls_dropped").notNull().default(0),
+    createdAt: created(),
+  },
+  (t) => [index("agent_run_user_idx").on(t.userId, t.createdAt)],
+);
+
+/**
  * Tables whose rows move from a guest to their new account. Profile is
  * handled separately because an existing account's settings win.
  */
@@ -434,4 +462,5 @@ export const movableTables = [
   reminder,
   pushSubscription,
   safetyEvent,
+  agentRun,
 ] as const;
