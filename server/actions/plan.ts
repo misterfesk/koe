@@ -5,6 +5,7 @@ import { fieldErrors, type ActionResult } from "@/domain/forms";
 import { assignTimes, breaksGuardrails, planKinds } from "@/domain/plan-menu";
 import { getUserModel, getPlanDay } from "../data/intake";
 import {
+  keepDraft,
   saveCheckIn,
   setVsExpected,
   undoLastChange,
@@ -57,6 +58,16 @@ export async function submitCheckIn(input: {
   );
   refresh();
   return { ok: true, safety, changed: result.changed, note: result.note };
+}
+
+/** "Keep it" on a day's draft: the plan stays as written and the draft banner goes. */
+export async function keepTodaysPlan(): Promise<ActionResult> {
+  const v = await requireViewer();
+  const r = await keepDraft(v.db, v.user.id, v.today);
+  refresh();
+  return r.ok
+    ? { ok: true }
+    : { ok: false, errors: { form: "That plan has already changed." } };
 }
 
 /** "This is too much today": a lighter day. */

@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { PageHeading } from "@/components/ui";
 import { IntakeFlow } from "@/features/intake/intake-flow";
 import { SafetyCheck } from "@/features/safety/safety-check";
+import { uses12Hour } from "@/domain/time";
 import { hasIntro } from "@/server/data/intake";
 import { env } from "@/server/env";
 import { pushConfigured } from "@/server/push";
@@ -17,7 +19,9 @@ export default async function Page() {
   if (v.profile.coachingPausedAt)
     return (
       <>
-        <PageHeading eyebrow="Welcome">Let&apos;s get to know you</PageHeading>
+        <PageHeading eyebrow="Welcome">
+          Five questions so Koe can plan your day
+        </PageHeading>
         <SafetyCheck region={v.profile.region} />
       </>
     );
@@ -25,6 +29,7 @@ export default async function Page() {
     <IntakeFlow
       region={v.profile.region}
       publicKey={pushConfigured() ? (env().VAPID_PUBLIC_KEY ?? "stub") : null}
+      hour12={uses12Hour((await headers()).get("accept-language"))}
     />
   );
 }

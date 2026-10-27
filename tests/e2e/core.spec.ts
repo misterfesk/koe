@@ -32,7 +32,10 @@ test("a new visitor starts in the welcome dialog, then skips the intake", async 
   await dialog.getByRole("button", { name: "Start", exact: true }).click();
   await expect(page).toHaveURL(/\/intake$/);
   await expect(
-    page.getByRole("heading", { level: 1, name: "Let's get to know you" }),
+    page.getByRole("heading", {
+      level: 1,
+      name: "Five questions so Koe can plan your day",
+    }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Skip for now" }).click();
   await expect(page).toHaveURL(/\/today$/);

@@ -18,6 +18,7 @@ import {
 } from "@/domain/plan-menu";
 import type { RiskLevel } from "@/domain/safety";
 import { EVERY_DAY, inQuietHours } from "@/domain/reminders";
+import { localMinutes } from "@/domain/time";
 import { commitIntro, getPlanDay } from "../data/intake";
 import {
   setMorningReminder,
@@ -107,6 +108,11 @@ export async function buildReveal(
       model,
       eatingConcern: model.eatingConcern,
       source: synthesis.source,
+      reminderRules: {
+        quietStart: v.profile.quietStart,
+        quietEnd: v.profile.quietEnd,
+        nowMinute: localMinutes(v.profile.timezone),
+      },
     },
   };
 }
@@ -176,15 +182,24 @@ export async function startMyDay(input: unknown): Promise<ActionResult> {
     parsed.data.remindItems || parsed.data.morningPlanMinute !== null;
   const subs = wantsAny ? await subscriptionsFor(v.db, [v.user.id]) : [];
   const morning = parsed.data.morningPlanMinute;
-  if (subs.length && morning !== null)
+  // A reminder inside quiet hours would never arrive, so it is not saved (the
+  // reveal says so; You → Reminders shows the same). Same for an entry
+  // whose time has already passed today.
+  if (
+    subs.length &&
+    morning !== null &&
+    !inQuietHours(morning, v.profile.quietStart, v.profile.quietEnd)
+  )
     await setMorningReminder(v.db, v.user.id, morning, v.profile.timezone);
   if (parsed.data.remindItems) {
     const plan = subs.length
       ? await getPlanDay(v.db, v.user.id, v.today)
       : null;
+    const now = localMinutes(v.profile.timezone);
     for (const item of plan?.items ?? []) {
       if (
         !item.stepId ||
+        item.minuteOfDay <= now ||
         inQuietHours(item.minuteOfDay, v.profile.quietStart, v.profile.quietEnd)
       )
         continue;

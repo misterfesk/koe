@@ -1,6 +1,6 @@
 import "server-only";
 import { and, eq, gte } from "drizzle-orm";
-import type { IntakeModel } from "@/domain/intake";
+import { namableLifts, type IntakeModel } from "@/domain/intake";
 import type { PlanItem } from "@/domain/plan-menu";
 import { addDays, localDay } from "@/domain/time";
 import { db as openDefaultDb, type Db } from "../db";
@@ -46,7 +46,7 @@ export function compactModel(model: IntakeModel) {
   put("days", model.days);
   put("busiest", model.busiest);
   put("puttingOff", model.puttingOff);
-  put("lifts", model.lifts);
+  put("lifts", namableLifts(model));
   put("people", model.people);
   put(
     "names",

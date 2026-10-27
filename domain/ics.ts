@@ -12,7 +12,6 @@ export type IcsItem = {
   day: string;
   minuteOfDay: number;
   title: string;
-  why: string | null;
   size: PlanSize | null;
 };
 
@@ -68,7 +67,9 @@ export function buildCalendar(
   for (const it of items) {
     const start = zonedInstant(timeZone, it.day, it.minuteOfDay);
     const end = new Date(start.getTime() + durationMinutes(it.size) * 60_000);
-    const description = [it.why, "From Koe"].filter(Boolean).join("\n");
+    // Only "From Koe": a why line can echo what the person wrote, and calendar
+    // apps share events with other apps and lock screens.
+    const description = "From Koe";
     lines.push(
       "BEGIN:VEVENT",
       `UID:${it.id}-${it.day}@koe.local`,

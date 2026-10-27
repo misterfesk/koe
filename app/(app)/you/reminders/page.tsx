@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { Empty, PageHeading } from "@/components/ui";
 import { inQuietHours } from "@/domain/reminders";
+import { uses12Hour } from "@/domain/time";
 import {
   DeviceNotifications,
   MorningPlanReminder,
@@ -37,6 +39,8 @@ export default async function Page({
   const defaultMinute =
     chosen && chosen !== "none" ? Number(chosen.slice(0, 2)) * 60 : 8 * 60;
   const active = steps.filter((s) => s.status === "active");
+  const hour12 = uses12Hour((await headers()).get("accept-language"));
+  const morning = reminders.find((r) => r.kind === "morning_plan");
   return (
     <>
       <PageHeading
@@ -49,8 +53,16 @@ export default async function Page({
       <MorningPlanReminder
         publicKey={publicKey}
         subscribed={subs.length > 0}
-        reminder={reminders.find((r) => r.kind === "morning_plan")}
+        reminder={morning}
         defaultMinute={defaultMinute}
+        quiet={
+          !!morning &&
+          inQuietHours(
+            morning.minuteOfDay,
+            v.profile.quietStart,
+            v.profile.quietEnd,
+          )
+        }
       />
       <section aria-labelledby="for-steps" style={{ marginTop: 32 }}>
         <h2 id="for-steps">Reminders for your day</h2>
@@ -69,6 +81,7 @@ export default async function Page({
                   (r) => r.kind === "item" && r.stepId === s.id,
                 )}
                 focus={focus === s.id}
+                hour12={hour12}
                 quiet={(() => {
                   const r = reminders.find(
                     (x) => x.kind === "item" && x.stepId === s.id,

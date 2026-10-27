@@ -6,6 +6,7 @@ import {
   goalLabels,
   isEmptyModel,
   liftLabels,
+  namableLifts,
   peopleLabels,
   supportLabels,
   templateMemories,
@@ -37,7 +38,7 @@ import { formatMinutes } from "@/domain/time";
 import { completeJson } from "./nebius";
 
 /** Bump when the prompt or the reply shape changes; evals report it. */
-export const INTAKE_PROMPT_VERSION = "intake-2";
+export const INTAKE_PROMPT_VERSION = "intake-3";
 
 /** How long the person waits before Koe gives up on the model and starts simply. */
 export const INTAKE_TIMEOUT_MS = 40_000;
@@ -125,10 +126,11 @@ function answersForPrompt(model: IntakeModel) {
   put(a, "busiest time", model.busiest && busiestLabels[model.busiest]);
   put(a, "keeps putting off", model.puttingOff);
   put(a, "a few words about their day", model.notes.day);
+  // Food and exercise lifts are not sent when food or weight worry is flagged.
   put(
     a,
     "used to lift them",
-    model.lifts.map((l) => liftLabels[l]),
+    namableLifts(model).map((l) => liftLabels[l]),
   );
   put(a, "a few words about that (lifts)", model.notes.lifts);
   put(
@@ -227,9 +229,17 @@ export function vet(model: IntakeModel, raw: z.output<typeof replyShape>) {
   let items: PlanItem[] = raw.items.map((i) => ({ ...i }));
   let replaced = 0;
 
-  // Items whose words break a guardrail or trip the safety rules.
+  // Items whose words break a guardrail, trip the safety rules or, when food
+  // or weight worry is flagged, mention food or exercise (title or why line).
+  const eatingText = (item: PlanItem) =>
+    eating &&
+    (mentionsFood(item.title) ||
+      mentionsExercise(item.title) ||
+      mentionsFood(item.why) ||
+      mentionsExercise(item.why));
   items = items.map((item, i) => {
-    if (!badText(item.title) && !badText(item.why)) return item;
+    if (!badText(item.title) && !badText(item.why) && !eatingText(item))
+      return item;
     const r = replacement(items, i, pool);
     replaced++;
     return r ?? item;

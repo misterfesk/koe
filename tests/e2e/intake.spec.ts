@@ -10,7 +10,10 @@ async function startIntake(page: Page) {
   await dialog.getByRole("button", { name: "Start", exact: true }).click();
   await expect(page).toHaveURL(/\/intake$/);
   await expect(
-    page.getByRole("heading", { level: 1, name: "Let's get to know you" }),
+    page.getByRole("heading", {
+      level: 1,
+      name: "Five questions so Koe can plan your day",
+    }),
   ).toBeVisible();
 }
 
@@ -77,9 +80,21 @@ test("welcome, five questions, reveal and Start my day land on Today", async ({
   // 5. Tone and morning plan.
   await expect(heading(page, "How should Koe be with you?")).toBeVisible();
   await chip(page, "Gentle").click();
-  await chip(page, "08:00").click();
+  await chip(page, "8:00 am").click();
   await clean(page, "q5");
+  // The server actions are slowed down, so the wait screen is on screen long
+  // enough to be seen: it must show while the reveal is being made.
+  let slowed = false;
+  await page.route("**/*", async (route) => {
+    if (!slowed && route.request().headers()["next-action"]) {
+      slowed = true;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    await route.continue();
+  });
   await page.getByRole("button", { name: "Finish" }).click();
+  await expect(heading(page, "Getting to know you…")).toBeVisible();
+  await expect(page.getByText("Putting your answers together")).toBeVisible();
 
   // The reveal.
   await expect(heading(page, "Here's what I understood")).toBeVisible();
@@ -93,7 +108,7 @@ test("welcome, five questions, reveal and Start my day land on Today", async ({
     await expect(li.getByRole("heading", { level: 3 })).toBeVisible();
     await expect(li.getByText(/^Because/)).toBeVisible();
     await expect(li.locator(".eyebrow")).toHaveText(
-      /^\d\d:\d\d · (Tiny|Small)$/,
+      /^\d{1,2}:\d\d( [ap]m)? · (Tiny|Small)$/,
     );
   }
   const titles = await items
@@ -134,7 +149,7 @@ test("welcome, five questions, reveal and Start my day land on Today", async ({
 
   // Only the ticked memory was kept, with its source.
   await page.goto("/you/knows");
-  await expect(page.getByText(kept)).toBeVisible();
+  await expect(page.locator("p", { hasText: kept })).toBeVisible();
   await expect(page.getByText("From your intro")).toHaveCount(1);
 
   // Someone who has done the intro does not see it again.
@@ -227,7 +242,10 @@ test("the questions work at 320px and by keyboard", async ({ page }) => {
   await page.keyboard.press("Space");
   await expect(page.getByRole("radio", { name: "Before 7" })).toBeChecked();
   await noHorizontalScroll(page);
-  for (let n = 0; n < 4; n++) await skip(page);
+  // One button: Next once something is answered, Skip when nothing is.
+  await expect(page.getByRole("button", { name: "Skip" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Next" }).click();
+  for (let n = 0; n < 3; n++) await skip(page);
   await expect(heading(page, "Here's what I understood")).toBeVisible();
   await noHorizontalScroll(page);
   await clean(page, "reveal 320");

@@ -32,6 +32,7 @@ import {
   type Wake,
 } from "@/domain/intake";
 import type { RiskLevel } from "@/domain/safety";
+import { formatClock } from "@/domain/time";
 import { buildReveal, checkIntakeText } from "@/server/actions/intake";
 import { SafetyCheck } from "../safety/safety-check";
 import { loadDraft, saveDraft, storable } from "./draft-store";
@@ -113,6 +114,26 @@ const textsOf = (d: Draft, q: number): string[] =>
           : []
   ).filter((t) => t.trim());
 
+/** Whether anything is answered on a question (the one button reads Skip when not). */
+function hasAnswer(d: Draft, q: number): boolean {
+  if (q === 1) return d.goals.length > 0 || !!d.goalsNote.trim();
+  if (q === 2)
+    return (
+      d.wake.length + d.days.length + d.busiest.length > 0 ||
+      !!d.puttingOff.trim() ||
+      !!d.dayNote.trim()
+    );
+  if (q === 3) return d.lifts.length > 0 || !!d.liftsNote.trim();
+  if (q === 4)
+    return (
+      d.people.length > 0 ||
+      d.support.length > 0 ||
+      !!d.peopleNote.trim() ||
+      d.names.some((n) => n.name.trim())
+    );
+  return d.tone.length > 0 || d.morningPlan.length > 0;
+}
+
 /** What skipping a question, or a safety hit on it, leaves behind. */
 function cleared(d: Draft, q: number): Draft {
   if (q === 1) return { ...d, goals: [], goalsNote: "" };
@@ -166,9 +187,11 @@ const titles: Record<number, string> = {
 export function IntakeFlow({
   region,
   publicKey,
+  hour12,
 }: {
   region: string | null;
   publicKey: string | null;
+  hour12: boolean;
 }) {
   const [stage, setStage] = useState<Stage>("intro");
   const [draft, setDraft] = useState<Draft>(blank);
@@ -233,6 +256,9 @@ export function IntakeFlow({
     if (skipped) setDraft(d);
     const next: Stage = from === TOTAL ? "thinking" : ((from + 1) as Stage);
     const texts = textsOf(d, from);
+    // The wait screen shows at once. A state set inside the async transition
+    // would be held back until the action ended.
+    if (from === TOTAL) setStage("thinking");
     startTransition(async () => {
       if (texts.length) {
         const { safety }: { safety: RiskLevel } = await checkIntakeText(texts);
@@ -267,7 +293,7 @@ export function IntakeFlow({
         <header className="page-heading">
           <p className="eyebrow">Welcome</p>
           <h1 ref={heading} tabIndex={-1}>
-            Let&apos;s get to know you
+            Five questions so Koe can plan your day
           </h1>
           <p className="lede">
             Five quick questions so Koe can plan a day that fits you. Tap an
@@ -306,7 +332,12 @@ export function IntakeFlow({
 
   if (stage === "reveal" && reveal)
     return (
-      <RevealScreen reveal={reveal} region={region} publicKey={publicKey} />
+      <RevealScreen
+        reveal={reveal}
+        region={region}
+        publicKey={publicKey}
+        hour12={hour12}
+      />
     );
 
   if (typeof stage !== "number") return null;
@@ -316,7 +347,8 @@ export function IntakeFlow({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        advance(question);
+        // One button: with nothing answered it skips, otherwise it moves on.
+        advance(question, !hasAnswer(draft, question));
       }}
       noValidate
     >
@@ -502,7 +534,10 @@ export function IntakeFlow({
             hint="This only picks a time. A reminder stays off until you turn it on."
             options={morningPlans.map((m) => ({
               value: m,
-              label: m === "none" ? "Not now" : m,
+              label:
+                m === "none"
+                  ? "Not now"
+                  : formatClock(Number(m.slice(0, 2)) * 60, hour12),
             }))}
             value={draft.morningPlan}
             onChange={(v) => set("morningPlan", v)}
@@ -517,15 +552,11 @@ export function IntakeFlow({
       )}
       <div className="actions">
         <button type="submit" disabled={pending}>
-          {question === TOTAL ? "Finish" : "Next"}
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={pending}
-          onClick={() => advance(question, true)}
-        >
-          Skip
+          {!hasAnswer(draft, question)
+            ? "Skip"
+            : question === TOTAL
+              ? "Finish"
+              : "Next"}
         </button>
         <button
           type="button"

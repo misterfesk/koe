@@ -1,7 +1,12 @@
 "use client";
 import { useState, useTransition } from "react";
-import { IGNORE_LIMIT } from "@/domain/reminders";
-import { describeDays, formatMinutes, weekdayOptions } from "@/domain/time";
+import { IGNORE_LIMIT, remindsOnce } from "@/domain/reminders";
+import {
+  describeDays,
+  formatClock,
+  formatMinutes,
+  weekdayOptions,
+} from "@/domain/time";
 import {
   removeReminder,
   saveReminder,
@@ -94,11 +99,14 @@ export function MorningPlanReminder({
   subscribed,
   reminder,
   defaultMinute,
+  quiet,
 }: {
   publicKey: string | null;
   subscribed: boolean;
   reminder?: ReminderView;
   defaultMinute: number;
+  /** The reminder's time falls inside quiet hours, so it won't arrive. */
+  quiet: boolean;
 }) {
   const [time, setTime] = useState(
     formatMinutes(reminder?.minuteOfDay ?? defaultMinute),
@@ -145,6 +153,12 @@ export function MorningPlanReminder({
             : "Paused."}
         </p>
       )}
+      {quiet && reminder && !reminder.paused && (
+        <p className="error">
+          This time is inside your quiet hours, so it won&apos;t arrive. Change
+          the time or your quiet hours below.
+        </p>
+      )}
       <div className="inline-form">
         <div className="field">
           <label htmlFor="morning-time">Time</label>
@@ -180,12 +194,15 @@ export function ReminderRow({
   reminder,
   focus,
   quiet,
+  hour12,
 }: {
   step: Entry;
   reminder?: ReminderView;
   focus: boolean;
   /** The reminder's time falls inside quiet hours, so it won't arrive. */
   quiet: boolean;
+  /** Whether the person's locale writes times on a 12-hour clock. */
+  hour12: boolean;
 }) {
   const [open, setOpen] = useState(focus && !reminder);
   const [time, setTime] = useState(
@@ -206,7 +223,11 @@ export function ReminderRow({
               ? reminder.ignoredCount >= IGNORE_LIMIT
                 ? "Paused after a few went unanswered. Turn it back on any time."
                 : "Paused"
-              : `${formatMinutes(reminder.minuteOfDay)} · ${describeDays(reminder.days)}`}
+              : `${formatClock(reminder.minuteOfDay, hour12)} · ${
+                  remindsOnce("item", step.repeatDays)
+                    ? "Once"
+                    : describeDays(reminder.days)
+                }`}
           </p>
           {quiet && !reminder.paused && (
             <p className="error">

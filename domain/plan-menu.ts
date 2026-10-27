@@ -92,11 +92,11 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     pick: "When the person named a job they keep putting off or are stuck on. Morning.",
     preferred: "tiny",
     ideas:
-      "a letter, an email, a form, a call, one chore, the first step of a stuck job",
+      "a letter, an email, a form, a call, one chore, the first small part of a stuck job",
     examples: {
       tiny: [
         { title: "Open the letter or message you have been avoiding" },
-        { title: "Write down the very first step of one job" },
+        { title: "Write down the very first thing to do on one job" },
       ],
       small: [
         { title: "Spend ten minutes on the first small part of one job" },
@@ -190,11 +190,11 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "midday",
     pick: "A recurring practical block; not on the lowest energy. Midday.",
     preferred: "tiny",
-    ideas: "naming it, listing options, picking one and its first step",
+    ideas: "naming it, listing options, picking one and what to do first",
     examples: {
       tiny: [{ title: "Name the problem in one line" }],
       small: [{ title: "Write down two or three options and pick one" }],
-      medium: [{ title: "Pick one option and write its first step" }],
+      medium: [{ title: "Pick one option and write down what to do first" }],
     },
   },
   wind_down: {
@@ -293,7 +293,7 @@ export const planItemSchema = z.object({
 export const neverSuggest = [
   "weight, calories, diets, fasting, food tracking, or exercise as compensation for eating",
   'light boxes or lamps, or any claim that "sunlight treats depression"',
-  "sleep restriction, staying up late, or rigid bedtime rules",
+  "sleep restriction, staying up late, rigid bedtime rules, or bedtime reminders and alarms",
   "expressive writing, relaxation or meditation add-ons, positive self-statements or affirmations, gratitude lists, or intensive mood logging",
   "supplements, vitamins, medication, doses or alcohol",
   "work or study decisions such as quitting or what to tell an employer",
@@ -329,6 +329,10 @@ const guardrails: [string, RegExp][] = [
   [
     "sleep restriction",
     /\bsleep restriction\b|\bstay(ing)? up\b|\bsleep (less|deprivation)\b|\bcut(ting)? (down|back) on sleep\b|\b(strict|fixed|rigid) (bed ?time|sleep schedule)\b|\bgo to bed (at|by|before) \d/,
+  ],
+  [
+    "bedtime rule",
+    /\bbed ?time (reminders?|alarms?|routines?|schedules?|rules?|deadlines?|targets?)\b|\b(set|keep to|stick to|follow) (a |an |your )?(\w+ )?bed ?time\b/,
   ],
   [
     "expressive writing",
@@ -677,7 +681,7 @@ export function whyFor(kind: PlanKind, model: IntakeModel): string {
     case "task":
       return model.puttingOff
         ? "Because you said there is something you keep putting off"
-        : "Because a first step is easier than the whole job";
+        : "Because a small start is easier than the whole job";
     case "basics":
       return model.goals.includes("basics")
         ? said("basics")
@@ -703,7 +707,7 @@ export function whyFor(kind: PlanKind, model: IntakeModel): string {
     case "kind":
       return "Because a gentle word to yourself costs nothing";
     case "problem":
-      return "Because one clear next step can make a problem smaller";
+      return "Because one clear thing to do next can make a problem smaller";
     case "care":
       return "Because it helps to have someone who can help in your corner";
     case "reach_out":
@@ -790,7 +794,7 @@ export function candidatesFor(kind: PlanKind, model: IntakeModel): Candidate[] {
     return [
       {
         kind,
-        title: "Take one tiny first step on the thing you keep putting off",
+        title: "Do the first tiny part of the thing you keep putting off",
         why: whyFor(kind, model),
         size: "tiny",
       },

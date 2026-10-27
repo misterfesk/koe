@@ -479,9 +479,9 @@ export function templateNote(d: PlanDiff, ctx: NoteContext): string {
       ? "Your plan already fits a low day."
       : "Your plan already fits today.";
   const sentences = [
-    ...d.shrunk.map((x) => `Swapped "${x.from.title}" for "${x.to.title}".`),
+    ...d.shrunk.map((x) => `Made "${x.from.title}" smaller: "${x.to.title}".`),
     ...d.swapped.map((x) => `Swapped "${x.from.title}" for "${x.to.title}".`),
-    ...d.grown.map((x) => `Stepped "${x.from.title}" up to "${x.to.title}".`),
+    ...d.grown.map((x) => `Made "${x.from.title}" bigger: "${x.to.title}".`),
     ...d.removed.map((x) => `Took "${x.title}" off today.`),
     ...d.added.map((x) => `Added "${x.title}".`),
     ...d.moved.map((x) => `Moved "${x.item.title}" to a different time.`),
@@ -496,6 +496,87 @@ export function templateNote(d: PlanDiff, ctx: NoteContext): string {
     sentences.slice(0, 2).join(" ") +
     (more > 0 ? ` And ${more} more ${more === 1 ? "change" : "changes"}.` : "")
   );
+}
+
+// --- Checking a model's note ---------------------------------------------------
+
+/** Every title a change touched: what left, what arrived and what moved. */
+export function changedTitles(d: PlanDiff): string[] {
+  return [
+    ...d.shrunk.flatMap((x) => [x.from.title, x.to.title]),
+    ...d.swapped.flatMap((x) => [x.from.title, x.to.title]),
+    ...d.grown.flatMap((x) => [x.from.title, x.to.title]),
+    ...d.removed.map((x) => x.title),
+    ...d.added.map((x) => x.title),
+    ...d.moved.map((x) => x.item.title),
+  ];
+}
+
+/**
+ * Words the person never sees in Koe's own lines (UX-AND-COPY.md section 3):
+ * the old word for an entry, internal names such as "anchor", and the menu's
+ * kind names used as nouns. Titles are removed before the check, because a
+ * title may use ordinary words such as "step outside" or "enjoy".
+ */
+const noteJargon: RegExp[] = [
+  /\bstep(s|ped|ping)?\b/,
+  /\banchors?\b/,
+  /\bbasics\b/,
+  /\b(items?|entry|entries|tasks?|goals?|habits?|activity|activities)\b/,
+  /\b(enjoy|move|task|outside|problem|care|kind|work chunk|wind down|reach out|basics)( (item|entry|option|kind|slot))\b/,
+  /\b(work chunk|wind down|reach out)\b/,
+  /\b[a-z]+_[a-z]+\b/,
+];
+
+const noteStop = new Set([
+  "your",
+  "with",
+  "that",
+  "this",
+  "from",
+  "then",
+  "about",
+  "some",
+  "minute",
+  "minutes",
+  "little",
+  "short",
+  "something",
+  "one",
+]);
+const contentWords = (text: string) =>
+  normaliseTitle(text)
+    .replace(/[^a-z0-9' -]/g, " ")
+    .split(/[\s-]+/)
+    .filter((w) => w.length >= 4 && !noteStop.has(w));
+
+/** Quoted titles come out of the note, longest first, so only Koe's own words are left. */
+function withoutTitles(note: string, titles: string[]) {
+  let text = normaliseTitle(note);
+  for (const t of [...titles].sort((a, b) => b.length - a.length)) {
+    const n = normaliseTitle(t);
+    if (n) text = text.split(n).join(" ");
+  }
+  return text;
+}
+
+/**
+ * True when a model's one-line note about a change can be shown: no jargon,
+ * and (when there is a change to describe) it names something that changed.
+ * A note that fails is replaced by `templateNote`.
+ */
+export function noteIsClean(note: string, diff?: PlanDiff): boolean {
+  const titles = diff ? changedTitles(diff) : [];
+  const rest = withoutTitles(note, titles);
+  if (noteJargon.some((re) => re.test(rest))) return false;
+  if (!diff) return true;
+  const text = normaliseTitle(note);
+  return titles.some((t) => {
+    if (text.includes(normaliseTitle(t))) return true;
+    const words = contentWords(t);
+    const shared = words.filter((w) => text.includes(w));
+    return words.length > 0 && shared.length >= Math.min(2, words.length);
+  });
 }
 
 // --- Repairing a model's plan -------------------------------------------------

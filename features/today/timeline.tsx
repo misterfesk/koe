@@ -52,7 +52,12 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
   return (
     <li className={styles.card} data-reported={!!report}>
       <p className="eyebrow">
-        {entry.time ? entry.time + " · " : ""}
+        {entry.time && (
+          <>
+            <span className="clock">{entry.time}</span>
+            {" · "}
+          </>
+        )}
         {entry.kindLabel}
         {entry.repeats ? " · " + entry.repeats : ""}
       </p>
@@ -118,13 +123,16 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
         <div className={styles.sheet} role="group" aria-label="Not today">
           <p className={styles.sheetTitle}>That is fine. What would help?</p>
           <div className="actions">
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => choose("shrink")}
-            >
-              Make it smaller
-            </button>
+            {/* A tiny entry can rarely get smaller, so that option comes last. */}
+            {entry.size !== "tiny" && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => choose("shrink")}
+              >
+                Make it smaller
+              </button>
+            )}
             {entry.later.length > 0 && (
               <button
                 type="button"
@@ -138,12 +146,22 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
             )}
             <button
               type="button"
-              className="secondary"
+              className={entry.size === "tiny" ? undefined : "secondary"}
               disabled={pending}
               onClick={() => choose("swap")}
             >
               Swap for something else
             </button>
+            {entry.size === "tiny" && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={pending}
+                onClick={() => choose("shrink")}
+              >
+                Make it smaller
+              </button>
+            )}
             <button
               type="button"
               className="secondary"

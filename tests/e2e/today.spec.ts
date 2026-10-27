@@ -73,7 +73,7 @@ test("the day plan: check-in, undo, answers, not today and letting go", async ({
   await page.getByRole("button", { name: "Update my day" }).click();
   const banner = page.getByRole("region", { name: "What changed" });
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText("Lighter day: Swapped");
+  await expect(banner).toContainText("Lighter day: Made");
   await expect(banner).not.toContainText(/\b(I|we|us)\b/);
   await expect(banner.getByRole("listitem")).toHaveCount(1);
   expect(await titles(page)).not.toEqual(original);
@@ -117,7 +117,7 @@ test("the day plan: check-in, undo, answers, not today and letting go", async ({
   ).toHaveCount(0);
   await expect(
     page.getByRole("region", { name: "What changed" }),
-  ).toContainText("Swapped");
+  ).toContainText("smaller");
   await expect(page.getByText("Small", { exact: true })).toHaveCount(0);
   const afterShrink = await titles(page);
   expect(afterShrink).toHaveLength(3);

@@ -257,6 +257,102 @@ describe("what Koe knows is the person's to export, move and delete", () => {
   });
 });
 
+describe(
+  "signing in with a guest that has a morning plan reminder",
+  { timeout: 30_000 },
+  () => {
+    it("keeps the account's morning plan reminder and drops the guest's", async () => {
+      const { db, schema } = await setup();
+      const { transferOwnership } = await import("@/server/db/ownership");
+      const { setMorningReminder, listReminders } =
+        await import("@/server/data/reminders");
+      await setMorningReminder(db, "a", 9 * 60, "UTC");
+      await setMorningReminder(db, "b", 8 * 60, "UTC");
+      await expect(transferOwnership(db, "a", "b")).resolves.toBeUndefined();
+      const mine = (await listReminders(db, "b")).filter(
+        (r) => r.kind === "morning_plan",
+      );
+      expect(mine).toHaveLength(1);
+      expect(mine[0].minuteOfDay).toBe(8 * 60);
+      const left = await db
+        .select()
+        .from(schema.reminder)
+        .where(eq(schema.reminder.userId, "a"));
+      expect(left).toHaveLength(0);
+    });
+
+    it("moves the guest's morning plan reminder when the account has none", async () => {
+      const { db } = await setup();
+      const { transferOwnership } = await import("@/server/db/ownership");
+      const { setMorningReminder, listReminders } =
+        await import("@/server/data/reminders");
+      await setMorningReminder(db, "a", 9 * 60, "UTC");
+      await transferOwnership(db, "a", "b");
+      const mine = await listReminders(db, "b");
+      expect(mine.map((r) => [r.kind, r.minuteOfDay])).toEqual([
+        ["morning_plan", 9 * 60],
+      ]);
+    });
+  },
+);
+
+describe(
+  "one day never mixes plan versions from a guest and an account",
+  { timeout: 30_000 },
+  () => {
+    it("keeps all of the account's versions of a day, and none of the guest's", async () => {
+      const { db } = await setup();
+      const { transferOwnership } = await import("@/server/db/ownership");
+      const intake = await import("@/server/data/intake");
+      const { writePlanVersion } = await import("@/server/data/plan");
+      const items = fallbackPlan(intakeModel.parse(answers));
+      await commit(db, "a");
+      await commit(db, "b");
+      const edit = (n: number) =>
+        items.map((i) => ({
+          ...i,
+          title: i.title + " " + n,
+          stepId: undefined,
+        }));
+      // The account's day has versions 1 and 2; the guest's has 1, 2 and 3.
+      await writePlanVersion(db, "b", {
+        day: TODAY,
+        items: edit(2),
+        energy: null,
+        mode: "normal",
+        reason: "add",
+        note: null,
+        origin: "you",
+      });
+      await writePlanVersion(db, "a", {
+        day: TODAY,
+        items: edit(12),
+        energy: null,
+        mode: "normal",
+        reason: "add",
+        note: null,
+        origin: "you",
+      });
+      await writePlanVersion(db, "a", {
+        day: TODAY,
+        items: edit(13),
+        energy: null,
+        mode: "normal",
+        reason: "add",
+        note: null,
+        origin: "you",
+      });
+      await transferOwnership(db, "a", "b");
+      const days = (await intake.listPlanDays(db, "b")).filter(
+        (d) => d.day === TODAY,
+      );
+      expect(days.map((d) => d.version).sort()).toEqual([1, 2]);
+      expect(days.find((d) => d.version === 2)!.items[0].title).toMatch(/ 2$/);
+      expect(JSON.stringify(days)).not.toMatch(/ 1[23]"/);
+    });
+  },
+);
+
 describe("context packet", { timeout: 30_000 }, () => {
   it("is small, ordered and stable, and includes what the person approved", async () => {
     const { db } = await setup();

@@ -102,6 +102,16 @@ export const liftLabels: Record<Lift, string> = {
   shows: "Shows",
   other: "Something else",
 };
+/** Lifts that are about food or exercise: left out of what Koe says when food or weight worry is flagged. */
+export const eatingSensitiveLifts: readonly Lift[] = ["cooking", "walking"];
+
+/** The lifts Koe may name for this person: all of them unless food or weight worry is flagged. */
+export function namableLifts(model: IntakeModel): Lift[] {
+  return model.eatingConcern
+    ? model.lifts.filter((l) => !eatingSensitiveLifts.includes(l))
+    : model.lifts;
+}
+
 /** Reads after "you said ...  used to lift you". */
 export const liftPhrases: Record<Lift, string> = {
   music: "music",
@@ -295,12 +305,17 @@ export function templateSummary(model: IntakeModel): string {
     const text = day.join(", and ");
     parts.push(text.charAt(0).toUpperCase() + text.slice(1) + ".");
   }
-  const liked = model.lifts.filter((l) => l !== "other");
+  const named = namableLifts(model);
+  const liked = named.filter((l) => l !== "other");
   if (liked.length)
     parts.push(
       `${capitalise(list(liked.map((l) => liftLabels[l].toLowerCase())))} used to lift you a little.`,
     );
-  else if (model.lifts.includes("other") || model.notes.lifts)
+  else if (
+    named.includes("other") ||
+    model.notes.lifts ||
+    model.lifts.length > named.length
+  )
     parts.push("Some things used to lift you a little.");
   if (model.names.length)
     parts.push(
@@ -327,7 +342,7 @@ export type MemoryProposal = {
 /** Memory proposals made without a model: only things the person ticked. */
 export function templateMemories(model: IntakeModel): MemoryProposal[] {
   const out: MemoryProposal[] = [];
-  const liked = model.lifts.filter((l) => l !== "other");
+  const liked = namableLifts(model).filter((l) => l !== "other");
   if (liked.length)
     out.push({
       kind: "helps",
@@ -361,6 +376,11 @@ export type Reveal = {
   model: IntakeModel;
   eatingConcern: boolean;
   source: "ai" | "fallback";
+  /**
+   * What the reveal needs to say plainly which reminders would never arrive:
+   * the person's quiet hours and the local time when the reveal was made.
+   */
+  reminderRules: { quietStart: number; quietEnd: number; nowMinute: number };
 };
 
 /** The sealed JSON stored in user_model.data. */

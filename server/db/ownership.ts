@@ -5,6 +5,7 @@ import {
   movableTables,
   planDay,
   profile,
+  reminder,
   userModel,
   weeklyReview,
 } from "./schema";
@@ -63,13 +64,26 @@ export async function transferOwnership(db: Db, from: string, to: string) {
           sql`${weeklyReview.weekStart} in (select "week_start" from "weekly_review" where "user_id" = ${to})`,
         ),
       );
-    // One plan per day and version: the account's own plan wins on a clash.
+    // One plan per day: where the account already has a plan for a day, its
+    // versions win and the guest's versions of that day are dropped, so one
+    // day never mixes versions from both. Other days move over as they are.
     await tx
       .delete(planDay)
       .where(
         and(
           eq(planDay.userId, from),
-          sql`("day", "version") in (select "day", "version" from "plan_day" where "user_id" = ${to})`,
+          sql`"day" in (select "day" from "plan_day" where "user_id" = ${to})`,
+        ),
+      );
+    // One morning plan reminder per person: the account's own wins, and the
+    // guest's is dropped (the unique index would refuse the move).
+    await tx
+      .delete(reminder)
+      .where(
+        and(
+          eq(reminder.userId, from),
+          eq(reminder.kind, "morning_plan"),
+          sql`exists (select 1 from "reminder" where "user_id" = ${to} and "kind" = 'morning_plan')`,
         ),
       );
     // One model per person: the account's own wins, otherwise the guest's moves over.

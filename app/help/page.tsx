@@ -4,7 +4,7 @@ import { Help } from "@/features/help/help";
 import { helpResources } from "@/fixtures/help-resources";
 import { getViewer } from "@/server/viewer";
 
-export const metadata: Metadata = { title: "Help now" };
+export const metadata: Metadata = { title: "Help" };
 export const dynamic = "force-dynamic";
 
 export default async function Page({
@@ -22,7 +22,7 @@ export default async function Page({
   return (
     <>
       <PageHeading
-        eyebrow="Help now"
+        eyebrow="Help"
         description="Koe can't check on you, assess danger or contact anyone. These services are run by people who can."
       >
         Reach a person who can help.

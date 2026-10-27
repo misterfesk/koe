@@ -10,6 +10,7 @@ import {
   isEmptyDiff,
   laterOptions,
   nextSize,
+  noteIsClean,
   plainDay,
   repairDayPlan,
   shouldGoLighter,
@@ -357,7 +358,7 @@ describe("diffPlans", () => {
       energy: "low",
     });
     expect(note).toBe(
-      'Lighter day: Swapped "Take a ten-minute walk" for "Stretch for two minutes".',
+      'Lighter day: Made "Take a ten-minute walk" smaller: "Stretch for two minutes".',
     );
     expect(note).not.toMatch(/\b(I|we|us|together)\b/);
     expect(
@@ -366,6 +367,129 @@ describe("diffPlans", () => {
         energy: "low",
       }),
     ).toBe("Your plan already fits a low day.");
+  });
+});
+
+describe("a model's note about a change", () => {
+  const before = fiveItems();
+  const lowDay = () => {
+    const keep = before.filter((i) => i.kind === "basics");
+    return keep.map((i) => ({ ...i, size: "tiny" as const }));
+  };
+
+  it("is refused when it uses the old word, anchor or a kind name (the three live examples)", () => {
+    const diff = diffPlans(before, lowDay());
+    // 1. Low check-in: "step", "anchor" and "basics" as a noun.
+    expect(
+      noteIsClean(
+        "Lighter day: dropped the landlord email and guitar; kept the basics anchor as a tiny step.",
+        diff,
+      ),
+    ).toBe(false);
+    // 2. Re-check-in: names no title, and says "basics".
+    expect(
+      noteIsClean("Lighter day: kept basics and made it tiny.", diff),
+    ).toBe(false);
+    // 3. Swap: a kind name as a noun, and nothing from the change.
+    const swap = diffPlans(before, [
+      ...before.slice(0, 3),
+      {
+        ...before[3],
+        kind: "kind",
+        title: "Say one line to yourself that a friend would say",
+        stepId: undefined,
+      },
+      before[4],
+    ]);
+    expect(noteIsClean("You added a reach out option yourself", swap)).toBe(
+      false,
+    );
+  });
+
+  it("is accepted when it names what changed in plain words", () => {
+    const diff = diffPlans(before, lowDay());
+    expect(
+      noteIsClean(
+        'Lighter day: took "Take a ten-minute walk" and "Send Sam a short hello" off today.',
+        diff,
+      ),
+    ).toBe(true);
+    // A title may use ordinary words such as "step outside" or "enjoy".
+    const outside = diffPlans(before, [
+      { ...before[0] },
+      {
+        ...before[1],
+        title: "Step outside for two minutes",
+        size: "tiny",
+        stepId: undefined,
+      },
+      ...before.slice(2),
+    ]);
+    expect(
+      noteIsClean(
+        'Swapped "Take a ten-minute walk" for "Step outside for two minutes".',
+        outside,
+      ),
+    ).toBe(true);
+    // Without a diff (a day's first plan) only the jargon check applies.
+    expect(noteIsClean("Today starts small.")).toBe(true);
+    expect(noteIsClean("Today starts with one tiny step.")).toBe(false);
+  });
+
+  it("is not accepted when it names nothing that changed", () => {
+    const diff = diffPlans(before, lowDay());
+    expect(noteIsClean("Lighter day: fewer things, all tiny.", diff)).toBe(
+      false,
+    );
+  });
+
+  it("the template note uses plain words for smaller and bigger", () => {
+    const smaller = before.map((i, n) =>
+      n === 1
+        ? {
+            ...i,
+            stepId: undefined,
+            size: "tiny" as const,
+            title: "Stretch for two minutes",
+          }
+        : i,
+    );
+    const note = templateNote(diffPlans(before, smaller), {
+      reason: "not_today_shrink",
+    });
+    expect(note).toBe(
+      'Made "Take a ten-minute walk" smaller: "Stretch for two minutes".',
+    );
+    expect(noteIsClean(note, diffPlans(before, smaller))).toBe(true);
+    const bigger = before.map((i, n) =>
+      n === 0
+        ? {
+            ...i,
+            stepId: undefined,
+            size: "medium" as const,
+            title: "Shower and put one load of washing on",
+          }
+        : i,
+    );
+    const up = templateNote(diffPlans(before, bigger), {
+      reason: "check_in",
+      energy: "more",
+    });
+    expect(up).toMatch(/^Made ".*" bigger: /);
+    expect(up).not.toMatch(/step/i);
+  });
+});
+
+describe("the anchor on a low day", () => {
+  const base = fiveItems();
+  it("counts an enjoy item on its own, so nothing is forced back", () => {
+    const enjoyOnly = base.filter((i) => i.kind === "enjoy");
+    const out = keepAnchor(enjoyOnly, base, new Set(), model);
+    expect(out).toEqual(enjoyOnly);
+  });
+  it("counts the basics on their own, and leaves the day as the model made it", () => {
+    const basicsOnly = base.filter((i) => i.kind === "basics");
+    expect(keepAnchor(basicsOnly, base, new Set(), model)).toEqual(basicsOnly);
   });
 });
 

@@ -20,7 +20,6 @@ export async function GET(
         day: s.plannedFor ?? v.today,
         minuteOfDay: s.minuteOfDay,
         title: s.title,
-        why: s.why,
         size: s.size,
       },
     ],

@@ -114,24 +114,27 @@ describe("the planner with a model", { timeout: 60_000 }, () => {
   it("uses a good reply, once, on the planner purpose with the big model", async () => {
     current = await setup();
     const { plan } = current;
+    const longer = plan.items.find((i) => i.size === "small")!;
+    const note = `Lighter day: swapped "${longer.title}" for "Open the document you need for work".`;
     fake.impl = async () =>
-      reply(plan, (i) =>
-        i.size === "small"
-          ? {
-              ...i,
-              keepId: null,
-              size: "tiny",
-              title: "Open the document you need for work",
-            }
-          : i,
+      reply(
+        plan,
+        (i) =>
+          i.size === "small"
+            ? {
+                ...i,
+                keepId: null,
+                size: "tiny",
+                title: "Open the document you need for work",
+              }
+            : i,
+        note,
       );
     const r = await run();
     expect(r.source).toBe("ai");
     expect(r.changed).toBe(true);
     expect(r.replaced).toBe(0);
-    expect(r.note).toBe(
-      "Lighter day: swapped the longer ones for shorter ones.",
-    );
+    expect(r.note).toBe(note);
     expect(fake.calls).toHaveLength(1);
     const [messages, , options] = fake.calls[0];
     expect(options).toMatchObject({ purpose: "planner", userId: "a" });
@@ -226,7 +229,7 @@ describe("the planner with a model", { timeout: 60_000 }, () => {
     const r = await run();
     expect(r.source).toBe("rules");
     expect(r.changed).toBe(true);
-    expect(r.note).toMatch(/^Lighter day: Swapped /);
+    expect(r.note).toMatch(/^Lighter day: Made ".*" smaller: "/);
   });
 
   it("makes one item smaller with the fast model, and falls back when it breaks a rule", async () => {
@@ -271,6 +274,100 @@ describe("the planner with a model", { timeout: 60_000 }, () => {
     expect(r2.changed).toBe(true);
   });
 
+  it("falls back to the template note when the model's note uses jargon", async () => {
+    current = await setup();
+    const { plan } = current;
+    fake.impl = async () =>
+      reply(
+        plan,
+        (i) =>
+          i.size === "small"
+            ? {
+                ...i,
+                keepId: null,
+                size: "tiny",
+                title: "Open the document you need for work",
+              }
+            : i,
+        "Lighter day: dropped the landlord email and guitar; kept the basics anchor as a tiny step.",
+      );
+    const r = await run();
+    expect(r.changed).toBe(true);
+    expect(r.note).toMatch(/^Lighter day: /);
+    expect(r.note).not.toMatch(/step|anchor|basics/i);
+    expect(r.note).toContain("Open the document you need for work");
+  });
+
+  it("with memory off, the planner sends kind, size and time only, never titles or why lines", async () => {
+    current = await setup();
+    const { db, plan } = current;
+    const { profile } = await import("@/server/db/schema");
+    const { eq } = await import("drizzle-orm");
+    await db
+      .update(profile)
+      .set({ memoryOn: false })
+      .where(eq(profile.userId, "a"));
+    fake.impl = async () =>
+      reply(plan, (i) =>
+        i.size === "small"
+          ? {
+              ...i,
+              keepId: null,
+              size: "tiny",
+              title: "Open the document you need for work",
+            }
+          : i,
+      );
+    await run();
+    const sent = fake.calls[0][0][1].content;
+    for (const i of plan.items) {
+      expect(sent).not.toContain(i.title);
+      expect(sent).not.toContain(i.why);
+    }
+    const user = JSON.parse(sent);
+    expect(user.plan).toHaveLength(3);
+    for (const p of user.plan) {
+      expect(Object.keys(p).sort()).toEqual([
+        "id",
+        "kind",
+        "minuteOfDay",
+        "size",
+        "state",
+      ]);
+    }
+    expect(user.about).toBeUndefined();
+    expect(user.summary).toBeUndefined();
+
+    // A swap or a shrink of one item sends no titles either.
+    fake.calls = [];
+    const { planToday } = await import("@/server/llm/planner");
+    fake.impl = async () => ({
+      note: "Swapped.",
+      kind: plan.items[0].kind,
+      title: "Open the window for a minute",
+      why: "Because you want a small start",
+      size: "tiny",
+    });
+    await planToday(
+      "a",
+      { reason: "not_today_swap", itemId: plan.items[0].stepId },
+      { db, today: TODAY },
+    );
+    const one = fake.calls[0][0][1].content;
+    for (const i of plan.items) {
+      expect(one).not.toContain(i.title);
+      expect(one).not.toContain(i.why);
+    }
+  });
+
+  it("with memory on, the same input does carry the titles", async () => {
+    current = await setup();
+    const { plan } = current;
+    fake.impl = async () => reply(plan, (i) => i);
+    await run();
+    expect(fake.calls[0][0][1].content).toContain(plan.items[0].title);
+  });
+
   it("plans a later day with the model and checks it like the first", async () => {
     // Yesterday's plan exists, so today is not the first day.
     current = await setup("2026-10-26");
@@ -311,5 +408,84 @@ describe("the planner with a model", { timeout: 60_000 }, () => {
     );
     expect(fake.calls).toHaveLength(1);
     expect(isMenuExample(plan.items[0].title)).toBe(false);
+  });
+
+  it("a model-made plan on day 2 is a draft: Keep it stores the choice, Start simpler is versioned and can be undone", async () => {
+    current = await setup("2026-10-26");
+    const { openToday, planToday } = await import("@/server/llm/planner");
+    const { keepDraft, undoLastChange } = await import("@/server/data/plan");
+    const { getPlanDay } = await import("@/server/data/intake");
+    const dayPlan = {
+      note: "Today starts small.",
+      items: [
+        {
+          keepId: null,
+          kind: "basics",
+          title: "Wash your face and open the curtains",
+          why: "Because you said energy would help most",
+          size: "tiny",
+          minuteOfDay: 8 * 60,
+        },
+        {
+          keepId: null,
+          kind: "work_chunk",
+          title: "Open the report you need for work",
+          why: "Because you said work would help most",
+          size: "small",
+          minuteOfDay: 13 * 60,
+        },
+        {
+          keepId: null,
+          kind: "enjoy",
+          title: "Play one record you used to like",
+          why: "Because you said music used to lift you",
+          size: "tiny",
+          minuteOfDay: 19 * 60,
+        },
+      ],
+    };
+    fake.impl = async () => dayPlan;
+    const plan = await openToday("a", { db: current.db, today: TODAY });
+    expect(plan.version).toBe(1);
+    expect(plan.reason).toBe("draft");
+
+    // Start simpler: the lighter-day action writes version 2 ...
+    fake.impl = async () => ({ note: "x", items: [] });
+    const simpler = await planToday(
+      "a",
+      { reason: "lighter" },
+      { db: current.db, today: TODAY },
+    );
+    expect(simpler.changed).toBe(true);
+    expect(simpler.version).toBe(2);
+    expect((await getPlanDay(current.db, "a", TODAY))!.mode).toBe("lighter");
+    // ... and undo brings the draft back, still a draft.
+    expect((await undoLastChange(current.db, "a", TODAY)).ok).toBe(true);
+    const back = (await getPlanDay(current.db, "a", TODAY))!;
+    expect(back.version).toBe(1);
+    expect(back.reason).toBe("draft");
+
+    // Keep it: stored, so the banner stays away after a reload.
+    expect((await keepDraft(current.db, "a", TODAY)).ok).toBe(true);
+    expect((await getPlanDay(current.db, "a", TODAY))!.reason).toBe(
+      "draft_kept",
+    );
+    expect((await keepDraft(current.db, "a", TODAY)).ok).toBe(false);
+  });
+
+  it("day 1 and a rules-made day 2 are not drafts", async () => {
+    current = await setup("2026-10-26");
+    const { openToday } = await import("@/server/llm/planner");
+    const { getPlanDay } = await import("@/server/data/intake");
+    // Day 1 (the intro) is written as "intro".
+    expect((await getPlanDay(current.db, "a", "2026-10-26"))!.reason).toBe(
+      "intro",
+    );
+    // The model fails, so the rules make day 2.
+    fake.impl = async () => {
+      throw new Error("down");
+    };
+    const plan = await openToday("a", { db: current.db, today: TODAY });
+    expect(plan.reason).toBe("first_open");
   });
 });

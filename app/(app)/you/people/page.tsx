@@ -33,7 +33,7 @@ export default async function Page() {
         </Link>
         <Link className={stepStyles.start} href="/help">
           <strong>Need someone now?</strong>
-          <span>Help now lists people you can reach in your region.</span>
+          <span>Help lists people you can reach in your region.</span>
         </Link>
       </div>
       <People people={people} />

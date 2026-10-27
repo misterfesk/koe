@@ -208,7 +208,7 @@ describe("changes and undo", { timeout: 60_000 }, () => {
     expect(r.changed).toBe(true);
     expect(r.source).toBe("rules");
     expect(r.version).toBe(2);
-    expect(r.note).toMatch(/^Lighter day: Swapped /);
+    expect(r.note).toMatch(/^Lighter day: Made ".*" smaller: "/);
     expect(r.note).not.toMatch(/\b(I|we|us|together)\b/i);
 
     const after = await titles(db);

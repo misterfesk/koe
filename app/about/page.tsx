@@ -24,17 +24,16 @@ export default function Page() {
           actually went.
         </p>
         <p>
-          Koe is built around that: one small step, an &ldquo;after lunch,
-          I&apos;ll…&rdquo; plan, a tap to say how it went, and a record that
-          shows you what tends to help. Talk, problem solving and the weekly
-          look-back all lead back to it.
+          Koe is built around that. It plans a short day from what you tell it.
+          You tap to say how each thing went. The plan follows your energy, and
+          the look-back shows you what tends to help.
         </p>
         <h2>What Koe isn&apos;t</h2>
         <p>
           Koe is an AI tool, not a therapist, doctor or crisis service. It
           can&apos;t diagnose or treat anything, can make mistakes, and
           can&apos;t check on you or contact anyone. If you might be in danger,
-          use <Link href="/help">Help now</Link>.
+          use <Link href="/help">Help</Link>.
         </p>
         <p>
           Self-help like this works for some people and not others, and no one
@@ -45,7 +44,7 @@ export default function Page() {
         <h2>No tricks</h2>
         <p>
           No streaks, points or guilt. Koe doesn&apos;t try to keep you in the
-          app: a short visit that ends in one small step is the point.
+          app: a short visit that ends in one small thing done is the point.
         </p>
       </div>
     </>

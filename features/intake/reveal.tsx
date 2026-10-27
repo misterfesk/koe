@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Field } from "@/components/ui";
+import { Field, GrowingText } from "@/components/ui";
 import type { Reveal } from "@/domain/intake";
 import { alternativeFor, sizeLabels, type PlanItem } from "@/domain/plan-menu";
-import { formatMinutes } from "@/domain/time";
+import { inQuietHours } from "@/domain/reminders";
+import { formatClock } from "@/domain/time";
 import { startMyDay } from "@/server/actions/intake";
 import { enableNotifications } from "../reminders/notifications";
 import { SafetyCheck } from "../safety/safety-check";
@@ -21,11 +22,15 @@ export function RevealScreen({
   reveal,
   region,
   publicKey,
+  hour12,
 }: {
   reveal: Reveal;
   region: string | null;
   publicKey: string | null;
+  /** Whether the person's locale writes times on a 12-hour clock. */
+  hour12: boolean;
 }) {
+  const clock = (m: number) => formatClock(m, hour12);
   const [summary, setSummary] = useState(reveal.summary);
   const [cards, setCards] = useState<Card[]>(
     reveal.memories.map((m) => ({ ...m, keep: true })),
@@ -51,6 +56,18 @@ export function RevealScreen({
   const morning = reveal.model.morningPlan;
   const morningMinute =
     morning && morning !== "none" ? Number(morning.slice(0, 2)) * 60 : null;
+  // A reminder inside quiet hours, or for a time that has passed today, would
+  // never arrive. The reveal says so instead of offering it.
+  const { quietStart, quietEnd, nowMinute } = reveal.reminderRules;
+  const morningQuiet =
+    morningMinute !== null && inQuietHours(morningMinute, quietStart, quietEnd);
+  const noReminder = items.flatMap((it) =>
+    inQuietHours(it.minuteOfDay, quietStart, quietEnd)
+      ? [{ title: it.title, why: "it is inside your quiet hours" }]
+      : it.minuteOfDay <= nowMinute
+        ? [{ title: it.title, why: "its time has passed today" }]
+        : [],
+  );
   const toggleMorning = (on: boolean) =>
     startTransition(async () => {
       setRemindError("");
@@ -134,6 +151,7 @@ export function RevealScreen({
         value={summary}
         onChange={setSummary}
         multiline
+        grow
         maxLength={400}
       />
 
@@ -174,15 +192,13 @@ export function RevealScreen({
                   <span>Remember this</span>
                 </label>
                 <div className="field">
-                  <input
+                  <GrowingText
                     aria-label={`Memory ${i + 1}`}
                     value={c.text}
                     maxLength={120}
-                    onChange={(e) =>
+                    onChange={(text) =>
                       setCards(
-                        cards.map((x, j) =>
-                          j === i ? { ...x, text: e.target.value } : x,
-                        ),
+                        cards.map((x, j) => (j === i ? { ...x, text } : x)),
                       )
                     }
                   />
@@ -226,7 +242,8 @@ export function RevealScreen({
           {items.map((it, i) => (
             <li key={`${it.kind}-${it.title}`} className={styles.item}>
               <p className="eyebrow">
-                {formatMinutes(it.minuteOfDay)} · {sizeLabels[it.size]}
+                <span className="clock">{clock(it.minuteOfDay)}</span> ·{" "}
+                {sizeLabels[it.size]}
               </p>
               <h3>{it.title}</h3>
               <p className="meta">{it.why}</p>
@@ -266,17 +283,26 @@ export function RevealScreen({
             Both are off until you turn them on, and are saved when you start
             your day. A reminder shows only the time, never what it is.
           </p>
-          {morningMinute !== null && (
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={morningOn}
-                disabled={pending}
-                onChange={(e) => toggleMorning(e.target.checked)}
-              />
-              <span>Remind me at {morning} when my day is ready</span>
-            </label>
-          )}
+          {morningMinute !== null &&
+            (morningQuiet ? (
+              <p className="meta" role="note">
+                {clock(morningMinute)} is inside your quiet hours, so a morning
+                plan reminder would never arrive. Pick another time, or change
+                your quiet hours, in You → Reminders once you have started.
+              </p>
+            ) : (
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={morningOn}
+                  disabled={pending}
+                  onChange={(e) => toggleMorning(e.target.checked)}
+                />
+                <span>
+                  Remind me at {clock(morningMinute)} when my day is ready
+                </span>
+              </label>
+            ))}
           <label className="toggle">
             <input
               type="checkbox"
@@ -286,6 +312,12 @@ export function RevealScreen({
             />
             <span>Remind me at the time of each thing in my plan</span>
           </label>
+          {itemsOn && noReminder.length > 0 && (
+            <p className="meta" role="status">
+              No reminder for{" "}
+              {noReminder.map((r) => `${r.title} (${r.why})`).join(", ")}.
+            </p>
+          )}
           {remindError && (
             <p className="error" role="alert">
               {remindError}

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionLink, Notice } from "@/components/ui";
 import { Welcome } from "@/features/onboarding/welcome";
@@ -20,14 +19,14 @@ export default async function Page({
         <div>
           <p className="eyebrow">For adults having a hard time</p>
           <h1>
-            A small step.
+            Small things.
             <br />
             At your pace.
           </h1>
           <p className="lede">
             When your mood is low, doing a little of what matters can help. Koe
-            helps you pick one small step, plan when you&apos;ll do it, and see
-            what actually helps over time.
+            plans a gentle day around you, makes it lighter when your energy
+            drops, and shows what actually helps over time.
           </p>
           <div className="actions">
             <Welcome autoOpen={!deleted}>
@@ -52,11 +51,11 @@ export default async function Page({
       <section className={styles.principles} aria-label="How Koe works">
         <div>
           <p className="eyebrow">01 / Choose</p>
-          <h2>One small step.</h2>
+          <h2>One gentle day.</h2>
           <p>
-            Pick something ordinary you used to enjoy or need to do. Make it
-            small enough to start, and decide when: &ldquo;After lunch,
-            I&apos;ll…&rdquo;
+            Answer five questions. Koe plans a few ordinary things you used to
+            enjoy or need to do, small enough to start. You can change any of
+            them.
           </p>
         </div>
         <div>
@@ -76,11 +75,6 @@ export default async function Page({
           </p>
         </div>
       </section>
-      <p className="meta">
-        Koe is an AI tool, not a therapist, and it can&apos;t respond to
-        emergencies. If you might act on thoughts of harming yourself,{" "}
-        <Link href="/help">get help now</Link>.
-      </p>
     </>
   );
 }

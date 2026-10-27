@@ -49,12 +49,50 @@ export function Notice({ children, id }: { children: ReactNode; id?: string }) {
     </p>
   );
 }
+/** Keeps a textarea as tall as its text, so nothing is hidden behind a scroll. */
+export function useAutoHeight(value: string) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + 2 + "px";
+  }, [value]);
+  return ref;
+}
+
+/** A textarea that grows with its text. Line breaks are not allowed (one short sentence). */
+export function GrowingText({
+  value,
+  onChange,
+  ...rest
+}: {
+  value: string;
+  onChange: (s: string) => void;
+  id?: string;
+  "aria-label"?: string;
+  maxLength?: number;
+}) {
+  const ref = useAutoHeight(value);
+  return (
+    <textarea
+      {...rest}
+      ref={ref}
+      rows={1}
+      value={value}
+      style={{ overflow: "hidden", resize: "none" }}
+      onChange={(e) => onChange(e.target.value.replace(/\s*\n\s*/g, " "))}
+    />
+  );
+}
+
 export function Field({
   label,
   value,
   onChange,
   error,
   multiline = false,
+  grow = false,
   maxLength = 3000,
   hint,
 }: {
@@ -63,10 +101,13 @@ export function Field({
   onChange: (s: string) => void;
   error?: string;
   multiline?: boolean;
+  /** A multiline field that grows with its text instead of scrolling. */
+  grow?: boolean;
   maxLength?: number;
   hint?: string;
 }) {
   const id = useId();
+  const autoRef = useAutoHeight(value);
   const props = {
     id,
     value,
@@ -84,7 +125,20 @@ export function Field({
           {hint}
         </p>
       )}
-      {multiline ? <textarea {...props} rows={4} /> : <input {...props} />}{" "}
+      {multiline ? (
+        grow ? (
+          <textarea
+            {...props}
+            ref={autoRef}
+            rows={3}
+            style={{ overflow: "hidden", resize: "none" }}
+          />
+        ) : (
+          <textarea {...props} rows={4} />
+        )
+      ) : (
+        <input {...props} />
+      )}{" "}
       {error && (
         <p id={id + "-error"} className="error" role="alert">
           {error}

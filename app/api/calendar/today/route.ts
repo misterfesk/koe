@@ -22,7 +22,6 @@ export async function GET() {
         day: v.today,
         minuteOfDay: s.minuteOfDay,
         title: s.title,
-        why: s.why,
         size: s.size,
       },
     ];

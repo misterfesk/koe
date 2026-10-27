@@ -10,6 +10,7 @@ import { helpResources } from "@/fixtures/help-resources";
 import { auth } from "../auth";
 import { memoryKinds, tones, user } from "../db/schema";
 import { addMemory, deleteMemory, updateMemory } from "../data/memory";
+import { saveSummary } from "../data/intake";
 import { updateProfile } from "../data/profile";
 import {
   deleteMorningReminder,
@@ -105,6 +106,27 @@ export async function saveMemory(
     await updateMemory(v.db, v.user.id, id.parse(input.id), parsed.data);
   else await addMemory(v.db, v.user.id, { ...parsed.data, source: "you" });
   const safety = await screen(v.db, v.user.id, "memory", [parsed.data.text]);
+  refresh();
+  return { ok: true, safety };
+}
+
+const summaryInput = z
+  .string()
+  .trim()
+  .min(1, "Write a few words, or leave it as it is.")
+  .max(400, "Use 400 characters or fewer.");
+
+/** The summary from the intro, edited in What Koe knows. */
+export async function editSummary(
+  input: string,
+): Promise<{ ok: boolean; error?: string; safety?: RiskLevel }> {
+  const v = await requireViewer();
+  const parsed = summaryInput.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0].message };
+  const saved = await saveSummary(v.db, v.user.id, parsed.data);
+  if (!saved) return { ok: false, error: "There is no summary to change yet." };
+  const safety = await screen(v.db, v.user.id, "memory", [parsed.data]);
   refresh();
   return { ok: true, safety };
 }

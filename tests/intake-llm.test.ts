@@ -271,6 +271,55 @@ describe("synthesiseIntake", () => {
     expect(system).toMatch(/worry about food or weight/);
   });
 
+  it("replaces a why line that names cooking or walking when an eating concern is flagged", async () => {
+    // The review's input: food and weight worry, with cooking and walking ticked.
+    const m = model({
+      eatingConcern: true,
+      goals: ["energy"],
+      lifts: ["cooking", "walking"],
+    });
+    completeJson.mockResolvedValue({
+      summary: "You want more energy. Cooking and walking used to lift you.",
+      memories: [
+        { kind: "helps", text: "Cooking and walking used to lift you." },
+      ],
+      items: [
+        {
+          kind: "basics",
+          title: "Drink a glass of water",
+          why: "Because you said energy would help most",
+          size: "tiny",
+          minuteOfDay: 8 * 60,
+        },
+        {
+          kind: "enjoy",
+          title: "Spend two minutes on something you used to enjoy",
+          why: "Because cooking and walking used to lift you",
+          size: "tiny",
+          minuteOfDay: 13 * 60,
+        },
+        {
+          kind: "wind_down",
+          title: "Dim the lights and put your phone down for a few minutes",
+          why: "Because a quiet end to the day is a gentle place to stop",
+          size: "tiny",
+          minuteOfDay: 19 * 60,
+        },
+      ],
+    });
+    const r = await run(m);
+    expect(r.source).toBe("ai");
+    expect(r.replaced).toBeGreaterThanOrEqual(1);
+    for (const i of r.items)
+      expect(i.title + " " + i.why).not.toMatch(/cook|walk/i);
+    expect(r.summary).not.toMatch(/cook|walk/i);
+    expect(r.memories.map((x) => x.text).join(" ")).not.toMatch(/cook|walk/i);
+    expect(checkComposition(r.items, contextFor(m))).toEqual([]);
+    // The answers sent to the model leave the two lifts out as well.
+    const user = JSON.parse(completeJson.mock.calls[0][0][1].content);
+    expect(JSON.stringify(user)).not.toMatch(/Cooking|Walking/);
+  });
+
   it("falls back to the rules-based plan when the model is unavailable", async () => {
     // Rejects when called, not when set up, so nothing is left unhandled.
     completeJson.mockImplementation(() =>

@@ -16,11 +16,11 @@ export default function Page() {
       <div className="prose">
         <h2>What Koe stores</h2>
         <p>
-          Your steps, reports, notes, conversations, memory cards, people and
-          reminders are stored on Koe&apos;s server so they&apos;re there next
-          time. Everything you write is encrypted in the database. That protects
-          it if someone gets a copy of the database. Koe&apos;s server can still
-          decrypt it, to show it to you and to use AI features.
+          Your day plans, answers, notes, conversations, memory cards, people
+          and reminders are stored on Koe&apos;s server so they&apos;re there
+          next time. Everything you write is encrypted in the database. That
+          protects it if someone gets a copy of the database. Koe&apos;s server
+          can still decrypt it, to show it to you and to use AI features.
         </p>
         <p>
           If you have an account, Koe stores your email address and a hashed
@@ -31,18 +31,47 @@ export default function Page() {
         </p>
         <h2>What goes to the AI provider</h2>
         <p>
-          AI features use Nebius Token Factory. When you talk with Koe, ask for
-          a smaller version, ask for ideas or draft a message, the text needed
-          for that is sent to Nebius to write the reply. In Talk that includes
-          the conversation and, if memory is on, your memory cards, recent steps
-          and today&apos;s energy check-in. With memory off, only the
-          conversation is sent.
+          AI features use Nebius Token Factory. The text needed for each one is
+          sent to Nebius to write the reply:
         </p>
+        <ul>
+          <li>
+            <strong>Your first questions.</strong> The answers you tick and the
+            words you type go to Nebius once, to write your summary and first
+            day. If food or weight worry shows up in your words, the words are
+            not kept.
+          </li>
+          <li>
+            <strong>Planning your day.</strong> When Koe plans a day, changes it
+            after a check-in, or makes something smaller or swaps it, Nebius
+            receives your day plan. With memory on, that includes the titles and
+            why lines, plus your answers, summary and memory cards. With memory
+            off, it receives only the kind, size and time of each entry, never
+            the titles or why lines.
+          </li>
+          <li>
+            <strong>The check-in word.</strong> If you add one word when you
+            check in, and today&apos;s energy is low or more, that word is sent
+            with the planning request. A word that trips the safety check is not
+            sent. With memory off, the word is still sent, because you typed it
+            for that day.
+          </li>
+          <li>
+            <strong>Talk.</strong> The conversation goes to Nebius. With memory
+            on, your memory cards, recent entries from your day and today&apos;s
+            energy check-in go too. With memory off, only the conversation is
+            sent.
+          </li>
+          <li>
+            <strong>Drafts and ideas.</strong> When you ask Koe for ideas or a
+            draft message, the text needed for that is sent.
+          </li>
+        </ul>
         <p>
           <strong>Not yet confirmed:</strong> how long Nebius keeps this text
           and whether it&apos;s used for anything else. Until that&apos;s
           checked, don&apos;t share anything you wouldn&apos;t want stored by a
-          third party. Your steps, notes and Help work without the AI.
+          third party. Your day, notes and Help work without the AI.
         </p>
         <h2>Safety checks</h2>
         <p>

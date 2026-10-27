@@ -87,6 +87,37 @@ describe("the menu", () => {
   });
 });
 
+describe("bedtime and the glossary", () => {
+  it("treats a bedtime reminder as a bedtime rule, and a gentle wind-down as fine", () => {
+    expect(breaksGuardrails("Set a simple bedtime reminder for tonight")).toBe(
+      true,
+    );
+    expect(guardrailHits("Set a bedtime alarm")).toContain("bedtime rule");
+    expect(
+      breaksGuardrails(
+        "Dim the lights and put your phone down for a few minutes",
+      ),
+    ).toBe(false);
+    expect(
+      breaksGuardrails("Spend ten minutes on something quiet before bed"),
+    ).toBe(false);
+  });
+
+  it("keeps the old noun out of the rules-based copy", () => {
+    const texts: string[] = [];
+    for (const kind of planKinds)
+      for (const size of planSizes)
+        texts.push(...planMenu[kind].examples[size].map((e) => e.title));
+    for (const m of [model({ puttingOff: "my taxes" }), model()])
+      for (const kind of planKinds)
+        for (const c of candidatesFor(kind, m)) texts.push(c.title, c.why);
+    // "Step outside" is a verb, so only the noun use is checked.
+    const noun =
+      /(^|[^a-z])(a|the|first|next|one|small|tiny) steps?([^a-z]|$)/i;
+    for (const t of texts) expect(t).not.toMatch(noun);
+  });
+});
+
 describe("breaksGuardrails", () => {
   const hits = [
     "Weigh yourself each morning",
@@ -607,6 +638,23 @@ describe("fallbackPlan", () => {
 });
 
 describe("template summary and memories", () => {
+  it("leaves cooking and walking out when food or weight worry is flagged", () => {
+    const m = model({ eatingConcern: true, lifts: ["cooking", "walking"] });
+    expect(templateSummary(m)).not.toMatch(/cook|walk/i);
+    expect(templateSummary(m)).toMatch(/Some things used to lift you/);
+    expect(
+      templateMemories(m)
+        .map((x) => x.text)
+        .join(" "),
+    ).not.toMatch(/cook|walk/i);
+    const mixed = model({ eatingConcern: true, lifts: ["cooking", "music"] });
+    expect(templateSummary(mixed)).toMatch(/Music used to lift you/);
+    expect(templateSummary(mixed)).not.toMatch(/cook/i);
+    expect(templateSummary(model({ lifts: ["cooking", "walking"] }))).toMatch(
+      /Cooking and walking used to lift you/,
+    );
+  });
+
   it("speaks to the person and never as we", () => {
     const m = model({
       goals: ["sleep", "energy"],

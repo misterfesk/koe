@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PageHeading } from "@/components/ui";
-import { MemoryCards } from "@/features/settings/memory";
+import { MemoryCards, SummaryCard } from "@/features/settings/memory";
+import { getUserModel } from "@/server/data/intake";
 import { listMemory } from "@/server/data/memory";
 import { requireViewer } from "@/server/viewer";
 
@@ -8,7 +9,10 @@ export const metadata: Metadata = { title: "What Koe knows" };
 
 export default async function Page() {
   const v = await requireViewer();
-  const cards = await listMemory(v.db, v.user.id);
+  const [cards, model] = await Promise.all([
+    listMemory(v.db, v.user.id),
+    v.profile.memoryOn ? getUserModel(v.db, v.user.id) : null,
+  ]);
   return (
     <>
       <PageHeading
@@ -17,6 +21,9 @@ export default async function Page() {
       >
         What Koe knows
       </PageHeading>
+      {model?.summary && (
+        <SummaryCard summary={model.summary} region={v.profile.region} />
+      )}
       <MemoryCards
         cards={cards}
         memoryOn={v.profile.memoryOn}

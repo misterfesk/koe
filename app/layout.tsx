@@ -4,9 +4,9 @@ import { getViewer } from "@/server/viewer";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Koe · small steps on low days", template: "%s · Koe" },
+  title: { default: "Koe · a gentle day on low days", template: "%s · Koe" },
   description:
-    "Plan small, doable steps, talk things through and see what helps. For adults having a hard time.",
+    "Plan a gentle day, talk things through and see what helps. For adults having a hard time.",
   robots: { index: false, follow: false },
 };
 

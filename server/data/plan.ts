@@ -16,6 +16,8 @@ import { insertStep } from "./steps";
 
 export type PlanReason =
   | "first_open"
+  /** The model's plan for day 2 or later: a draft until the person keeps it. */
+  | "draft"
   | "check_in"
   | "not_today_shrink"
   | "not_today_swap"
@@ -156,7 +158,7 @@ export async function writePlanVersion(
     await parkItems(tx, userId, gone);
 
     // A new day starts clean: yesterday's unfinished items are not carried over.
-    if (w.reason === "first_open")
+    if (w.reason === "first_open" || w.reason === "draft")
       await tx
         .update(step)
         .set({ status: "archived", updatedAt: new Date() })
@@ -184,7 +186,12 @@ export async function ensureTodayPlan(
   db: Db,
   userId: string,
   today: string,
-  produce: () => Promise<Omit<PlanWrite, "day" | "reason" | "expectVersion">>,
+  produce: () => Promise<
+    Omit<PlanWrite, "day" | "reason" | "expectVersion"> & {
+      /** "draft" for a model-made plan on day 2 or later; otherwise "first_open". */
+      reason?: Extract<PlanReason, "first_open" | "draft">;
+    }
+  >,
 ): Promise<PlanDayView> {
   const have = await getPlanDay(db, userId, today);
   if (have) return have;
@@ -193,11 +200,11 @@ export async function ensureTodayPlan(
   if (!work) {
     work = (async () => {
       try {
-        const draft = await produce();
+        const made = await produce();
         await writePlanVersion(db, userId, {
-          ...draft,
+          ...made,
           day: today,
-          reason: "first_open",
+          reason: made.reason ?? "first_open",
           expectVersion: 1,
         });
         return (await getPlanDay(db, userId, today))!;
@@ -208,6 +215,21 @@ export async function ensureTodayPlan(
     inflight.set(key, work);
   }
   return work;
+}
+
+/**
+ * "Keep it" on a draft: the plan stays as the model wrote it and the draft
+ * banner goes. Stored on the plan version itself, so it survives a reload.
+ */
+export async function keepDraft(db: Db, userId: string, day: string) {
+  const latest = await latestRow(db, userId, day);
+  if (!latest || latest.version !== 1 || latest.reason !== "draft")
+    return { ok: false as const };
+  await db
+    .update(planDay)
+    .set({ reason: "draft_kept" })
+    .where(eq(planDay.id, latest.id));
+  return { ok: true as const };
 }
 
 /**

@@ -63,8 +63,8 @@ export function SafetyCheck({
             </button>
           </div>
           <p className="meta">
-            Not sure? Treat it as not safe. <Link href="/help">Help now</Link>{" "}
-            lists people you can reach.
+            Not sure? Treat it as not safe. <Link href="/help">Help</Link> lists
+            people you can reach.
           </p>
         </>
       )}
@@ -99,8 +99,8 @@ export function SafetyCheck({
             Thanks for answering.
           </h2>
           <p>
-            If it gets worse, Help now is at the top of every screen. Talking to
-            a person can help even when you&apos;re not in danger.
+            If it gets worse, Help is at the top of every screen. Talking to a
+            person can help even when you&apos;re not in danger.
           </p>
           {line}
           <div className="actions">

@@ -1,8 +1,9 @@
 "use client";
 import { useState, useTransition } from "react";
-import { ConfirmDelete } from "@/components/ui";
+import { ConfirmDelete, Field } from "@/components/ui";
 import type { RiskLevel } from "@/domain/safety";
 import {
+  editSummary,
   removeMemory,
   saveMemory,
   setPrivacy,
@@ -21,6 +22,60 @@ const kinds: [MemoryKind, string, string][] = [
   ["people", "People", "My sister Mia is easy to talk to"],
   ["preference", "How you like things", "I prefer plain, direct suggestions"],
 ];
+
+/** What Koe understood in the intro, as the person approved it. Editable. */
+export function SummaryCard({
+  summary,
+  region,
+}: {
+  summary: string;
+  region: string | null;
+}) {
+  const [text, setText] = useState(summary);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [safety, setSafety] = useState<RiskLevel>("none");
+  const [pending, startTransition] = useTransition();
+  if (safety !== "none")
+    return <SafetyCheck region={region} onResume={() => setSafety("none")} />;
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        startTransition(async () => {
+          const r = await editSummary(text);
+          if (!r.ok) return setError(r.error ?? "");
+          setError("");
+          setSaved(true);
+          setSafety(r.safety ?? "none");
+        });
+      }}
+    >
+      <Field
+        label="Here's what I understood"
+        value={text}
+        onChange={(t) => {
+          setText(t);
+          setSaved(false);
+        }}
+        multiline
+        grow
+        maxLength={400}
+        error={error}
+      />
+      <div className="actions">
+        <button className="secondary" disabled={pending || text === summary}>
+          Save summary
+        </button>
+        {saved && (
+          <p className="meta" role="status">
+            Saved.
+          </p>
+        )}
+      </div>
+    </form>
+  );
+}
 
 export function MemoryCards({
   cards,

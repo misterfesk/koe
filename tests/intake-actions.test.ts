@@ -194,6 +194,45 @@ describe("startMyDay", { timeout: 30_000 }, () => {
     expect(await db.select().from(schema.step)).toHaveLength(3);
   });
 
+  it("does not save a morning plan reminder inside quiet hours, and says so in the reveal", async () => {
+    const { db, schema } = await setup();
+    await db.insert(schema.pushSubscription).values({
+      userId: "a",
+      endpoint: "https://fcm.googleapis.com/fcm/send/test-a",
+      p256dh: "p256dh-test-key",
+      auth: "auth-test",
+    });
+    // The default quiet hours are 22:00 to 08:00, so 07:00 would never arrive.
+    const [p] = await db.select().from(schema.profile);
+    expect([p.quietStart, p.quietEnd]).toEqual([22 * 60, 8 * 60]);
+    const built = await reveal({ goals: ["energy"], morningPlan: "07:00" });
+    expect(built.reveal?.reminderRules).toMatchObject({
+      quietStart: 22 * 60,
+      quietEnd: 8 * 60,
+    });
+    expect(await run({ ...payload(), morningPlanMinute: 7 * 60 })).toBe(
+      "REDIRECT /today",
+    );
+    expect(await db.select().from(schema.reminder)).toHaveLength(0);
+  });
+
+  it("saves a morning plan reminder outside quiet hours", async () => {
+    const { db, schema } = await setup();
+    await db.insert(schema.pushSubscription).values({
+      userId: "a",
+      endpoint: "https://fcm.googleapis.com/fcm/send/test-a",
+      p256dh: "p256dh-test-key",
+      auth: "auth-test",
+    });
+    expect(await run({ ...payload(), morningPlanMinute: 9 * 60 })).toBe(
+      "REDIRECT /today",
+    );
+    const rows = await db.select().from(schema.reminder);
+    expect(rows.map((r) => [r.kind, r.minuteOfDay])).toEqual([
+      ["morning_plan", 9 * 60],
+    ]);
+  });
+
   it("writes only what was kept when the person unticks a memory and removes an item", async () => {
     const { db, schema } = await setup();
     const p = payload();

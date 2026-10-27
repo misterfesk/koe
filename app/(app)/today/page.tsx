@@ -10,6 +10,7 @@ import {
 } from "@/domain/day-plan";
 import { kindLabel } from "@/domain/plan-menu";
 import { IGNORE_LIMIT, inQuietHours } from "@/domain/reminders";
+import { detectRisk } from "@/domain/safety";
 import { isDue, isRepeating, reportOn, type StepView } from "@/domain/steps";
 import {
   daysBetween,
@@ -23,6 +24,7 @@ import { tone } from "@/domain/tone";
 import { SafetyCheck } from "@/features/safety/safety-check";
 import { ChangeBanner } from "@/features/today/change-banner";
 import { CheckIn } from "@/features/today/check-in";
+import { DraftBanner } from "@/features/today/draft-banner";
 import type { Banner, Entry } from "@/features/today/model";
 import { Timeline } from "@/features/today/timeline";
 import { WelcomeBack } from "@/features/today/welcome-back";
@@ -128,8 +130,12 @@ export default async function Page() {
     (a, b) => (a.minute ?? Infinity) - (b.minute ?? Infinity),
   );
 
+  // A plan the model made on day 2 or later is a draft until the person keeps
+  // it or starts simpler. Day 1 (the intro) and rules-made plans are not.
+  const isDraft = plan.version === 1 && plan.reason === "draft";
   let banner: Banner | null = null;
-  if (plan.version > 1 && plan.reason !== "intro" && before) {
+  if (isDraft) banner = null;
+  else if (plan.version > 1 && plan.reason !== "intro" && before) {
     const diff = diffPlans(before, plan.items);
     // A reminder belongs to its item. An item that left takes it along, and
     // whatever replaced it starts without one; Undo brings both back.
@@ -152,7 +158,7 @@ export default async function Page() {
       ],
       canUndo: true,
     };
-  } else if (plan.note) {
+  } else if (plan.note && plan.reason !== "draft_kept") {
     banner = { note: plan.note, lines: [], canUndo: false };
   }
 
@@ -197,7 +203,20 @@ export default async function Page() {
     <>
       <PageHeading eyebrow="Today">{voice.message}</PageHeading>
       {away && <WelcomeBack older={older} />}
-      <CheckIn checkIn={checkIn} region={p.region} />
+      <CheckIn
+        checkIn={
+          checkIn && {
+            energy: checkIn.energy,
+            // A word that tripped the safety check is not shown again.
+            word:
+              checkIn.word && detectRisk(checkIn.word) === "none"
+                ? checkIn.word
+                : null,
+          }
+        }
+        region={p.region}
+      />
+      {isDraft && <DraftBanner lighter={plan.mode === "lighter"} />}
       {banner && <ChangeBanner banner={banner} />}
       <Timeline
         entries={entries}

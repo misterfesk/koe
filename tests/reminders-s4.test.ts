@@ -108,7 +108,6 @@ describe("calendar file", () => {
     day: "2026-10-24",
     minuteOfDay: 15 * 60,
     title: "Put on one song",
-    why: "Because music has helped before",
     size: "tiny" as const,
     ...over,
   });
@@ -139,7 +138,7 @@ describe("calendar file", () => {
     expect(durationMinutes(null)).toBe(30);
   });
 
-  it("is a well-formed calendar with the title, why line and Koe", () => {
+  it("is a well-formed calendar with the title and Koe, and no why line", () => {
     const ics = buildCalendar(
       [item({ title: "Walk, then tea; slowly" })],
       "UTC",
@@ -148,9 +147,8 @@ describe("calendar file", () => {
     expect(ics.startsWith("BEGIN:VCALENDAR\r\n")).toBe(true);
     expect(ics.endsWith("END:VCALENDAR\r\n")).toBe(true);
     expect(ics).toContain("SUMMARY:Walk\\, then tea\\; slowly");
-    expect(ics).toContain(
-      "DESCRIPTION:Because music has helped before\\nFrom Koe",
-    );
+    expect(ics).toContain("DESCRIPTION:From Koe\r\n");
+    expect(ics).not.toContain("Because");
     expect(ics).toContain("UID:s1-2026-10-24@koe.local");
     expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1);
     // Every line ends CRLF and none is a bare LF.

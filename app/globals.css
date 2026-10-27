@@ -160,6 +160,11 @@ pre {
   color: var(--secondary);
   margin: 0 0 16px;
 }
+/* A clock time keeps its own case ("8:00 am"), so every time reads the same. */
+.eyebrow .clock {
+  text-transform: none;
+  letter-spacing: 0.08em;
+}
 .lede {
   font-size: 1.125rem;
   color: var(--secondary);

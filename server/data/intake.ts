@@ -98,6 +98,20 @@ export async function listPlanDays(db: Db, userId: string) {
   return rows.map(toView);
 }
 
+/** The person edits the summary Koe holds about them; sealed like the rest. */
+export async function saveSummary(db: Db, userId: string, summary: string) {
+  const rows = await db
+    .update(userModel)
+    .set({
+      summaryEnc: seal(summary),
+      version: sql`${userModel.version} + 1`,
+      updatedAt: new Date(),
+    })
+    .where(eq(userModel.userId, userId))
+    .returning({ id: userModel.userId });
+  return rows.length > 0;
+}
+
 export async function hasIntro(db: Db, userId: string) {
   const [model] = await db
     .select({ id: userModel.userId })

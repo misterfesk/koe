@@ -53,7 +53,7 @@ export function CheckIn({
       <div className={styles.arrived}>
         <p>
           <strong>
-            Arrived: {checkIn.energy}
+            Arrived: {options.find(([v]) => v === checkIn.energy)?.[1]}
             {checkIn.word ? ` · ${checkIn.word}` : ""}
           </strong>{" "}
           <button
