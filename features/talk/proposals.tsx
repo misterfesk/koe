@@ -155,6 +155,10 @@ export function ToolCard({
   const isDraft = tool.name === "draft_message";
   // A draft stays usable (copy again, open in another app) until it is dismissed.
   const decided = !!result && !isDraft;
+  const searchDone =
+    tool.name === "find_resources" &&
+    (/^Added \d+ picks? to your Shelf\.$/.test(result) ||
+      result === resultLines.find_resources(0));
 
   const confirm = (extra?: { text?: string; via?: "copy" | "sms" | "email" }) =>
     startTransition(async () => {
@@ -220,7 +224,13 @@ export function ToolCard({
           {tool.name === "save_memory" ? memory : card.headline}
         </p>
       )}
-      {card.detail && <p className="meta">{card.detail}</p>}
+      {card.detail && (
+        <p className="meta">
+          {searchDone
+            ? `Koe searched for: “${tool.query ?? ""}”. Only these words were used. Nothing you wrote was included.`
+            : card.detail}
+        </p>
+      )}
       {asking && !decided && (
         <p className="meta">
           Your browser will ask to show notifications. A reminder shows only the
@@ -236,6 +246,11 @@ export function ToolCard({
         <p className="meta" role="status">
           {result}
         </p>
+      )}
+      {tool.name === "find_resources" && result && (
+        <Link href="/shelf">
+          Open Shelf <span aria-hidden="true">→</span>
+        </Link>
       )}
       {!decided && (
         <div className="actions">

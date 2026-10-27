@@ -2,7 +2,7 @@
 
 Koe is a private AI companion for adults living with depression. It learns about you in a short intake, plans a gentle day, adapts that day when your energy drops, reminds you at the right moments, finds a few trustworthy things to read, and is there to talk. It supports human care and never replaces it.
 
-This document describes the system as built. Items marked **(in progress)** are being built for the current release; their contracts are fixed and their code is not finished yet.
+This document describes the system as built through S6. Remaining You work and the scoped final review are tracked in `../HANDOFF.md`.
 
 ## 1. Principles
 
@@ -57,7 +57,7 @@ flowchart LR
 | `server/actions/*` | Server actions, the only write path from the UI. Each checks the viewer, validates input, screens free text and then calls `server/data`. |
 | `server/data/*` | Database reads and writes per area. Text is sealed and opened here. |
 | `server/llm/*` | The AI runtime (`nebius.ts`), usage logging and budget (`usage.ts`), the context packet (`context.ts`) and one module per agent (`intake.ts`, `talk.ts`, `coach.ts`, planner). |
-| `server/search/*` | The Tavily client and, in progress, result screening. |
+| `server/search/*` | Tavily, adult-resource screening, weekly cache and the Shelf refresh pipeline. |
 | `server/db/*` | Schema, migrations runner, guest→account ownership transfer. |
 | `drizzle/` | SQL migrations. |
 | `instrumentation.ts` | Starts the minute scheduler for reminders and the hourly chat-history purge. |
@@ -83,7 +83,8 @@ All user-owned tables reference `user` with `ON DELETE CASCADE`. Guest data move
 | `reminder`, `push_subscription` | Reminders the person turned on, and browser push endpoints (allowlisted push services only). |
 | `safety_event` | That a risk signal was seen, where, and what Koe showed. Never the text. |
 | `agent_run` | One row per model or search call: purpose, model, tokens, latency, estimated cost, fallback used, dropped tool calls. Never the text. |
-| `shelf_item`, `resource_cache` | **(in progress)** The person's picks (URL, title, sealed why line, Save / Not for me), plus a shared weekly cache per tag set. The cache holds public data only. |
+| `shelf_item`, `shelf_refresh` | Owner-scoped picks (URL, title, sealed why, Save / Not for me) and refresh attempts, including empty results and durable Talk request keys. Both transfer to accounts, export and cascade on deletion. |
+| `resource_cache` | Shared weekly screened metadata per enum tag set. Public titles, links and safety flags only; no snippets, personal text or why lines. |
 
 ## 5. AI system
 
@@ -107,8 +108,8 @@ Model IDs are configuration (`KOE_CHAT_MODEL`, `KOE_FAST_MODEL`, `KOE_SAFETY_MOD
 |---|---|---|
 | Intake synthesiser (`intake.ts`) | End of the 5-question intake | Summary, up to 4 memory proposals, 3 plan items. Checked against zod, the composition rules, the guardrails and the safety rules. Failing items are swapped for rules-based ones. AI off: `fallbackPlan`. |
 | Planner (`planner.ts`) | First open of the day, check-in, "Not today" (smaller/swap), lighter day | A new plan version, plus a one-line note on what changed. Same checks. AI off: deterministic adaptation. |
-| Talk | Each message | Reply text plus tool proposals: add, move or shrink an entry, set a reminder, save a memory, find resources, draft a message, prepare for an appointment **(in progress)**. Proposals are written only when the person confirms them. |
-| Resource screener **(in progress)** | Weekly Shelf refresh, or a Talk request | Keep/drop and a "why this might help you" line for each allowlisted search result. |
+| Talk | Each message | Reply text plus tool proposals: add, move or shrink an entry, set a reminder, save a memory, find resources, draft a message, prepare for an appointment. Proposals are written only when the person confirms them. |
+| Resource screener | Weekly Shelf refresh, or a confirmed Talk request | Rules then Nano: exact HTTPS host, adult audience and excluded subjects. Fail-closed on model errors; validated why line or a fixed fallback. AI off uses rules and fixed copy. |
 | Safety classifier | Every Talk turn | Fail-closed: if the classifier errors or times out, no normal reply is shown. |
 
 ### The day-plan menu (`domain/plan-menu.ts`)
@@ -132,7 +133,9 @@ The risk patterns and the crisis-flow wording are engineering defaults and have 
 - With memory off, nothing from the person's records goes to the model. With chat history off, conversations are purged hourly.
 - Export everything (`/api/export`) and delete everything (cascade) are in You → Your data.
 
-**Talk tools (`domain/talk-tools.ts`).** Talk calls `completeWithTools` with eight tools (add, move, shrink, reminder, memory, find resources, draft, appointment). A call is only ever a proposal: it is checked (schema, words, rules, at most two cards, none on a risky turn) and stored with the reply as a card. Confirm runs the existing action (`server/plan-edit.ts`, `planToday`, `remindMe`, `turnOnMorningPlan`, `addMemory`) once; No thanks writes nothing. `find_resources` stores a confirmed request that the Shelf reads with `requestedSearches`; its query comes only from `buildResourceQuery` (enum tags).
+**Talk tools (`domain/talk-tools.ts`).** Talk calls `completeWithTools` with eight tools (add, move, shrink, reminder, memory, find resources, draft, appointment). A call is only ever a proposal: it is checked (schema, words, rules, at most two cards, none on a risky turn) and stored with the reply as a card. Confirm runs the existing action (`server/plan-edit.ts`, `planToday`, `remindMe`, `turnOnMorningPlan`, `addMemory`) once; No thanks writes nothing. `find_resources` runs the same Shelf pipeline and reports the real count. `requestedSearches` recovers older or interrupted confirmed searches. Queries come only from `buildResourceQuery` (runtime-validated enum tags).
+
+**Shelf.** Pages read stored picks without awaiting search; a client action refreshes when needed. Weekly attempts, including empty ones, prevent repeated calls; failed attempts wait 15 minutes. A shared tag/week cache coalesces misses, and each person's searches are capped at three per UTC day. Results are revalidated per person, including local eating constraints with memory off. External publisher prose is screened for resource safety; Koe's own why lines also follow the strict copy and planning guardrails. Only exact approved HTTPS hosts are accepted. YouTube is excluded. Save / Not for me has owner-bound Undo. Search off or coaching paused leaves saved picks readable.
 
 ## 8. Reminders
 
@@ -147,6 +150,7 @@ Web Push with VAPID. The person turns a reminder on for a timed entry, or for th
 | `KOE_AI_DAILY_CALLS` | Per-user daily model-call budget (default 200). |
 | `KOE_SCHEDULER=off` | Stops the in-process scheduler (tests, or a separate worker). |
 | `KOE_AI_STUB=on` | **Tests only.** Talk answers from a script (`server/llm/talk-stub.ts`) instead of the model. Refused unless `APP_URL` is `127.0.0.1` or `localhost`, so a hosted app ignores it. Set only in `playwright.config.ts`. |
+| `KOE_SEARCH_STUB=on` | **Tests only.** Fixed Shelf search results; accepted only for an exact local HTTP `APP_URL`. Hosted URLs cannot activate it. |
 | `NEBIUS_API_KEY`, `TAVILY_API_KEY`, `DATA_ENCRYPTION_KEY`, `AUTH_SECRET`, `VAPID_*`, `DATABASE_URL`, `APP_URL` | See `.env.example`. |
 
 **Single-instance assumption:** the scheduler and the rate limits live in memory. Several instances would need a shared job runner and a shared rate-limit store.

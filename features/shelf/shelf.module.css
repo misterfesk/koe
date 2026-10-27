@@ -1,0 +1,33 @@
+.section {
+  margin-block: 32px;
+}
+.picks {
+  display: grid;
+  gap: 20px;
+  padding: 0;
+  list-style: none;
+}
+.pick {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  scroll-margin-block-start: 112px;
+}
+.pick h3 {
+  margin-block: 8px 12px;
+}
+.pick :global(.actions) {
+  margin-bottom: 0;
+}
+.compact {
+  margin-top: 32px;
+  overflow-wrap: anywhere;
+}
+.compact h2 {
+  font-size: 1.25rem;
+  margin-block: 8px;
+}
+@media (max-width: 400px) {
+  .pick {
+    padding: 20px;
+  }
+}

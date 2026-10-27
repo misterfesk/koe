@@ -36,6 +36,8 @@ import { pushConfigured } from "@/server/push";
 import { listSteps } from "@/server/data/steps";
 import { openToday } from "@/server/llm/planner";
 import { requireViewer } from "@/server/viewer";
+import { getTodayShelfPick } from "@/server/data/shelf";
+import { TodayPick } from "@/features/shelf/today-pick";
 
 export const metadata: Metadata = { title: "Today" };
 
@@ -55,6 +57,7 @@ export default async function Page() {
   // The first time today is opened, the day is planned (once, even if two
   // requests arrive together).
   const plan = await openToday(v.user.id, { db: v.db, today: v.today });
+  const shelfPick = await getTodayShelfPick(v);
   const [steps, checkIn, before, accept, reminders, subs] = await Promise.all([
     listSteps(v.db, v.user.id),
     getCheckInView(v.db, v.user.id, v.today),
@@ -234,7 +237,7 @@ export default async function Page() {
           Next reminder: {next.time} · {next.title}
         </p>
       )}
-      {/* Slot for the shelf card (S6). */}
+      {shelfPick && <TodayPick pick={shelfPick} />}
       <div className={styles.below}>
         <p className="meta">Rather talk it through?</p>
         <Link className="button secondary" href="/talk">

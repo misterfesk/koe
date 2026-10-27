@@ -29,6 +29,10 @@ export default function Page() {
           session working and secure. A guest&apos;s data stays until it&apos;s
           deleted; it doesn&apos;t expire on its own.
         </p>
+        <p>
+          Your Shelf keeps titles, links, choices and short why lines. Page
+          excerpts aren&apos;t saved.
+        </p>
         <h2>What goes to the AI provider</h2>
         <p>
           AI features use Nebius Token Factory. The text needed for each one is
@@ -59,12 +63,16 @@ export default function Page() {
           <li>
             <strong>Talk.</strong> The conversation goes to Nebius. With memory
             on, your memory cards, recent entries from your day and today&apos;s
-            energy check-in go too. With memory off, only the conversation is
-            sent.
+            energy check-in go too. With memory off, recent counts, kinds, sizes
+            and times still go. Plan titles and why lines stay out.
           </li>
           <li>
             <strong>Drafts and ideas.</strong> When you ask Koe for ideas or a
             draft message, the text needed for that is sent.
+          </li>
+          <li>
+            <strong>Shelf.</strong> Nebius receives a page&apos;s title, a short
+            excerpt and fixed topics. Your words and notes aren&apos;t included.
           </li>
         </ul>
         <p>
@@ -72,6 +80,16 @@ export default function Page() {
           and whether it&apos;s used for anything else. Until that&apos;s
           checked, don&apos;t share anything you wouldn&apos;t want stored by a
           third party. Your day, notes and Help work without the AI.
+        </p>
+        <h2>What goes to web search</h2>
+        <p>
+          Shelf searches use fixed phrases from your choices. Your own words are
+          never sent to Tavily. With memory off, automatic searches use general
+          topics. Talk searches use the topics shown on the card you confirm.
+        </p>
+        <p>
+          Tavily&apos;s storage and reuse of searches haven&apos;t been
+          verified. Search phrases contain no names, notes or conversation text.
         </p>
         <h2>Safety checks</h2>
         <p>
