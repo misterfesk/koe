@@ -30,6 +30,18 @@ vi.mock("@/features/safety/safety-check", () => ({
 import { WorkInterview } from "@/features/intake/interview";
 const thing = capturedThingSchema.parse({ what: "Update the CV" });
 const draft = { items: [{ captured: thing, pieces: fallbackPieces(thing) }] };
+const multiTurn = {
+  ...openingTurn(),
+  message: "Which parts need your attention?",
+  ask: {
+    kind: "multi" as const,
+    allowOther: true,
+    options: [
+      { id: "opening", label: "Opening paragraph" },
+      { id: "dates", label: "Work dates" },
+    ],
+  },
+};
 beforeEach(() => {
   sessionStorage.clear();
   vi.resetAllMocks();
@@ -42,6 +54,223 @@ beforeEach(() => {
   });
 });
 afterEach(cleanup);
+it("keeps every multi-choice pick and Other across reload, then sends them all", async () => {
+  mocks.startInterview.mockResolvedValue({
+    ok: true,
+    safety: "none",
+    token: "multi",
+    turn: multiTurn,
+  });
+  mocks.advanceInterview.mockResolvedValue({
+    ok: true,
+    safety: "none",
+    token: "next",
+    turn: confirmingTurn(),
+  });
+  const view = render(<WorkInterview owner="a" region="SG" />);
+  const dates = await screen.findByRole("button", { name: "Work dates" });
+  await waitFor(() => expect(dates).toBeEnabled());
+  fireEvent.click(dates);
+  fireEvent.click(screen.getByRole("button", { name: /Something else/ }));
+  fireEvent.change(screen.getByLabelText("Your words"), {
+    target: { value: "Contact details" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Opening paragraph" }));
+  expect(screen.getByLabelText("Your words")).toHaveValue("Contact details");
+  expect(readInterviewDraft("a", "return")).toMatchObject({
+    selected: ["dates", "opening"],
+    answer: "Contact details",
+  });
+  expect(readInterviewDraft("b", "return")).toBeNull();
+  view.unmount();
+  render(<WorkInterview owner="a" region="SG" />);
+  expect(
+    await screen.findByRole("button", { name: "Opening paragraph" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Work dates" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(screen.getByLabelText("Your words")).toHaveValue("Contact details");
+  fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+  await screen.findByRole("heading", { name: confirmingTurn().message });
+  expect(mocks.advanceInterview).toHaveBeenCalledWith({
+    token: "multi",
+    intent: "answer",
+    text: "Opening paragraph; Work dates; Contact details",
+  });
+  expect(readInterviewDraft("a", "return")?.selected).toEqual([]);
+  expect(mocks.startInterview).toHaveBeenCalledTimes(1);
+});
+it("blocks combined answers over 400 characters without losing words or picks", async () => {
+  const prefix = "Opening paragraph; Work dates; ";
+  const words = "a".repeat(401 - prefix.length);
+  writeInterviewDraft("a", "return", {
+    token: "multi",
+    turn: multiTurn,
+    selected: ["opening", "dates"],
+    messages: [],
+    answer: words,
+  });
+  mocks.advanceInterview.mockResolvedValue({
+    ok: true,
+    safety: "none",
+    token: "next",
+    turn: confirmingTurn(),
+  });
+  render(<WorkInterview owner="a" region="SG" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Reply" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Shorten your words or unselect an option.",
+  );
+  expect(mocks.advanceInterview).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("Your words")).toHaveValue(words);
+  expect(readInterviewDraft("a", "return")).toMatchObject({
+    selected: ["opening", "dates"],
+    answer: words,
+  });
+  fireEvent.change(screen.getByLabelText("Your words"), {
+    target: { value: words.slice(1) },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+  await waitFor(() =>
+    expect(mocks.advanceInterview).toHaveBeenCalledWith({
+      token: "multi",
+      intent: "answer",
+      text: prefix + words.slice(1),
+    }),
+  );
+});
+it("keeps single-choice answers exclusive when switching to and from Other", async () => {
+  writeInterviewDraft("a", "return", {
+    token: "single",
+    turn: { ...multiTurn, ask: { ...multiTurn.ask, kind: "single" } },
+    messages: [],
+    answer: "Contact details",
+  });
+  render(<WorkInterview owner="a" region="SG" />);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Opening paragraph" }),
+  );
+  expect(screen.getByLabelText("Your words")).toHaveValue("");
+  expect(readInterviewDraft("a", "return")?.selected).toEqual(["opening"]);
+  fireEvent.change(screen.getByLabelText("Your words"), {
+    target: { value: "Contact details" },
+  });
+  expect(
+    screen.getByRole("button", { name: "Opening paragraph" }),
+  ).toHaveAttribute("aria-pressed", "false");
+  expect(readInterviewDraft("a", "return")?.selected).toEqual([]);
+});
+it("restores old drafts without picks and rejects selections outside the current ask", () => {
+  const value = {
+    token: "old",
+    turn: multiTurn,
+    messages: [],
+    answer: "Contact details",
+  };
+  sessionStorage.setItem(interviewKey("a", "return"), JSON.stringify(value));
+  expect(readInterviewDraft("a", "return")).toMatchObject({
+    ...value,
+    selected: [],
+  });
+  for (const selected of [
+    ["foreign"],
+    ["opening", "opening"],
+    ["opening", 2],
+  ]) {
+    sessionStorage.setItem(
+      interviewKey("a", "return"),
+      JSON.stringify({ ...value, selected }),
+    );
+    expect(readInterviewDraft("a", "return")).toBeNull();
+  }
+  sessionStorage.setItem(
+    interviewKey("a", "return"),
+    JSON.stringify({
+      ...value,
+      turn: openingTurn(),
+      selected: ["opening"],
+    }),
+  );
+  expect(readInterviewDraft("a", "return")).toBeNull();
+  sessionStorage.setItem(
+    interviewKey("a", "return"),
+    JSON.stringify({
+      ...value,
+      turn: confirmingTurn(),
+      selected: ["propose", "add"],
+    }),
+  );
+  expect(readInterviewDraft("a", "return")).toBeNull();
+});
+it("preserves selected labels and Other as words after a confirmed restart", async () => {
+  writeInterviewDraft("a", "return", {
+    token: "expired",
+    turn: multiTurn,
+    selected: ["opening", "dates"],
+    messages: [],
+    answer: "Contact details",
+  });
+  mocks.advanceInterview.mockResolvedValue({
+    ok: false,
+    error: "This interview changed. Open it again before continuing.",
+  });
+  render(<WorkInterview owner="a" region="SG" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Reply" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Open interview again" }),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Yes, open interview again" }),
+  );
+  await waitFor(() =>
+    expect(screen.getByLabelText("Your answer")).toHaveValue(
+      "Opening paragraph; Work dates; Contact details",
+    ),
+  );
+});
+it("keeps an over-limit recovery answer editable instead of clearing it", async () => {
+  const prefix = "Opening paragraph; Work dates; ";
+  const words = "a".repeat(400 - prefix.length);
+  writeInterviewDraft("a", "return", {
+    token: "expired",
+    turn: multiTurn,
+    selected: ["opening", "dates"],
+    messages: [],
+    answer: words,
+  });
+  mocks.advanceInterview.mockResolvedValue({
+    ok: false,
+    error: "This interview changed. Open it again before continuing.",
+  });
+  render(<WorkInterview owner="a" region="SG" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Reply" }));
+  await screen.findByRole("button", { name: "Open interview again" });
+  fireEvent.change(screen.getByLabelText("Your words"), {
+    target: { value: words + "a" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Open interview again" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Yes, open interview again" }),
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent("400 characters");
+  expect(mocks.startInterview).not.toHaveBeenCalled();
+  expect(readInterviewDraft("a", "return")).toMatchObject({
+    answer: words + "a",
+    selected: ["opening", "dates"],
+  });
+  fireEvent.change(screen.getByLabelText("Your words"), {
+    target: { value: words },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Open interview again" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Yes, open interview again" }),
+  );
+  await waitFor(() =>
+    expect(screen.getByLabelText("Your answer")).toHaveValue(prefix + words),
+  );
+});
 it("feeds the weekly intake answer into the interview without another opening question", async () => {
   mocks.advanceInterview.mockResolvedValue({
     ok: true,

@@ -49,6 +49,25 @@ const ctx: InterviewContext = {
   followups: 0,
   turnsLeft: 8,
 };
+function distinctWritingPieces(base = fallbackPieces(ctx.thing)[0]) {
+  return [
+    {
+      ...base,
+      title: "Write three rough opening words",
+      endpoint: "Three rough opening words written",
+    },
+    {
+      ...base,
+      title: "Expand the words into an opening sentence",
+      endpoint: "One rough opening sentence written",
+    },
+    {
+      ...base,
+      title: "Revise one word in the opening sentence",
+      endpoint: "One word in the opening sentence revised",
+    },
+  ];
+}
 beforeEach(() => {
   model.ai = "on";
   model.fail = false;
@@ -129,7 +148,7 @@ describe("interview model contract", () => {
       ).source,
     ).toBe("ai");
     model.output = {
-      pieces: Array.from({ length: 3 }, () => fallbackPieces(ctx.thing)[0]),
+      pieces: distinctWritingPieces(),
     };
     expect((await llm.breakDown(ctx)).source).toBe("ai");
     expect(model.calls.map((c) => c.options.purpose)).toEqual([
@@ -235,8 +254,8 @@ describe("interview model contract", () => {
     expect(result.source).toBe("fallback");
     expect(result.pieces[0].minutes).toBe(5);
     model.output = {
-      pieces: Array.from({ length: 3 }, () => ({
-        ...p,
+      pieces: distinctWritingPieces(p).map((piece) => ({
+        ...piece,
         size: "tiny",
         minutes: 5,
       })),
@@ -283,5 +302,237 @@ describe("interview model contract", () => {
     expect(model.calls[0].messages[0].content).toContain(
       "do not invent digital files",
     );
+  });
+  it.each(["off", "provider failure"])(
+    "keeps final scope words in the concrete fallback with %s",
+    async (failure) => {
+      model.ai = failure === "off" ? "off" : "on";
+      model.fail = failure === "provider failure";
+      const { breakDown } = await import("@/server/llm/interview");
+      const result = await breakDown({
+        ...ctx,
+        thing: capturedThingSchema.parse({ what: "Maybe sorting my records." }),
+        originalWords:
+          "I don't know, everything.\nMaybe sorting my records.\nOnly one shelf.",
+      });
+      expect(result.source).toBe("fallback");
+      expect(result.pieces[0].title).toBe(
+        "Put two records from that one shelf in name order",
+      );
+      expect(result.pieces[0].sourcePhrase).toBe("Maybe sorting my records.");
+    },
+  );
+  it("rejects later pieces scheduled today and gives the retry a timing correction", async () => {
+    const { breakDown } = await import("@/server/llm/interview");
+    const originalWords = "I can't do anything today.";
+    const later = fallbackPieces(ctx.thing, false, originalWords)[0];
+    model.output = {
+      pieces: [later, later, { ...later, when: "later today" }],
+    };
+    const result = await breakDown({ ...ctx, originalWords });
+    expect(result.source).toBe("fallback");
+    expect(result.pieces[0].when).toBe("On a later day");
+    expect(model.validationMessages).toContain(
+      "Work is unavailable today. Suggest a later day for every piece, including unsent drafts.",
+    );
+    model.output = {
+      pieces: distinctWritingPieces(later).map((piece) => ({
+        ...piece,
+        when: "tomorrow",
+      })),
+    };
+    expect((await breakDown({ ...ctx, originalWords })).source).toBe("ai");
+  });
+  it("rejects a sending action hidden behind a draft endpoint and explains the repair", async () => {
+    const { breakDown } = await import("@/server/llm/interview");
+    const thing = capturedThingSchema.parse({
+      what: "Write the landlord email",
+    });
+    const draft = fallbackPieces(thing)[0];
+    model.output = {
+      pieces: [
+        draft,
+        draft,
+        {
+          ...draft,
+          title: "Review and send email to landlord",
+          endpoint: "Email sent from draft",
+        },
+      ],
+    };
+    const result = await breakDown({
+      ...ctx,
+      thing,
+      originalWords: "Only an unsent draft, not sending today.",
+    });
+    expect(result.source).toBe("fallback");
+    expect(model.validationMessages).toContain(
+      "Use an unsent draft. Sending requires an explicit request.",
+    );
+    expect(result.pieces[0].title).toContain("unsent");
+  });
+  it.each([
+    "One rough sentence exists in the document",
+    "  ONE rough sentence   exists in the document!  ",
+    "One rough sentence exists in the document…",
+    "One deliberately rough sentence exists in the document",
+    "One sentence exists in the document",
+  ])(
+    "rejects duplicate outcomes with different Write/Draft titles: %s",
+    async (endpoint) => {
+      const { breakDown } = await import("@/server/llm/interview");
+      const pieces = distinctWritingPieces();
+      pieces[0] = {
+        ...pieces[0],
+        title: "Write one rough opening sentence for the CV",
+        endpoint: "One rough sentence exists in the document",
+      };
+      pieces[2] = {
+        ...pieces[2],
+        title: "Draft one rough opening sentence for the CV",
+        endpoint,
+      };
+      model.output = { pieces };
+      const result = await breakDown(ctx);
+      expect(result.source).toBe("fallback");
+      expect(result.pieces).toEqual(fallbackPieces(ctx.thing));
+      expect(model.validationMessages).toContain(
+        "Give each piece a different result. Expand, revise, or add to earlier work.",
+      );
+    },
+  );
+  it("rejects leaving sorted bills unchanged after they are already grouped", async () => {
+    const { breakDown } = await import("@/server/llm/interview");
+    const thing = capturedThingSchema.parse({
+      what: "Sort the papers on my desk.",
+      stuck: "The bills are still mixed up.",
+    });
+    const base = fallbackPieces(thing)[0];
+    model.output = {
+      pieces: [
+        {
+          ...base,
+          title: "Pull out every bill and set it in one pile",
+          endpoint: "All bills are in a single stack on the desk",
+        },
+        {
+          ...base,
+          title:
+            "Sort the bill pile into categories like utilities and medical",
+          endpoint: "Bills grouped by type in separate stacks on the desk",
+        },
+        {
+          ...base,
+          title: "Leave each sorted stack in its own pile on the desk",
+          endpoint: "Each bill category stays in a separate pile on the desk",
+        },
+      ],
+    };
+    const result = await breakDown({ ...ctx, thing });
+    expect(result.source).toBe("fallback");
+    expect(result.pieces).toEqual(fallbackPieces(thing));
+    expect(model.validationMessages).toContain(
+      "Keeping an earlier result unchanged is not another piece. Add a concrete change within the person's scope.",
+    );
+  });
+  it("accepts added words, revision, and continued writing with distinct results", async () => {
+    const { breakDown } = await import("@/server/llm/interview");
+    const pieces = distinctWritingPieces();
+    pieces[1] = {
+      ...pieces[1],
+      title: "Keep writing until you have three opening sentences",
+      endpoint: "Three opening sentences written; the wording remains rough",
+    };
+    model.output = { pieces };
+    const result = await breakDown(ctx);
+    expect(result.source).toBe("ai");
+    expect(result.pieces).toEqual(pieces);
+    expect(model.validationMessages).toEqual([]);
+  });
+  it("accepts sorting followed by ordering without creating new storage", async () => {
+    const { breakDown } = await import("@/server/llm/interview");
+    const thing = capturedThingSchema.parse({
+      what: "Sort the papers on my desk.",
+      stuck: "The bills are still mixed up.",
+    });
+    const base = fallbackPieces(thing)[0];
+    const pieces = [
+      {
+        ...base,
+        title: "Pull two bills out of the mixed papers",
+        endpoint: "Two bills separated from the other papers on the desk",
+      },
+      {
+        ...base,
+        title: "Sort those two bills by due date",
+        endpoint: "Those two bills ordered by due date on the desk",
+      },
+      {
+        ...base,
+        title: "Add one more bill in due-date order",
+        endpoint: "Three bills ordered by due date on the desk",
+      },
+    ];
+    model.output = { pieces };
+    const result = await breakDown({ ...ctx, thing });
+    expect(result.source).toBe("ai");
+    expect(result.pieces).toEqual(pieces);
+  });
+  it("accepts legitimate distinct writing outcomes", async () => {
+    const { breakDown } = await import("@/server/llm/interview");
+    const pieces = distinctWritingPieces();
+    model.output = { pieces };
+    const result = await breakDown(ctx);
+    expect(result.source).toBe("ai");
+    expect(result.pieces).toEqual(pieces);
+    expect(model.validationMessages).toEqual([]);
+  });
+  it("rejects an invented storage location and allows the same originally named folder", async () => {
+    const { breakDown } = await import("@/server/llm/interview");
+    const thing = capturedThingSchema.parse({
+      what: "Sort the papers on my desk",
+      stuck: "The bills are still mixed up",
+    });
+    const base = fallbackPieces(thing)[0];
+    model.output = {
+      pieces: [
+        {
+          ...base,
+          title: "Pull out just the bills from the pile",
+          endpoint: "A separate stack of bills on the desk",
+        },
+        {
+          ...base,
+          title: "Group the bills by due date",
+          endpoint: "Bills ordered from soonest to latest due date",
+        },
+        {
+          ...base,
+          title: "File the sorted bills into your bill folder",
+          endpoint: "All bills filed in the designated folder",
+        },
+      ],
+    };
+    expect(
+      (
+        await breakDown({
+          ...ctx,
+          thing,
+          originalWords: thing.what + ". " + thing.stuck,
+        })
+      ).source,
+    ).toBe("fallback");
+    expect(model.validationMessages).toContain(
+      "Use only storage the person named. Keep sorted groups in that place.",
+    );
+    expect(
+      (
+        await breakDown({
+          ...ctx,
+          thing,
+          originalWords: "Use the bill folder on the desk.",
+        })
+      ).source,
+    ).toBe("ai");
   });
 });

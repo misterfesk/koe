@@ -128,6 +128,42 @@ function messageContext(thing: CapturedThing, originalWords: string) {
     [thing.what, thing.left, originalWords].join("\n"),
   );
 }
+/** A broad no-work boundary; deferring only sending does not defer drafting. */
+function noWorkToday(thing: CapturedThing, originalWords: string) {
+  return [thing.what, thing.left, thing.stuck, thing.when, originalWords].some(
+    (words) =>
+      /\b(?:can['’]?t|cannot|won['’]?t|will not)\s+(?:do anything|work(?: on (?:this|it))?|do (?:this|any work))\s+today\b|\b(?:no work|no plan|not working)\s+today\b|(?:^|[.!?\n])\s*not today\s*(?:[.!?\n]|$)/i.test(
+        words,
+      ),
+  );
+}
+/** Narrow storage assumptions only; this does not verify every implied fact. */
+function assumesStorage(
+  text: string,
+  thing: CapturedThing,
+  originalWords: string,
+) {
+  const known = [...Object.values(thing), originalWords].join("\n");
+  const references = text.matchAll(
+    /\b(?:your|the|that|its|designated)\s+(?:[\p{L}\p{N}'’-]+\s+){0,2}(folders?|shel(?:f|ves)|drawers?|containers?)\b/giu,
+  );
+  for (const reference of references) {
+    if (/\bnew\b/i.test(reference[0])) continue;
+    const noun = reference[1].toLowerCase();
+    const type = noun.startsWith("shel")
+      ? "shel(?:f|ves)"
+      : noun.replace(/s$/, "") + "s?";
+    if (new RegExp("\\b" + type + "\\b", "i").test(known)) continue;
+    const createsStorage = new RegExp(
+      "\\b(?:create|make|set up)\\s+(?:a\\s+)?(?:new\\s+)?(?:[\\p{L}\\p{N}'’-]+\\s+){0,2}" +
+        type +
+        "\\b",
+      "iu",
+    );
+    if (!createsStorage.test(text)) return true;
+  }
+  return false;
+}
 /** Generated text only. A number of minutes is allowed; contact numbers are not. */
 export function safeInterviewText(
   text: string,
@@ -161,7 +197,16 @@ export function pieceIssues(
   const available = statedAvailabilityMinutes(thing, originalWords);
   if (available !== null && piece.minutes > available)
     issues.push("availability");
+  if (
+    noWorkToday(thing, originalWords) &&
+    /\b(now|today|tonight|this (?:morning|afternoon|evening))\b/i.test(
+      piece.when.replace(/\b(?:not|never)\s+(?:now|today|tonight)\b/gi, ""),
+    )
+  )
+    issues.push("not_today");
   const generated = [piece.title, piece.endpoint, piece.when].join("\n");
+  if (assumesStorage(generated, thing, originalWords))
+    issues.push("invented_storage");
   if (
     destructiveActions.some(
       (action) =>
@@ -182,13 +227,15 @@ export function pieceIssues(
   if (!safeInterviewText(piece.sourcePhrase, eatingConcern))
     issues.push("words");
   const requested = thing.what + " " + thing.left;
-  const sending = /\bsend\b/i.test(piece.title + " " + piece.endpoint);
+  const sending = suggestsDestruction(
+    /\b(send|sending|sent)\b/i,
+    piece.title + "\n" + piece.endpoint,
+  );
   const explicitlyRequested = sending
-    ? /\b(send|sending)\b/i.test(requested) &&
-      !/\b(not|never|don['’]?t|do not|without)\b.{0,20}\b(send|sending)\b/i.test(
-        requested,
-      )
+    ? requestedDestruction(/\b(send|sending)\b/i, thing, originalWords)
     : /\b(call|phone|text|contact|message|email|book|visit)\b/i.test(requested);
+  // A draft mentioned elsewhere cannot authorise a real send action.
+  if (sending && !explicitlyRequested) issues.push("contact");
   if (
     contact.test(piece.title + " " + piece.endpoint) &&
     !/\b(draft|unsent|do not send|don't send)\b/i.test(
@@ -212,9 +259,14 @@ export function pieceIssues(
   return [...new Set(issues)];
 }
 export function weekIssues(draft: WeekDraft, eatingConcern = false) {
+  // Generation and owner approval check storage against signed original words.
+  // This durable recheck lacks those words, so cannot disprove original-only
+  // storage facts. Every safety, size, contact and destruction check still runs.
   return draft.items.flatMap((item) =>
     item.pieces.flatMap((piece) =>
-      pieceIssues(piece, item.captured, eatingConcern),
+      pieceIssues(piece, item.captured, eatingConcern).filter(
+        (issue) => issue !== "invented_storage",
+      ),
     ),
   );
 }
@@ -224,10 +276,11 @@ export function fallbackPieces(
   eatingConcern = false,
   originalWords = "",
 ): Piece[] {
-  const choices = [thing.what, thing.left];
+  const choices = [thing.stuck, thing.left, thing.what];
   const phrase = choices.find((t) => t && safeInterviewText(t, eatingConcern));
   if (!phrase) return [];
-  const cleaned = phrase
+  const words = [thing.what, thing.left, thing.stuck, originalWords].join("\n");
+  const cleaned = thing.what
     .split(/[.!?]/)[0]
     .replace(/^I (want to |need to )?/i, "")
     .replace(/^(?:maybe|perhaps)\s+/i, "")
@@ -257,21 +310,79 @@ export function fallbackPieces(
   const target =
     cleaned.length > 45 ? cleaned.slice(0, 45).replace(/\s+\S*$/, "") : cleaned;
   const isContact = messageContext(thing, originalWords);
+  // A few work shapes, not a catalogue of goals. Propose a new action without
+  // assuming an app, possessions, completed work, or a particular daily routine.
+  // Unfamiliar work still has an AI-off route: identify a concrete unfinished
+  // part, without claiming to solve a blocker whose meaning is unknown.
+  let title = `Name one unfinished part: ${target}`;
+  let endpoint =
+    "Stop with one unfinished part named within your stated limits";
+  if (isContact) {
+    title = `Draft two unsent lines${/\bemail\b/i.test(target) ? " for the email" : ""}`;
+    endpoint = "Stop with two unsent lines";
+  } else if (/\b(cv|essay|paragraph|writing|write|draft)\b/i.test(thing.what)) {
+    const opening = /\b(opening|first words|first sentence)\b/i.test(words);
+    const section = [thing.left, thing.stuck, originalWords]
+      .join("\n")
+      .match(
+        /\b(?:opening paragraph|opening|introduction|conclusion|work history|employment history|education section|top section)\b/i,
+      )?.[0]
+      .toLowerCase();
+    const subject = /\bcv\b/i.test(thing.what)
+      ? section
+        ? `your CV's ${section}`
+        : opening
+          ? "your CV's opening"
+          : "your CV"
+      : /\bessay\b/i.test(thing.what)
+        ? section
+          ? `your essay's ${section}`
+          : opening
+            ? "your essay's opening"
+            : "your essay"
+        : "the writing";
+    title = `Write three rough words for ${subject}`;
+    endpoint = `Stop with three rough words for ${subject}`;
+  } else if (
+    /\b(sort|sorting|organise|organising|organize|organizing)\b/i.test(
+      thing.what,
+    )
+  ) {
+    // Explicit scope may survive only in the last answer, not model capture.
+    const oneShelf =
+      /\b(?:only|just)\s+(?:the\s+)?(?:one|1|a|single)\s+shelf\b/i.test(words);
+    if (/\brecords\b/i.test(thing.what)) {
+      title = oneShelf
+        ? "Put two records from that one shelf in name order"
+        : "Put two records in name order";
+      endpoint = oneShelf
+        ? "Stop with two records ordered on that one shelf"
+        : "Stop with two records in name order";
+    } else if (/\b(papers|bills)\b/i.test(thing.what)) {
+      const object = /\bappointment\b/i.test(thing.what)
+        ? "appointment papers"
+        : /\bbills\b/i.test(thing.what)
+          ? "bills"
+          : "papers";
+      title = `Compare two ${object} and group them by subject`;
+      endpoint = "Stop with those two papers grouped. Keep both.";
+    } else if (/\b(playlist|songs)\b/i.test(thing.what)) {
+      title = "Choose the first song for your playlist";
+      endpoint = "Stop with one song placed first in your playlist";
+    }
+  }
   const minutes = Math.min(
     10,
     statedAvailabilityMinutes(thing, originalWords) ?? 10,
   );
-  const minuteLabel = minutes === 1 ? "minute" : "minutes";
   const piece: Piece = {
-    title: isContact
-      ? `Draft two unsent lines${/\bemail\b/i.test(target) ? " for the email" : ""}`
-      : `Spend ${minutes} ${minuteLabel} on ${target}`,
+    title,
     size: minutes <= 5 ? "tiny" : "small",
     minutes,
-    endpoint: isContact
-      ? "Stop with two unsent lines"
-      : `Stop after ${minutes} ${minuteLabel} on ${target}`,
-    when: "When you next have a quiet moment",
+    endpoint,
+    when: noWorkToday(thing, originalWords)
+      ? "On a later day"
+      : "When you next have a quiet moment",
     sourcePhrase: phrase,
   };
   return pieceIssues(piece, thing, eatingConcern, originalWords).length

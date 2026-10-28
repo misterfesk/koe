@@ -15,6 +15,7 @@ import {
 import { SafetyCheck } from "../safety/safety-check";
 import {
   clearInterviewDraft,
+  interviewAnswer,
   readInterviewDraft,
   writeInterviewDraft,
   type InterviewDraft,
@@ -42,7 +43,6 @@ export function WorkInterview({
   const router = useRouter();
   const mode = onReady ? "intro" : "return";
   const [state, setState] = useState<InterviewDraft | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [flagged, setFlagged] = useState(false);
   const [restart, setRestart] = useState(false);
@@ -93,10 +93,10 @@ export function WorkInterview({
       turn: result.turn,
       ...(result.draft ? { draft: result.draft } : {}),
       answer: "",
+      selected: [],
       messages: messages.slice(-20),
     };
     remember(next);
-    setSelected([]);
     return next;
   }
   async function open(preservedAnswer = "") {
@@ -148,6 +148,7 @@ export function WorkInterview({
 
   function send() {
     if (!state || pending) return;
+    const selected = state.selected ?? [];
     const option = state.turn?.ask?.options?.find((o) =>
       selected.includes(o.id),
     );
@@ -160,9 +161,15 @@ export function WorkInterview({
       enough();
       return;
     }
-    const text = state.answer.trim() || option?.label || "";
+    const text = interviewAnswer(state);
     if (intent === "answer" && !text) {
       setError("Give it a few words, or stop here for now.");
+      return;
+    }
+    if (intent === "answer" && text.length > 400) {
+      setError(
+        "Keep your answer within 400 characters. Shorten your words or unselect an option.",
+      );
       return;
     }
     setError("");
@@ -245,6 +252,7 @@ export function WorkInterview({
       />
     );
   const turn = state?.turn;
+  const selected = state?.selected ?? [];
   return (
     <div className={styles.chatIntake}>
       <header
@@ -283,15 +291,21 @@ export function WorkInterview({
             value={selected}
             other={state.answer}
             onChange={(value) => {
-              setSelected(value);
-              if (state.answer) remember({ ...state, answer: "" });
+              remember({
+                ...state,
+                selected: value,
+                answer: turn.ask?.kind === "multi" ? state.answer : "",
+              });
             }}
             onOtherChange={(answer) => {
-              setSelected([]);
-              remember({ ...state, answer });
+              remember({
+                ...state,
+                answer,
+                selected: turn.ask?.kind === "multi" ? selected : [],
+              });
             }}
             maxLength={400}
-            disabled={pending || restart}
+            disabled={pending}
           />
           <div className="actions">
             <button
@@ -361,7 +375,14 @@ export function WorkInterview({
             question="Start the interview again?"
             detail="Your earlier replies will be replaced. Your current answer stays here."
             onConfirm={() => {
-              const answer = readInterviewDraft(owner, mode)?.answer ?? "";
+              const saved = readInterviewDraft(owner, mode);
+              const answer = saved ? interviewAnswer(saved) : "";
+              if (answer.length > 400) {
+                setError(
+                  "Keep your answer within 400 characters. Shorten your words or unselect an option.",
+                );
+                return;
+              }
               clearInterviewDraft(owner, mode);
               startTransition(() => open(answer));
             }}

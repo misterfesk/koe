@@ -124,6 +124,8 @@ export async function breakDown(context: InterviewContext, userId?: string) {
       const corrections: Record<string, string> = {
         availability:
           "Every piece must fit the person's stated available minutes.",
+        not_today:
+          "Work is unavailable today. Suggest a later day for every piece, including unsent drafts.",
         destructive:
           "No destruction was requested. Propose sorting and keeping instead.",
         unrelated_message:
@@ -133,7 +135,14 @@ export async function breakDown(context: InterviewContext, userId?: string) {
           "Use safe plain second-person words without banned phrases or excluded subjects.",
         contact: "Use an unsent draft. Sending requires an explicit request.",
         size: "Minutes must fit tiny <=5, small <=15, medium <=25.",
+        duplicate_outcome:
+          "Give each piece a different result. Expand, revise, or add to earlier work.",
+        unchanged_outcome:
+          "Keeping an earlier result unchanged is not another piece. Add a concrete change within the person's scope.",
+        invented_storage:
+          "Use only storage the person named. Keep sorted groups in that place.",
       };
+      const endpoints = new Set<string>();
       result.pieces.forEach((piece, index) => {
         const issues = pieceIssues(
           piece,
@@ -143,6 +152,28 @@ export async function breakDown(context: InterviewContext, userId?: string) {
         );
         if (context.caring && piece.size === "medium")
           issues.push("availability");
+        const endpoint = piece.endpoint
+          .normalize("NFKC")
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}]+/gu, " ")
+          // Roughness changes the writing standard, not the amount of work.
+          // Preserve revision verbs, quantities, and objects: this is not a
+          // general semantic similarity check.
+          .replace(/\b(?:deliberately|rough)\b/gu, " ")
+          .replace(/\s+/gu, " ")
+          .trim();
+        if (endpoints.has(endpoint)) issues.push("duplicate_outcome");
+        endpoints.add(endpoint);
+        // A preservation instruction can describe a constraint on earlier
+        // work, but cannot fill another slot in a cumulative breakdown.
+        // Require both fields: "Keep writing" can produce additional words.
+        if (
+          index > 0 &&
+          /^(?:leave|keep|maintain)\b/i.test(piece.title) &&
+          !/^keep\s+[\p{L}]+ing\b/iu.test(piece.title) &&
+          /\b(?:stays?|remains?|unchanged)\b/i.test(piece.endpoint)
+        )
+          issues.push("unchanged_outcome");
         for (const issue of issues)
           validation.addIssue({
             code: "custom",
