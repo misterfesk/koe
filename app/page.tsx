@@ -53,7 +53,7 @@ export default async function Page({
           <p className="eyebrow">01 / Choose</p>
           <h2>One gentle day.</h2>
           <p>
-            Answer five questions. Koe plans a few ordinary things you used to
+            Answer four questions. Koe plans a few ordinary things you used to
             enjoy or need to do, small enough to start. You can change any of
             them.
           </p>

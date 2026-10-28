@@ -98,3 +98,38 @@
   font-size: 1.25rem;
   margin: 32px 0 12px;
 }
+
+.chatIntake {
+  max-width: 660px;
+  margin: 0 auto;
+}
+.chatIntake h1,
+.intro h1 {
+  font-size: clamp(2.25rem, 5vw, 3rem);
+  font-weight: 600;
+  line-height: 1.15;
+}
+.introActions > * {
+  flex-grow: 0;
+}
+.history {
+  margin-bottom: 28px;
+}
+.history [role="log"] {
+  max-height: 150px;
+  font-size: 0.875rem;
+}
+.wake {
+  margin-top: 28px;
+}
+.wake legend {
+  font-size: 1.125rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dots span {
+    animation: none;
+  }
+  .barFill {
+    transition: none;
+  }
+}

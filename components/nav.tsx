@@ -17,6 +17,7 @@ const items = [
 
 export function Nav() {
   const path = usePathname();
+  if (path === "/intake") return null;
   return (
     <nav aria-label="Main navigation" className={styles.nav}>
       {items.map(([href, label, icon, also]) => (

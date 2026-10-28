@@ -10,7 +10,7 @@ import { env } from "@/server/env";
 import { pushConfigured } from "@/server/push";
 import { requireViewer } from "@/server/viewer";
 
-export const metadata: Metadata = { title: "Get to know you" };
+export const metadata: Metadata = { title: "Plan your first day" };
 
 export default async function Page() {
   const v = await requireViewer();
@@ -19,9 +19,7 @@ export default async function Page() {
   if (v.profile.coachingPausedAt)
     return (
       <>
-        <PageHeading eyebrow="Welcome">
-          Five questions so Koe can plan your day
-        </PageHeading>
+        <PageHeading eyebrow="Welcome">Plan your first day</PageHeading>
         <SafetyCheck region={v.profile.region} />
       </>
     );

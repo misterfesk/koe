@@ -11,13 +11,12 @@ async function startWithPlan(page: Page) {
   await expect(page).toHaveURL(/\/intake$/);
   await page.getByRole("button", { name: "Start", exact: true }).click();
   const chip = (name: string) =>
-    page.locator("label.chip", { hasText: name }).first();
+    page.getByRole("button", { name, exact: true });
   await chip("Work or study").click();
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByRole("button", { name: "Skip", exact: true }).click();
   await chip("Music").click();
   await page.getByRole("button", { name: "Next" }).click();
-  await page.getByRole("button", { name: "Skip", exact: true }).click();
   await page.getByRole("button", { name: "Skip", exact: true }).click();
   await expect(
     page.getByRole("heading", { level: 1, name: "Here's what I understood" }),

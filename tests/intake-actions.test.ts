@@ -10,11 +10,6 @@ vi.mock("@/server/viewer", () => ({
   requireViewer: async () => viewer.current,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
-vi.mock("next/navigation", () => ({
-  redirect: (to: string) => {
-    throw new Error("REDIRECT " + to);
-  },
-}));
 
 beforeAll(() => {
   process.env.NEBIUS_API_KEY = "test-key-not-used-in-this-suite";
@@ -177,9 +172,9 @@ describe("startMyDay", { timeout: 30_000 }, () => {
     }
   };
 
-  it("writes the approved things and opens Today", async () => {
+  it("writes the approved things and returns success for draft cleanup", async () => {
     const { db, schema } = await setup();
-    expect(await run(payload())).toBe("REDIRECT /today");
+    expect(await run(payload())).toEqual({ ok: true });
     expect(await db.select().from(schema.userModel)).toHaveLength(1);
     expect(await db.select().from(schema.step)).toHaveLength(3);
     expect(await db.select().from(schema.planDay)).toHaveLength(1);
@@ -190,7 +185,7 @@ describe("startMyDay", { timeout: 30_000 }, () => {
     // Only a name that was in the answers can be saved.
     expect(await db.select().from(schema.person)).toHaveLength(1);
     // A second tap changes nothing.
-    expect(await run(payload())).toBe("REDIRECT /today");
+    expect(await run(payload())).toEqual({ ok: true });
     expect(await db.select().from(schema.step)).toHaveLength(3);
   });
 
@@ -210,9 +205,9 @@ describe("startMyDay", { timeout: 30_000 }, () => {
       quietStart: 22 * 60,
       quietEnd: 8 * 60,
     });
-    expect(await run({ ...payload(), morningPlanMinute: 7 * 60 })).toBe(
-      "REDIRECT /today",
-    );
+    expect(await run({ ...payload(), morningPlanMinute: 7 * 60 })).toEqual({
+      ok: true,
+    });
     expect(await db.select().from(schema.reminder)).toHaveLength(0);
   });
 
@@ -224,9 +219,9 @@ describe("startMyDay", { timeout: 30_000 }, () => {
       p256dh: "p256dh-test-key",
       auth: "auth-test",
     });
-    expect(await run({ ...payload(), morningPlanMinute: 9 * 60 })).toBe(
-      "REDIRECT /today",
-    );
+    expect(await run({ ...payload(), morningPlanMinute: 9 * 60 })).toEqual({
+      ok: true,
+    });
     const rows = await db.select().from(schema.reminder);
     expect(rows.map((r) => [r.kind, r.minuteOfDay])).toEqual([
       ["morning_plan", 9 * 60],
@@ -243,7 +238,7 @@ describe("startMyDay", { timeout: 30_000 }, () => {
         items: p.items.slice(0, 2),
         savePeople: [],
       }),
-    ).toBe("REDIRECT /today");
+    ).toEqual({ ok: true });
     expect(await db.select().from(schema.memoryCard)).toHaveLength(0);
     expect(await db.select().from(schema.person)).toHaveLength(0);
     expect(await db.select().from(schema.step)).toHaveLength(2);
@@ -285,7 +280,7 @@ describe("startMyDay", { timeout: 30_000 }, () => {
 
   it("keeps the model and cards out when memory is off but still plans the day", async () => {
     const { db, schema } = await setup(false);
-    expect(await run(payload())).toBe("REDIRECT /today");
+    expect(await run(payload())).toEqual({ ok: true });
     expect(await db.select().from(schema.userModel)).toHaveLength(0);
     expect(await db.select().from(schema.memoryCard)).toHaveLength(0);
     expect(await db.select().from(schema.step)).toHaveLength(3);

@@ -1,8 +1,10 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Field, GrowingText } from "@/components/ui";
-import type { Reveal } from "@/domain/intake";
+import { AskCard } from "@/components/chat";
+import { morningPlans, type MorningPlan, type Reveal } from "@/domain/intake";
 import { alternativeFor, sizeLabels, type PlanItem } from "@/domain/plan-menu";
 import { inQuietHours } from "@/domain/reminders";
 import { formatClock } from "@/domain/time";
@@ -30,6 +32,7 @@ export function RevealScreen({
   /** Whether the person's locale writes times on a 12-hour clock. */
   hour12: boolean;
 }) {
+  const router = useRouter();
   const clock = (m: number) => formatClock(m, hour12);
   const [summary, setSummary] = useState(reveal.summary);
   const [cards, setCards] = useState<Card[]>(
@@ -40,6 +43,9 @@ export function RevealScreen({
   );
   const [items, setItems] = useState<PlanItem[]>(reveal.items);
   const [morningOn, setMorningOn] = useState(false);
+  const [morning, setMorning] = useState<MorningPlan>(
+    reveal.model.morningPlan ?? "none",
+  );
   const [itemsOn, setItemsOn] = useState(false);
   const [remindError, setRemindError] = useState("");
   const [announce, setAnnounce] = useState("");
@@ -48,12 +54,12 @@ export function RevealScreen({
   const [pending, startTransition] = useTransition();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    heading.current?.focus();
+    heading.current?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: "instant" });
   }, [flagged]);
 
   // Reminders start off. Turning one on asks the browser then, with the
   // reason just shown above the switch.
-  const morning = reveal.model.morningPlan;
   const morningMinute =
     morning && morning !== "none" ? Number(morning.slice(0, 2)) * 60 : null;
   // A reminder inside quiet hours, or for a time that has passed today, would
@@ -101,21 +107,25 @@ export function RevealScreen({
   const start = () => {
     setError("");
     startTransition(async () => {
-      const r = await startMyDay({
-        model: reveal.model,
-        summary,
-        memories: cards
-          .filter((c) => c.keep && c.text.trim())
-          .map(({ kind, text }) => ({ kind, text })),
-        savePeople: save.filter((n) => n.save).map((n) => n.name),
-        items,
-        remindItems: itemsOn,
-        morningPlanMinute: morningOn ? morningMinute : null,
-      });
-      // On success the server sends the person to Today.
-      if (!r.ok) return setError(Object.values(r.errors)[0]);
-      clearDraft();
-      if (r.safety && r.safety !== "none") setFlagged(true);
+      try {
+        const r = await startMyDay({
+          model: { ...reveal.model, morningPlan: morning },
+          summary,
+          memories: cards
+            .filter((c) => c.keep && c.text.trim())
+            .map(({ kind, text }) => ({ kind, text })),
+          savePeople: save.filter((n) => n.save).map((n) => n.name),
+          items,
+          remindItems: itemsOn,
+          morningPlanMinute: morningOn ? morningMinute : null,
+        });
+        if (!r.ok) return setError(Object.values(r.errors)[0]);
+        if (r.safety && r.safety !== "none") return setFlagged(true);
+        clearDraft();
+        router.replace("/today");
+      } catch {
+        setError("Your day couldn't be confirmed. Try Start my day again.");
+      }
     });
   };
 
@@ -280,9 +290,32 @@ export function RevealScreen({
             Want a reminder?
           </h2>
           <p className="meta">
-            Both are off until you turn them on, and are saved when you start
-            your day. A reminder shows only the time, never what it is.
+            Reminders stay off until you turn them on. Your choices save when
+            you start your day. A reminder shows only the time, never what it
+            is.
           </p>
+          <AskCard
+            label="A morning plan time"
+            ask={{
+              kind: "single",
+              allowOther: false,
+              options: morningPlans.map((value) => ({
+                id: value,
+                label:
+                  value === "none"
+                    ? "Not now"
+                    : clock(Number(value.slice(0, 2)) * 60),
+              })),
+            }}
+            value={[morning]}
+            other=""
+            onOtherChange={() => {}}
+            disabled={pending}
+            onChange={(value) => {
+              setMorning((value[0] as MorningPlan) ?? "none");
+              setMorningOn(false);
+            }}
+          />
           {morningMinute !== null &&
             (morningQuiet ? (
               <p className="meta" role="note">

@@ -34,7 +34,7 @@ test("a new visitor starts in the welcome dialog, then skips the intake", async 
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Five questions so Koe can plan your day",
+      name: "Plan your first day",
     }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Skip for now" }).click();

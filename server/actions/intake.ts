@@ -1,6 +1,5 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import { fieldErrors, type ActionResult } from "@/domain/forms";
 import {
@@ -135,7 +134,7 @@ const startInput = z.object({
   morningPlanMinute: z.number().int().min(0).max(1439).nullable().default(null),
 });
 
-/** "Start my day": writes exactly what the person approved, then opens Today. */
+/** "Start my day": writes approved choices; the caller clears its draft before navigation. */
 export async function startMyDay(input: unknown): Promise<ActionResult> {
   const v = await requireViewer();
   const parsed = startInput.safeParse(input);
@@ -212,5 +211,5 @@ export async function startMyDay(input: unknown): Promise<ActionResult> {
     }
   }
   refresh();
-  redirect("/today");
+  return { ok: true };
 }

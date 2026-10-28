@@ -12,8 +12,14 @@ async function startIntake(page: Page) {
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Five questions so Koe can plan your day",
+      name: "Plan your first day",
     }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Main navigation" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Help", exact: true }),
   ).toBeVisible();
 }
 
@@ -28,7 +34,7 @@ async function clean(page: Page, label: string) {
 }
 
 const chip = (page: Page, name: string) =>
-  page.locator("label.chip", { hasText: name }).first();
+  page.getByRole("button", { name, exact: true });
 const heading = (page: Page, name: string | RegExp) =>
   page.getByRole("heading", { level: 1, name });
 const begin = (page: Page) =>
@@ -36,7 +42,7 @@ const begin = (page: Page) =>
 const skip = (page: Page) =>
   page.getByRole("button", { name: "Skip", exact: true }).click();
 
-test("welcome, five questions, reveal and Start my day land on Today", async ({
+test("welcome, four chat turns, reveal and Start my day land on Today", async ({
   page,
 }) => {
   test.setTimeout(90_000);
@@ -46,21 +52,20 @@ test("welcome, five questions, reveal and Start my day land on Today", async ({
 
   // 1. Goals: up to two.
   await expect(heading(page, "What would help most right now?")).toBeFocused();
-  await expect(page.getByText("1 of 5")).toBeVisible();
+  await expect(page.getByText("1 of 4")).toBeVisible();
   await chip(page, "Energy and motivation").click();
   await chip(page, "Sleep").click();
   await expect(
-    page.getByRole("checkbox", { name: "Looking after the basics" }),
+    page.getByRole("button", { name: "Looking after the basics" }),
   ).toBeDisabled();
   await clean(page, "q1");
   await page.getByRole("button", { name: "Next" }).click();
 
   // 2. A usual day.
-  await expect(heading(page, "What does a usual day look like?")).toBeVisible();
-  await expect(page.getByText("2 of 5")).toBeVisible();
+  await expect(heading(page, "What fills your days?")).toBeVisible();
+  await expect(page.getByText("2 of 4")).toBeVisible();
   await chip(page, "Between 7 and 9").click();
   await chip(page, "Working").click();
-  await chip(page, "Morning").click();
   await clean(page, "q2");
   await page.getByRole("button", { name: "Next" }).click();
 
@@ -68,20 +73,13 @@ test("welcome, five questions, reveal and Start my day land on Today", async ({
   await expect(heading(page, /What used to lift you/)).toBeVisible();
   await chip(page, "Music").click();
   await chip(page, "Walking").click();
-  await page.getByLabel("Add a few words (optional)").fill("Old records");
+  await page.getByRole("button", { name: /Something else/ }).click();
   await clean(page, "q3");
   await page.getByRole("button", { name: "Next" }).click();
 
-  // 4. Skipped.
-  await expect(heading(page, "Who's in your corner?")).toBeVisible();
+  // 4. The weekly hand-off can be skipped with taps only.
+  await expect(heading(page, /Tell me one thing/)).toBeVisible();
   await clean(page, "q4");
-  await skip(page);
-
-  // 5. Tone and morning plan.
-  await expect(heading(page, "How should Koe be with you?")).toBeVisible();
-  await chip(page, "Gentle").click();
-  await chip(page, "8:00 am").click();
-  await clean(page, "q5");
   // The server actions are slowed down, so the wait screen is on screen long
   // enough to be seen: it must show while the reveal is being made.
   let slowed = false;
@@ -92,13 +90,38 @@ test("welcome, five questions, reveal and Start my day land on Today", async ({
     }
     await route.continue();
   });
-  await page.getByRole("button", { name: "Finish" }).click();
+  await page.getByRole("button", { name: "Skip" }).click();
   await expect(heading(page, "Getting to know you…")).toBeVisible();
-  await expect(page.getByText("Putting your answers together")).toBeVisible();
+  await expect(
+    page.getByText("Putting your answers into a first day.", { exact: false }),
+  ).toBeVisible();
 
   // The reveal.
   await expect(heading(page, "Here's what I understood")).toBeVisible();
+  await expect
+    .poll(async () => {
+      const title = await heading(
+        page,
+        "Here's what I understood",
+      ).boundingBox();
+      const header = await page.getByRole("banner").boundingBox();
+      return !!title && !!header && title.y >= header.y + header.height;
+    })
+    .toBe(true);
   await expect(page.getByText("Here's a simple start")).toBeVisible();
+  const morningChoices = page.getByRole("group", {
+    name: "A morning plan time",
+  });
+  await expect(
+    morningChoices.getByRole("button", { name: "Not now" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await morningChoices.getByRole("button", { name: "8:00 am" }).click();
+  await expect(
+    page.getByRole("checkbox", { name: /Remind me at 8:00 am/ }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByRole("checkbox", { name: /Remind me at the time/ }),
+  ).not.toBeChecked();
   await clean(page, "reveal");
   const summary = page.getByLabel(/You can change this/);
   await expect(summary).toHaveValue(/^You/);
@@ -133,6 +156,10 @@ test("welcome, five questions, reveal and Start my day land on Today", async ({
 
   await page.getByRole("button", { name: "Start my day" }).click();
   await expect(page).toHaveURL(/\/today$/);
+
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("koe.intake.draft.v1")),
+  ).toBeNull();
 
   // Today shows the three items with their times and reasons.
   const today = page.getByRole("heading", { level: 3 });
@@ -172,9 +199,8 @@ test("a risky answer shows the safety flow and the intake carries on", async ({
   await startIntake(page);
   await begin(page);
   await chip(page, "Sleep").click();
-  await page
-    .getByLabel("Add a few words (optional)")
-    .fill("I want to end it all");
+  await page.getByRole("button", { name: /Something else/ }).click();
+  await page.getByLabel("Your words").fill("I want to end it all");
   await page.getByRole("button", { name: "Next" }).click();
   await expect(
     page.getByRole("heading", { name: /are you safe right now/ }),
@@ -182,11 +208,15 @@ test("a risky answer shows the safety flow and the intake carries on", async ({
   await clean(page, "safety");
   await page.getByRole("button", { name: "I'm safe for now" }).click();
   await page.getByRole("button", { name: "Carry on with Koe" }).click();
-  await expect(heading(page, "What does a usual day look like?")).toBeVisible();
+  await expect(heading(page, "What fills your days?")).toBeVisible();
   // Back on the first question, the words are gone and the tick is kept.
   await page.getByRole("button", { name: "Back" }).click();
-  await expect(page.getByLabel("Add a few words (optional)")).toHaveValue("");
-  await expect(page.getByRole("checkbox", { name: "Sleep" })).toBeChecked();
+  await page.getByRole("button", { name: /Something else/ }).click();
+  await expect(page.getByLabel("Your words")).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Sleep" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 });
 
 test("all questions skipped still gives a gentle first day", async ({
@@ -194,7 +224,7 @@ test("all questions skipped still gives a gentle first day", async ({
 }) => {
   await startIntake(page);
   await begin(page);
-  for (let n = 0; n < 5; n++) await skip(page);
+  for (let n = 0; n < 4; n++) await skip(page);
   await expect(heading(page, "Here's what I understood")).toBeVisible();
   await expect(page.locator("ol li")).toHaveCount(3);
   // Removing items is allowed down to one.
@@ -213,11 +243,12 @@ test("food and weight worry drops food and movement and points to Help", async (
 }) => {
   await startIntake(page);
   await begin(page);
+  await page.getByRole("button", { name: /Something else/ }).click();
   await page
-    .getByLabel("Add a few words (optional)")
+    .getByLabel("Your words")
     .fill("I hate my body and I'm restricting");
   await page.getByRole("button", { name: "Next" }).click();
-  for (let n = 0; n < 4; n++) await skip(page);
+  for (let n = 0; n < 3; n++) await skip(page);
   await expect(heading(page, "Here's what I understood")).toBeVisible();
   await expect(
     page.getByText(/tell a doctor or someone you trust/),
@@ -236,18 +267,22 @@ test("the questions work at 320px and by keyboard", async ({ page }) => {
   await begin(page);
   await noHorizontalScroll(page);
   // Enter in a text box moves on, like Next.
-  await page.getByLabel("Add a few words (optional)").fill("Just getting by");
-  await page.getByLabel("Add a few words (optional)").press("Enter");
-  await expect(heading(page, "What does a usual day look like?")).toBeVisible();
+  await page.getByRole("button", { name: /Something else/ }).click();
+  await page.getByLabel("Your words").fill("Just getting by");
+  await page.getByLabel("Your words").press("Enter");
+  await expect(heading(page, "What fills your days?")).toBeVisible();
   // Chips are real controls: Space picks one.
-  await page.getByRole("radio", { name: "Before 7" }).focus();
+  await page.getByRole("button", { name: "Before 7" }).focus();
   await page.keyboard.press("Space");
-  await expect(page.getByRole("radio", { name: "Before 7" })).toBeChecked();
+  await expect(page.getByRole("button", { name: "Before 7" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await noHorizontalScroll(page);
   // One button: Next once something is answered, Skip when nothing is.
   await expect(page.getByRole("button", { name: "Skip" })).toHaveCount(0);
   await page.getByRole("button", { name: "Next" }).click();
-  for (let n = 0; n < 3; n++) await skip(page);
+  for (let n = 0; n < 2; n++) await skip(page);
   await expect(heading(page, "Here's what I understood")).toBeVisible();
   await noHorizontalScroll(page);
   await clean(page, "reveal 320");
@@ -257,25 +292,26 @@ test("a reload picks up the intake where it was", async ({ page }) => {
   await startIntake(page);
   await begin(page);
   await chip(page, "Sleep").click();
-  await page.getByLabel("Add a few words (optional)").fill("Mornings are hard");
+  await page.getByRole("button", { name: /Something else/ }).click();
+  await page.getByLabel("Your words").fill("Mornings are hard");
   await page.getByRole("button", { name: "Next" }).click();
-  await expect(heading(page, "What does a usual day look like?")).toBeVisible();
+  await expect(heading(page, "What fills your days?")).toBeVisible();
   await chip(page, "Between 7 and 9").click();
   await page.reload();
   // Back on the second question, with the earlier answers kept.
-  await expect(heading(page, "What does a usual day look like?")).toBeVisible();
+  await expect(heading(page, "What fills your days?")).toBeVisible();
   await expect(
-    page.getByRole("radio", { name: "Between 7 and 9" }),
-  ).toBeChecked();
+    page.getByRole("button", { name: "Between 7 and 9" }),
+  ).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Back" }).click();
-  await expect(page.getByRole("checkbox", { name: "Sleep" })).toBeChecked();
-  await expect(page.getByLabel("Add a few words (optional)")).toHaveValue(
-    "Mornings are hard",
+  await expect(page.getByRole("button", { name: "Sleep" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
   );
+  await expect(page.getByLabel("Your words")).toHaveValue("Mornings are hard");
   // Words that trip the safety check are never kept.
-  await page
-    .getByLabel("Add a few words (optional)")
-    .fill("I want to end it all");
+  await page.getByRole("button", { name: /Something else/ }).click();
+  await page.getByLabel("Your words").fill("I want to end it all");
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByRole("button", { name: "I'm safe for now" }).click();
   await page.getByRole("button", { name: "Carry on with Koe" }).click();
@@ -284,4 +320,202 @@ test("a reload picks up the intake where it was", async ({ page }) => {
     window.sessionStorage.getItem("koe.intake.draft.v1"),
   );
   expect(kept).not.toContain("end it all");
+});
+
+test("inline Other and weekly words reach a saved lean plan", async ({
+  page,
+}) => {
+  await startIntake(page);
+  await begin(page);
+  await page.getByRole("button", { name: /Something else/ }).click();
+  await page.getByLabel("Your words").fill("Starting the morning");
+  await page.getByRole("button", { name: "Next" }).click();
+  const days = page.getByRole("group", {
+    name: "What fills your days?",
+    exact: true,
+  });
+  await days.getByRole("button", { name: /Something else/ }).click();
+  await days.getByLabel("Your words").fill("Freelance drawing");
+  const wake = page.getByRole("group", { name: "Roughly when do you wake?" });
+  await wake.getByRole("button", { name: /Something else/ }).click();
+  await wake.getByLabel("Your words").fill("After night shifts");
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(heading(page, "What used to lift you?")).toBeVisible();
+  await page.getByRole("button", { name: /Something else/ }).click();
+  await page.getByLabel("Your words").fill("Drawing cats");
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByLabel("Your answer").fill("Update my CV");
+  await page.getByLabel("Your answer").press("Enter");
+  await expect(heading(page, "Here's what I understood")).toBeVisible();
+  await page.getByRole("button", { name: "Start my day" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+  const body = await (await page.request.get("/api/export")).json();
+  expect(body.userModel.model).toMatchObject({
+    puttingOff: "Update my CV",
+    people: [],
+    names: [],
+    tone: "calm",
+    notes: {
+      goals: "Starting the morning",
+      day: "Freelance drawing. Wake: After night shifts",
+      lifts: "Drawing cats",
+    },
+  });
+  expect(body.userModel.model.support).toBeUndefined();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("koe.intake.draft.v1")),
+  ).toBeNull();
+  await page.context().clearCookies();
+  await startIntake(page);
+  await begin(page);
+  await expect(page.locator("button[aria-pressed=true]")).toHaveCount(0);
+  await skip(page);
+  await skip(page);
+  await skip(page);
+  await expect(page.getByLabel("Your answer")).toHaveValue("");
+});
+
+test("Back, Skip and exit preserve only answers the person keeps", async ({
+  page,
+}) => {
+  await startIntake(page);
+  await begin(page);
+  await chip(page, "Sleep").click();
+  await page.getByRole("button", { name: "Next" }).click();
+  await chip(page, "Working").click();
+  await page.getByRole("link", { name: "Leave for Today" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+  await page.goto("/intake");
+  await expect(heading(page, "What fills your days?")).toBeVisible();
+  await expect(chip(page, "Working")).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Back" }).click();
+  await chip(page, "Sleep").click();
+  await skip(page);
+  await chip(page, "Working").click();
+  await skip(page);
+  await skip(page);
+  await skip(page);
+  await page.getByRole("button", { name: "Start my day" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+  const body = await (await page.request.get("/api/export")).json();
+  expect(body.userModel.model.goals).toEqual([]);
+  expect(body.userModel.model.days).toBeUndefined();
+});
+
+test("malformed and legacy drafts resume without hidden answers", async ({
+  page,
+}) => {
+  await startIntake(page);
+  await page.evaluate(() =>
+    sessionStorage.setItem(
+      "koe.intake.draft.v1",
+      JSON.stringify({
+        stage: 2,
+        draft: {
+          goals: "bad",
+          days: {},
+          wake: [null],
+          lifts: "bad",
+          names: "bad",
+          people: ["friend"],
+          tone: ["expressive"],
+        },
+      }),
+    ),
+  );
+  await page.reload();
+  await expect(heading(page, "What fills your days?")).toBeVisible();
+  await skip(page);
+  await skip(page);
+  await skip(page);
+  await page.getByRole("button", { name: "Start my day" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+  const body = await (await page.request.get("/api/export")).json();
+  expect(body.userModel.model).toMatchObject({
+    people: [],
+    names: [],
+    tone: "calm",
+  });
+});
+
+test("keyboard-only lean intake reaches Today", async ({ page }) => {
+  await startIntake(page);
+  async function activate(name: string | RegExp) {
+    const target = page.getByRole("button", {
+      name,
+      exact: typeof name === "string",
+    });
+    for (let n = 0; n < 60; n++) {
+      if (
+        await target.evaluate((element) => element === document.activeElement)
+      ) {
+        await page.keyboard.press("Enter");
+        return;
+      }
+      await page.keyboard.press("Tab");
+    }
+    throw new Error(`Could not reach ${name}`);
+  }
+  await activate("Start");
+  await activate("Sleep");
+  await activate("Next");
+  await activate("Working");
+  await activate("Before 7");
+  await activate("Next");
+  await activate("Music");
+  await activate("Next");
+  await activate("Skip");
+  await expect(heading(page, "Here's what I understood")).toBeVisible();
+  await activate("Start my day");
+  await expect(page).toHaveURL(/\/today$/);
+});
+
+test("a risky reveal edit preserves the intake draft", async ({ page }) => {
+  await startIntake(page);
+  await begin(page);
+  await chip(page, "Sleep").click();
+  await page.getByRole("button", { name: "Next" }).click();
+  await skip(page);
+  await skip(page);
+  await skip(page);
+  await expect(heading(page, "Here's what I understood")).toBeVisible();
+  const before = await page.evaluate(() =>
+    sessionStorage.getItem("koe.intake.draft.v1"),
+  );
+  expect(before).toContain("sleep");
+  await page.getByLabel(/You can change this/).fill("I want to end it all");
+  await page.getByRole("button", { name: "Start my day" }).click();
+  await expect(
+    page.getByRole("heading", { name: /are you safe right now/ }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("koe.intake.draft.v1")),
+  ).toBe(before);
+});
+
+test("a failed Start my day request preserves the intake draft", async ({
+  page,
+}) => {
+  await startIntake(page);
+  await begin(page);
+  for (let n = 0; n < 4; n++) await skip(page);
+  await expect(heading(page, "Here's what I understood")).toBeVisible();
+  const before = await page.evaluate(() =>
+    sessionStorage.getItem("koe.intake.draft.v1"),
+  );
+  expect(before).not.toBeNull();
+  await page.route("**/intake", async (route) => {
+    if (route.request().headers()["next-action"]) await route.abort("failed");
+    else await route.continue();
+  });
+  await page.getByRole("button", { name: "Start my day" }).click();
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: "Your day couldn't be confirmed." }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("koe.intake.draft.v1")),
+  ).toBe(before);
+  await expect(page).toHaveURL(/\/intake$/);
 });

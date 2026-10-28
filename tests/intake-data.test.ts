@@ -164,33 +164,41 @@ describe("Start my day", { timeout: 30_000 }, () => {
 });
 
 describe("what Koe knows is the person's to export, move and delete", () => {
-  it("includes the user model and plan days in the export", async () => {
-    const { db } = await setup();
-    await commit(db);
-    const { getUserModel } = await import("@/server/data/intake");
-    const { profile } = await import("@/server/db/schema");
-    await db.insert(profile).values({ userId: "a", timezone: "UTC" });
-    const [p] = await db.select().from(profile).where(eq(profile.userId, "a"));
-    viewer.current = {
-      user: { id: "a", email: "a@example.com", createdAt: new Date() },
-      profile: p,
-      db,
-      today: TODAY,
-      isGuest: true,
-    };
-    const { GET } = await import("@/app/api/export/route");
-    const res = await GET();
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.userModel.summary).toMatch(/more energy/);
-    expect(body.userModel.model.names[0].name).toBe("Sam");
-    expect(body.planDays).toHaveLength(1);
-    expect(body.planDays[0].items).toHaveLength(3);
-    expect(body.steps).toHaveLength(3);
-    expect(body.steps[0]).toHaveProperty("why");
-    expect(body.memoryCards[0].source).toBe("intro");
-    expect(await getUserModel(db, "a")).not.toBeNull();
-  });
+  // PGlite setup can exceed five seconds on a busy Windows host.
+  it(
+    "includes the user model and plan days in the export",
+    { timeout: 30_000 },
+    async () => {
+      const { db } = await setup();
+      await commit(db);
+      const { getUserModel } = await import("@/server/data/intake");
+      const { profile } = await import("@/server/db/schema");
+      await db.insert(profile).values({ userId: "a", timezone: "UTC" });
+      const [p] = await db
+        .select()
+        .from(profile)
+        .where(eq(profile.userId, "a"));
+      viewer.current = {
+        user: { id: "a", email: "a@example.com", createdAt: new Date() },
+        profile: p,
+        db,
+        today: TODAY,
+        isGuest: true,
+      };
+      const { GET } = await import("@/app/api/export/route");
+      const res = await GET();
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.userModel.summary).toMatch(/more energy/);
+      expect(body.userModel.model.names[0].name).toBe("Sam");
+      expect(body.planDays).toHaveLength(1);
+      expect(body.planDays[0].items).toHaveLength(3);
+      expect(body.steps).toHaveLength(3);
+      expect(body.steps[0]).toHaveProperty("why");
+      expect(body.memoryCards[0].source).toBe("intro");
+      expect(await getUserModel(db, "a")).not.toBeNull();
+    },
+  );
 
   it("clears them with the account", async () => {
     const { db, schema } = await setup();

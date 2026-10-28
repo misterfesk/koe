@@ -2,7 +2,7 @@
 
 Koe is a private AI companion for adults living with depression. It learns about you in a short intake, plans a gentle day, adapts that day when your energy drops, reminds you at the right moments, finds a few trustworthy things to read, and is there to talk. It supports human care and never replaces it.
 
-This document describes the system through S7. Verification and the scoped final review are tracked in `../HANDOFF.md`.
+This document describes the system through S7 and v3 A1. Verification and milestone reviews are tracked in `../HANDOFF.md`.
 
 ## 1. Principles
 
@@ -53,6 +53,7 @@ flowchart LR
 |---|---|
 | `app/` | Routes. `(app)/` holds the signed-in or guest pages: `today`, `talk`, `shelf`, `you/*`, `intake`. Public pages are `/`, `/help`, `/about`, `/privacy` and `/sign-in`. API routes cover auth and export. |
 | `features/*` | Client components per feature: intake, today, talk, safety, onboarding, settings, connect, journey. |
+| `components/chat/*` | Shared controlled choices, checked-message transcript, loading dots and a caller-supplied checked-stream reader. `domain/chat-turn.ts` validates the turn contract and supplies a plain-text fallback. |
 | `domain/*` | Pure, unit-tested rules with no I/O: the day-plan menu and guardrails (`plan-menu.ts`), the intake model (`intake.ts`), risk patterns (`safety.ts`), reminder timing (`reminders.ts`), tone lines (`tone.ts`) and time helpers. |
 | `server/actions/*` | Server actions, the only write path from the UI. Each checks the viewer, validates input, screens free text and then calls `server/data`. |
 | `server/data/*` | Database reads and writes per area. Text is sealed and opened here. |
@@ -106,7 +107,7 @@ Model IDs are configuration (`KOE_CHAT_MODEL`, `KOE_FAST_MODEL`, `KOE_SAFETY_MOD
 
 | Agent | When | Output and checks |
 |---|---|---|
-| Intake synthesiser (`intake.ts`) | End of the 5-question intake | Summary, up to 4 memory proposals, 3 plan items. Checked against zod, the composition rules, the guardrails and the safety rules. Failing items are swapped for rules-based ones. AI off: `fallbackPlan`. |
+| Intake synthesiser (`intake.ts`) | End of the four-turn chat intake | Summary, up to 4 memory proposals, 3 plan items. Checked against zod, the composition rules, the guardrails and the safety rules. Failing items are swapped for rules-based ones. AI off: `fallbackPlan`. |
 | Planner (`planner.ts`) | First open of the day, check-in, "Not today" (smaller/swap), lighter day | A new plan version, plus a one-line note on what changed. Same checks. AI off: deterministic adaptation. |
 | Talk | Each message | Reply text plus tool proposals: add, move or shrink an entry, set a reminder, save a memory, find resources, draft a message, prepare for an appointment. Proposals are written only when the person confirms them. |
 | Resource screener | Weekly Shelf refresh, or a confirmed Talk request | Rules then Nano: exact HTTPS host, adult audience and excluded subjects. Fail-closed on model errors; validated why line or a fixed fallback. AI off uses rules and fixed copy. |
@@ -140,6 +141,8 @@ The risk patterns and the crisis-flow wording are engineering defaults and have 
 **You.** What Koe knows exposes the saved summary, intake answers and memory cards even when memory is off. Information changes require an explicit save, are sealed and owner-scoped, and reject stale model versions. They do not call a provider or change the current day, people or active reminders. The eating-concern flag is derived locally and retained; it is not accepted from the browser. Saved intro tone and morning-plan preferences are separate from the active controls in Appearance and Reminders.
 
 **Entry paths and drafts.** Legacy `/steps/[id]` links lead to the current entry on Today, including its scroll position, or read-only Look back history. Add and problem-solving forms live under `/today`; People uses the same versioned add action. Weekly choices save intentions only; Today handles plan changes and Undo. Tab-local form drafts are validated and scoped to their owner. A stale information draft needs an explicit choice before it replaces current answers in the editor. A confirmed anonymous-to-account link moves browser drafts using server-confirmed owner IDs; no credential values enter that handoff. A collision retains both drafts under the account's cleanup scope, without automatically loading the extra draft. Successful account deletion also clears the person's browser drafts; failed deletion keeps them. Search-budget reservations write an explicit UTC instant, independently of the database's local timezone.
+
+**Chat intake (v3 A1).** Four turns collect priorities, day/wake context, lifts and an optional weekly thing. The weekly text uses the existing `puttingOff` field until A2 adds the interview. People/support/busy-time questions are absent; tone defaults to calm. Main navigation stays hidden during onboarding, while Help remains available. Every typed answer is screened before the next turn. Validated tab drafts migrate legacy answers, discard hidden fields and unsafe words, and keep the local eating-protection flag. Day and wake notes share the existing 200-character storage limit. Morning reminder time is chosen on the reveal, with reminders off until explicitly enabled. The existing synthesis/reveal and save boundary remain; no new tables or model prompts are introduced in A1.
 
 ## 8. Reminders
 
