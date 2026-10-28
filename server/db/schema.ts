@@ -190,11 +190,26 @@ export const conversation = pgTable(
     mode: text("mode", { enum: talkModes }).notNull().default("talk"),
     titleEnc: text("title_enc"),
     safetyPausedAt: timestamp("safety_paused_at"),
+    // What the person opened Talk from (Stuck? Ask Koe), set when it starts.
+    contextKind: text("context_kind", { enum: ["thing"] }),
+    contextId: text("context_id"),
     createdAt: created(),
     updatedAt: updated(),
   },
   (t) => [index("conversation_user_idx").on(t.userId, t.updatedAt)],
 );
+
+/** Takeaways from one conversation: sealed JSON of 1 to 3 short lines. */
+export const conversationSummary = pgTable("conversation_summary", {
+  conversationId: text("conversation_id")
+    .primaryKey()
+    .references(() => conversation.id, { onDelete: "cascade" }),
+  userId: owner(),
+  takeawaysEnc: text("takeaways_enc").notNull(),
+  // The newest message the takeaways cover.
+  uptoMessageId: text("upto_message_id").notNull(),
+  createdAt: created(),
+});
 
 export const message = pgTable(
   "message",
@@ -625,6 +640,7 @@ export const movableTables = [
   checkIn,
   memoryCard,
   conversation,
+  conversationSummary,
   message,
   step,
   stepVersion,

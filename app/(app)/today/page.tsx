@@ -94,6 +94,7 @@ export default async function Page() {
       minute,
       inPlan,
       thing: !!s.weekItemId,
+      weekItemId: s.weekItemId ?? null,
       repeats: isRepeating(s) ? describeDays(s.repeatDays!) : null,
       report: r
         ? { id: r.id, outcome: r.outcome, vsExpected: r.vsExpected }

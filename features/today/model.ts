@@ -17,6 +17,8 @@ export type Entry = {
   inPlan: boolean;
   /** One of the person's This week things: never made smaller or swapped. */
   thing: boolean;
+  /** The This week thing it came from, for Stuck? Ask Koe. */
+  weekItemId?: string | null;
   /** Days a repeating entry from before the plan came, if any. */
   repeats: string | null;
   report: {

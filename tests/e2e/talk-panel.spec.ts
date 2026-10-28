@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { noHorizontalScroll, startAsGuest } from "./helpers";
+import { noHorizontalScroll, proposeInterview, startAsGuest } from "./helpers";
 
 // Talk answers from a script here (KOE_AI_STUB, local servers only).
 const desktop = { width: 1440, height: 1000 };
@@ -110,4 +110,58 @@ test("the phone bar has five items with Talk in the centre, and More opens a she
     await expect(panel(page)).toHaveCount(0);
     await expect(bar.getByRole("button", { name: "Talk" })).toBeFocused();
   }
+});
+
+test("Stuck? Ask Koe opens Talk on a This week thing; Close leaves a takeaway in History", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize(desktop);
+  await startAsGuest(page);
+  await page.goto("/intake");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  for (let n = 0; n < 4; n++)
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
+  await page.getByRole("button", { name: "Start my day" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+  await page.getByRole("link", { name: /Tell Koe one thing/ }).click();
+  await page.getByLabel("Your answer").fill("Update the CV");
+  await page.getByRole("button", { name: "Reply", exact: true }).click();
+  await proposeInterview(page);
+  await page
+    .getByRole("button", { name: "Save this week", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/today$/);
+  // A check-in plans the day from the week.
+  await page.getByRole("button", { name: "Low", exact: true }).click();
+  await page.getByRole("button", { name: "Update my day" }).click();
+  await expect(
+    page.getByRole("region", { name: "What changed" }),
+  ).toBeVisible();
+
+  const thing = page.locator("li", {
+    has: page.getByRole("heading", { level: 3, name: "Update the CV" }),
+  });
+  await thing.getByRole("button", { name: "Stuck? Ask Koe →" }).click();
+  await expect(panel(page)).toBeVisible();
+  await expect(
+    panel(page).getByText(`What's getting in the way with "Update the CV"?`),
+  ).toBeVisible();
+
+  for (const said of ["I open it and close it", "the first line is hard"]) {
+    await panel(page).getByLabel("Your message").fill(said);
+    await panel(page).getByRole("button", { name: "Send" }).click();
+    await expect(panel(page).getByText(said)).toBeVisible();
+    await expect(panel(page).getByText("Thinking…")).toHaveCount(0);
+  }
+  await panel(page).getByRole("button", { name: "Close Talk" }).click();
+  await expect(panel(page)).toHaveCount(0);
+
+  await opener(page).click();
+  await panel(page)
+    .getByRole("button", { name: "Show earlier conversations" })
+    .click();
+  await expect(
+    panel(page).getByText("You named what gets in the way."),
+  ).toBeVisible();
 });

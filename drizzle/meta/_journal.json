@@ -64,6 +64,13 @@
       "when": 1793215650557,
       "tag": "0008_normal_tigra",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793219070193,
+      "tag": "0009_loose_talkback",
+      "breakpoints": true
     }
   ]
 }

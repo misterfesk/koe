@@ -11,7 +11,11 @@ import {
   type ReactNode,
 } from "react";
 import { Conversation } from "@/features/talk/conversation";
-import { listTalkHistory, loadConversation } from "@/server/actions/talk";
+import {
+  listTalkHistory,
+  loadConversation,
+  summariseConversation,
+} from "@/server/actions/talk";
 import { useDialog, useMedia } from "./use-dialog";
 import styles from "./talk-panel.module.css";
 
@@ -28,6 +32,9 @@ type Ctx = {
 };
 
 const TalkCtx = createContext<Ctx | null>(null);
+
+// The takeaways Close asked for, so History waits for them.
+let summarising: Promise<unknown> | undefined;
 
 /** Opens the Talk panel from anywhere on the page, with or without React context. */
 export function openTalk(context?: TalkContext) {
@@ -92,12 +99,13 @@ type Loaded = Extract<
 >;
 type Row = Awaited<ReturnType<typeof listTalkHistory>>[number];
 
-/** One earlier conversation. A4b adds a takeaway line under the title. */
+/** One earlier conversation: its title, first takeaway and when. */
 function HistoryRow({ row, onOpen }: { row: Row; onOpen: () => void }) {
   return (
     <li>
       <button type="button" className={styles.row} onClick={onOpen}>
         <span>{row.title}</span>
+        {row.takeaway && <span className="meta">{row.takeaway}</span>}
         <span className="meta">{row.when}</span>
       </button>
     </li>
@@ -119,11 +127,25 @@ function PanelBody() {
   const [history, setHistory] = useState<Row[] | null>(null);
   // A new key remounts the conversation (New, or one chosen from History).
   const [key, setKey] = useState(0);
-  useDialog(ref, { trap: phone, onClose: close });
+  // Closing makes takeaways for the conversation it was on.
+  // (Read through a ref: the Escape handler is set once per open.)
+  const current = useRef(convoId);
+  useEffect(() => {
+    current.current = convoId;
+  }, [convoId]);
+  const closeAndSummarise = useCallback(() => {
+    const id = current.current;
+    if (id) summarising = summariseConversation(id).catch(() => {});
+    close();
+  }, [close]);
+  useDialog(ref, { trap: phone, onClose: closeAndSummarise });
 
   const load = useCallback(
-    async (id: string | null) => {
-      let r = await loadConversation(id);
+    async (id: string | null, from?: TalkContext) => {
+      let r = await loadConversation(
+        id,
+        from?.kind === "thing" ? { kind: "thing", id: from.id } : undefined,
+      );
       if (!r.ok) r = await loadConversation(null);
       if (!r.ok) return null;
       setConvoId(r.id);
@@ -133,8 +155,8 @@ function PanelBody() {
   );
   // Show a conversation; `fresh` remounts it (New, History, first open).
   const show = useCallback(
-    (id: string | null, fresh: boolean) =>
-      load(id).then((r) => {
+    (id: string | null, fresh: boolean, from?: TalkContext) =>
+      load(id, from).then((r) => {
         if (!r) return;
         setData(r);
         if (fresh) setKey((k) => k + 1);
@@ -142,18 +164,28 @@ function PanelBody() {
     [load],
   );
   useEffect(() => {
-    // Only on open; later loads are asked for by the buttons.
+    // On open, and when Stuck? Ask Koe starts a new conversation about a
+    // thing; later loads are asked for by the buttons.
     let live = true;
-    void load(convoId).then((r) => live && r && setData(r));
+    const thing = context?.kind === "thing" ? context : undefined;
+    void load(thing ? null : convoId, thing).then((r) => {
+      if (!live || !r) return;
+      setData(r);
+      if (thing) {
+        setView("chat");
+        setKey((k) => k + 1);
+      }
+    });
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [context]);
 
   async function showHistory() {
     if (view === "history") return setView("chat");
     setView("history");
+    await summarising;
     setHistory(await listTalkHistory());
   }
 
@@ -201,7 +233,7 @@ function PanelBody() {
           type="button"
           className={styles.closer}
           aria-label="Close Talk"
-          onClick={close}
+          onClick={closeAndSummarise}
         >
           Close
         </button>
@@ -236,6 +268,8 @@ function PanelBody() {
               push={data.push}
               hour12={data.hour12}
               context={context}
+              focus={data.focus}
+              takeaways={data.takeaways}
               onChanged={(id) => show(id, false)}
             />
           )

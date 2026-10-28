@@ -163,7 +163,8 @@ describe("accounts", { timeout: 30_000 }, () => {
       source: "you",
     });
     const c = await talk.startConversation(db, "a", "talk", "Hi");
-    await talk.addMessage(db, "a", c, "user", "Hello");
+    const hello = await talk.addMessage(db, "a", c, "user", "Hello");
+    await talk.saveSummary(db, "a", c, ["You said hello."], hello.id);
     // Both have profiles; the guest's safety pause and private choice survive.
     await profile.completeSetup(db, "a", { region: "SG", timezone: "UTC" });
     await profile.completeSetup(db, "b", { region: "GB", timezone: "UTC" });
@@ -186,6 +187,11 @@ describe("accounts", { timeout: 30_000 }, () => {
     expect((await steps.listSteps(db, "b"))[0].reports).toHaveLength(1);
     expect(await memory.listMemory(db, "b")).toHaveLength(1);
     expect((await talk.getConversation(db, "b", c))?.messages).toHaveLength(1);
+    // Takeaways move with the conversation; export reads them from it.
+    expect((await talk.getConversation(db, "b", c))?.takeaways).toEqual([
+      "You said hello.",
+    ]);
+    expect(await talk.getSummary(db, "a", c)).toBeNull();
     // The account's own check-in wins the clash.
     expect(await profile.getCheckIn(db, "b", TODAY)).toBe("more");
     for (const table of schema.movableTables) {
@@ -256,6 +262,10 @@ describe("accounts", { timeout: 30_000 }, () => {
     );
     await notes.addNote(db, "a", { text: "Note" });
     await people.addPerson(db, "a", { name: "Sam", channel: "message" });
+    const talk = await import("@/server/data/talk");
+    const c = await talk.startConversation(db, "a", "talk", "Hi");
+    const m = await talk.addMessage(db, "a", c, "user", "Hello");
+    await talk.saveSummary(db, "a", c, ["You said hello."], m.id);
 
     await db.delete(schema.user).where(eq(schema.user.id, "a"));
 

@@ -14,18 +14,27 @@ import {
 import { conversation, talkModes } from "../db/schema";
 import { recordSafetyEvent, updateProfile } from "../data/profile";
 import { addMemory } from "../data/memory";
+import { getUserModel } from "../data/intake";
 import {
   addMessage,
   countUserMessagesSince,
   deleteConversation,
+  firstTakeaways,
   getConversation,
   getMessage,
+  getSummary,
+  keptFrom,
   listConversations,
+  messageCounts,
   purgeOldConversations,
+  saveSummary,
   setConversationPaused,
   startConversation,
   updateTool,
 } from "../data/talk";
+import { weekThing } from "../data/week";
+import type { MessageView } from "../data/talk";
+import { summarise } from "../llm/summaries";
 import { env } from "../env";
 import { AiUnavailable } from "../llm/nebius";
 import { planToday } from "../llm/planner";
@@ -36,7 +45,11 @@ import { addToToday, moveItemTo } from "../plan-edit";
 import { screen } from "../safety";
 import { requireViewer, type Viewer } from "../viewer";
 import { formatClock, localDay, readableDay, uses12Hour } from "@/domain/time";
-import { talkScreenState } from "../talk-page";
+import {
+  conversationExtras,
+  talkScreenState,
+  type TakeawayView,
+} from "../talk-page";
 import { remindMe, turnOnMorningPlan } from "./settings";
 import { refreshShelfFor } from "../search/shelf";
 
@@ -49,8 +62,17 @@ const SAFETY_NOTE =
 
 const DAILY_CAP = 200;
 
+const GONE = "This conversation is gone.";
+
+/** What Talk was opened from. Only the kind and id come from the client. */
+const talkContext = z.object({
+  kind: z.literal("thing"),
+  id: z.string().min(1).max(64),
+});
+
 const input = z.object({
   conversationId: z.string().max(64).optional(),
+  context: talkContext.optional(),
   mode: z.enum(talkModes).default("talk"),
   text: z
     .string()
@@ -92,12 +114,22 @@ export async function sendMessage(
 
   let id = parsed.data.conversationId;
   let convo = id ? await getConversation(v.db, v.user.id, id) : null;
-  if (id && !convo) return { ok: false, error: "This conversation is gone." };
+  if (id && !convo) return { ok: false, error: GONE };
+  // A new conversation opened from a thing: it must be the person's own.
+  const asked = !id ? parsed.data.context : undefined;
+  if (asked && !(await weekThing(v.db, v.user.id, asked.id)))
+    return { ok: false, error: GONE };
   if (convo?.safetyPaused || v.profile.coachingPausedAt)
     return { ok: true, conversationId: id ?? null, safety: "concern" };
   if (!id) {
     const title = text.length > 60 ? text.slice(0, 57).trimEnd() + "…" : text;
-    id = await startConversation(v.db, v.user.id, mode, title);
+    id = await startConversation(
+      v.db,
+      v.user.id,
+      asked ? "talk" : mode,
+      title,
+      asked ?? null,
+    );
   }
   await addMessage(v.db, v.user.id, id, "user", text);
 
@@ -120,6 +152,9 @@ export async function sendMessage(
 
   convo = await getConversation(v.db, v.user.id, id);
   const history = convo!.messages;
+  const focus = convo!.context
+    ? await weekThing(v.db, v.user.id, convo!.context.id)
+    : null;
 
   // Layer 2 (model check) runs alongside the reply to save time. A reply is
   // only shown if the check comes back clear: an error or timeout counts as
@@ -130,14 +165,17 @@ export async function sendMessage(
   }));
   const [risk, answer] = await Promise.all([
     classifyRisk(chat, v.user.id),
-    buildTalkContext(v, history.filter((m) => m.role === "user").length).then(
-      (context) =>
-        reply(convo!.mode, history, context, v.user.id).catch(
-          (error: unknown) => {
-            if (error instanceof AiUnavailable) return null;
-            throw error;
-          },
-        ),
+    buildTalkContext(
+      v,
+      history.filter((m) => m.role === "user").length,
+      focus,
+    ).then((context) =>
+      reply(convo!.mode, history, context, v.user.id).catch(
+        (error: unknown) => {
+          if (error instanceof AiUnavailable) return null;
+          throw error;
+        },
+      ),
     ),
   ]);
 
@@ -507,20 +545,31 @@ export async function resumeConversation(conversationId: string) {
  * One conversation (or an empty one for null) with what the Talk screen needs,
  * for the side panel. Another person's id gives nothing.
  */
-export async function loadConversation(id: string | null) {
+export async function loadConversation(
+  id: string | null,
+  context?: z.input<typeof talkContext>,
+) {
   const v = await requireViewer();
-  const screen = await talkScreenState(v);
-  const base = { region: v.profile.region, ...screen };
   const paused = !!v.profile.coachingPausedAt;
-  if (id === null)
+  if (id === null) {
+    // Opened from a thing: only the person's own, else nothing is loaded.
+    const asked = context ? talkContext.safeParse(context) : null;
+    const thing = asked?.success
+      ? await weekThing(v.db, v.user.id, asked.data.id)
+      : null;
+    if (asked && !thing) return { ok: false as const, error: GONE };
     return {
       ok: true as const,
       id: null,
       mode: "talk" as const,
-      messages: [],
+      messages: [] as MessageView[],
       paused,
-      ...base,
+      focus: thing ? { title: thing.title } : null,
+      takeaways: [] as TakeawayView[],
+      region: v.profile.region,
+      ...(await talkScreenState(v)),
     };
+  }
   const convo = await getConversation(
     v.db,
     v.user.id,
@@ -533,8 +582,76 @@ export async function loadConversation(id: string | null) {
     mode: convo.mode,
     messages: convo.messages,
     paused: convo.safetyPaused || paused,
-    ...base,
+    ...(await conversationExtras(v, convo)),
+    region: v.profile.region,
+    ...(await talkScreenState(v)),
   };
+}
+
+// Conversation and newest message already tried and failed in this process:
+// one attempt each, no retry.
+const triedSummaries = new Set<string>();
+
+/**
+ * Takeaways for one of the person's conversations, when it has something new.
+ * Skipped with memory off, while safety-paused, and under two messages from
+ * the person. One model attempt; a failed check stores nothing.
+ */
+async function summariseFor(v: Viewer, id: string) {
+  if (!v.profile.memoryOn) return false;
+  const convo = await getConversation(v.db, v.user.id, id);
+  if (!convo || convo.safetyPaused) return false;
+  if (convo.messages.filter((m) => m.role === "user").length < 2) return false;
+  const last = convo.messages.at(-1)!.id;
+  const before = await getSummary(v.db, v.user.id, id);
+  if (before?.uptoMessageId === last) return false;
+  const key = `${id}:${last}`;
+  if (triedSummaries.has(key)) return false;
+  triedSummaries.add(key);
+  const model = (await getUserModel(v.db, v.user.id))?.model;
+  const takeaways = await summarise(convo.messages, {
+    userId: v.user.id,
+    eatingConcern: model?.eatingConcern ?? false,
+  });
+  if (!takeaways) return false;
+  await saveSummary(v.db, v.user.id, id, takeaways, last);
+  return true;
+}
+
+/** The panel's Close: takeaways for the conversation it was on. */
+export async function summariseConversation(conversationId: string) {
+  const v = await requireViewer();
+  const id = z.string().max(64).safeParse(conversationId);
+  if (!id.success) return { ok: false };
+  return { ok: await summariseFor(v, id.data) };
+}
+
+/**
+ * Keeps one takeaway as a memory card ("How you like things", the kind that
+ * fits a general sentence). The text is the stored takeaway, never anything
+ * the client sends, and goes through the same checks as other memory cards.
+ */
+export async function keepTakeaway(conversationId: string, index: number) {
+  const v = await requireViewer();
+  if (!v.profile.memoryOn)
+    return { ok: false, error: "Memory is off. You can turn it on in You." };
+  const id = z.string().max(64).safeParse(conversationId);
+  const at = z.number().int().min(0).max(2).safeParse(index);
+  if (!id.success || !at.success) return { ok: false, error: GONE };
+  const summary = await getSummary(v.db, v.user.id, id.data);
+  const text = memoryText.safeParse(summary?.takeaways[at.data]);
+  if (!text.success) return { ok: false, error: GONE };
+  if (!(await keptFrom(v.db, v.user.id, id.data)).has(text.data)) {
+    await addMemory(v.db, v.user.id, {
+      kind: "preference",
+      text: text.data,
+      source: "talk",
+      sourceRef: id.data,
+    });
+    await screen(v.db, v.user.id, "memory", [text.data]);
+  }
+  refresh();
+  return { ok: true };
 }
 
 /** The 8 newest conversations `/talk` lists, with a readable date for each. */
@@ -542,9 +659,39 @@ export async function listTalkHistory() {
   const v = await requireViewer();
   if (!v.profile.keepTranscripts) await purgeOldConversations(v.db, v.user.id);
   const talks = await listConversations(v.db, v.user.id, 8);
+  if (v.profile.memoryOn && talks.length) {
+    // Lazily: at most 2 conversations idle over 10 minutes with new messages.
+    const ids = talks.map((t) => t.id);
+    const [counts, summaries] = await Promise.all([
+      messageCounts(v.db, v.user.id, ids),
+      Promise.all(ids.map((id) => getSummary(v.db, v.user.id, id))),
+    ]);
+    const idle = Date.now() - 10 * 60_000;
+    const due = talks
+      .filter((t, i) => {
+        const c = counts.get(t.id);
+        return (
+          !t.safetyPaused &&
+          Date.parse(t.updatedAt) < idle &&
+          !!c &&
+          c.user >= 2 &&
+          c.last !== summaries[i]?.uptoMessageId
+        );
+      })
+      .slice(0, 2);
+    for (const t of due) await summariseFor(v, t.id);
+  }
+  const first = v.profile.memoryOn
+    ? await firstTakeaways(
+        v.db,
+        v.user.id,
+        talks.map((t) => t.id),
+      )
+    : new Map<string, string>();
   return talks.map((t) => ({
     id: t.id,
     title: t.title,
+    takeaway: first.get(t.id) ?? null,
     updatedAt: t.updatedAt,
     when: readableDay(
       localDay(v.profile.timezone, new Date(t.updatedAt)),

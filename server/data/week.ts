@@ -170,6 +170,37 @@ export async function weekThingStates(
   if (!latest) return [];
   const current = await getWeek(db, userId, latest.id);
   if (!current?.items.length) return [];
+  return withStates(db, userId, current.items, today);
+}
+
+/** One This week thing by id, from any of the person's weeks. Null for anyone else's. */
+export async function weekThing(
+  db: Reader,
+  userId: string,
+  id: string,
+): Promise<ThingState | null> {
+  const [row] = await db
+    .select()
+    .from(weekItem)
+    .where(and(eq(weekItem.id, id), eq(weekItem.userId, userId)));
+  if (!row) return null;
+  const siblings = await db
+    .select({ id: weekItem.id })
+    .from(weekItem)
+    .where(and(eq(weekItem.weekId, row.weekId), eq(weekItem.userId, userId)))
+    .orderBy(weekItem.order);
+  const [state] = await withStates(db, userId, [
+    { id: row.id, captured: readCaptured(JSON.parse(open(row.capturedEnc))) },
+  ]);
+  return { ...state, position: siblings.findIndex((s) => s.id === row.id) };
+}
+
+async function withStates(
+  db: Reader,
+  userId: string,
+  items: WeekView["items"],
+  today?: string,
+): Promise<ThingState[]> {
   const reports = await db
     .select({
       weekItemId: step.weekItemId,
@@ -184,11 +215,11 @@ export async function weekThingStates(
         eq(step.userId, userId),
         inArray(
           step.weekItemId,
-          current.items.map((i) => i.id),
+          items.map((i) => i.id),
         ),
       ),
     );
-  return current.items.map((item, position) => {
+  return items.map((item, position) => {
     const mine = reports.filter((r) => r.weekItemId === item.id);
     const not = mine.filter((r) => r.outcome === "not" || r.outcome === "skip");
     return {
@@ -204,4 +235,15 @@ export async function weekThingStates(
       letGoToday: !!today && not.some((r) => r.day === today),
     };
   });
+}
+
+/** A thing's state in words, for Talk's context: "done", "moved forward 2 times". */
+export function thingState(t: OpenThing): string {
+  if (t.done) return "done";
+  const times = (n: number) => (n === 1 ? "1 time" : `${n} times`);
+  const parts = [
+    ...(t.partly ? [`moved forward ${times(t.partly)}`] : []),
+    ...(t.notToday ? [`not today ${times(t.notToday)}`] : []),
+  ];
+  return parts.length ? parts.join(", ") : "not started";
 }

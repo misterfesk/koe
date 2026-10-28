@@ -319,7 +319,8 @@ export function vetCall(
     case "shrink_item": {
       const x = a as z.infer<(typeof toolSchemas)["shrink_item"]>;
       const it = item(x.itemId);
-      if (!it || it.done) return null;
+      // A This week thing is never made smaller (D036).
+      if (!it || it.done || it.weekItemId) return null;
       // Already as small as it gets: nothing to offer.
       const base = smallerVersion(it, v.model);
       if (!base) return null;
@@ -424,7 +425,7 @@ export function vetCalls(
 // --- Lines on the cards ----------------------------------------------------------------
 
 /** Said when the model gave no words of its own. */
-export const LEAD_IN = "Here's something you could do.";
+export const LEAD_IN = "You could try this.";
 
 export const undoOnToday = "You can undo it on Today.";
 

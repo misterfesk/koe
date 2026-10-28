@@ -9,7 +9,12 @@ import {
   useTransition,
 } from "react";
 import type { RiskLevel } from "@/domain/safety";
-import { resumeConversation, sendMessage } from "@/server/actions/talk";
+import {
+  keepTakeaway,
+  resumeConversation,
+  sendMessage,
+} from "@/server/actions/talk";
+import type { TakeawayView } from "@/server/talk-page";
 import { modeLabels, type TalkMode } from "@/domain/talk";
 import type { MessageView } from "@/server/data/talk";
 import { SafetyCheck } from "../safety/safety-check";
@@ -36,6 +41,9 @@ export function Conversation({
   push,
   hour12,
   onChanged,
+  context,
+  focus,
+  takeaways = [],
 }: {
   id: string | null;
   mode: TalkMode;
@@ -48,6 +56,9 @@ export function Conversation({
   onChanged?: (conversationId: string) => void | Promise<void>;
   /** What the person opened Talk from (used by Stuck? Ask Koe, A4b). */
   context?: { kind: "thing" | "day"; id: string };
+  /** The This week thing it was opened from: its opener replaces the mode's. */
+  focus?: { title: string } | null;
+  takeaways?: TakeawayView[];
 }) {
   const inputId = useId();
   const router = useRouter();
@@ -86,6 +97,10 @@ export function Conversation({
         conversationId: id ?? undefined,
         mode,
         text: content,
+        // Only the kind and id: the server loads the thing itself.
+        ...(!id && focus && context?.kind === "thing"
+          ? { context: { kind: "thing" as const, id: context.id } }
+          : {}),
       });
       if (!r.ok) {
         setText(content);
@@ -110,7 +125,7 @@ export function Conversation({
       <p className={styles.disclosure}>
         Koe is an AI, not a person or a therapist. It can get things wrong.
       </p>
-      {!id && (
+      {!id && !focus && (
         <fieldset className="chips">
           <legend>What would help?</legend>
           {(Object.keys(modeLabels) as TalkMode[]).map((m) => (
@@ -129,7 +144,11 @@ export function Conversation({
       <ol className={styles.messages} aria-label="Conversation">
         <li className={styles.koe}>
           <span className={styles.who}>Koe</span>
-          <p>{openers[mode]}</p>
+          <p>
+            {focus
+              ? `What's getting in the way with "${focus.title}"?`
+              : openers[mode]}
+          </p>
         </li>
         {shown.map((m) => (
           <li
@@ -167,6 +186,9 @@ export function Conversation({
         )}
       </ol>
       <div ref={end} />
+      {id && takeaways.length > 0 && (
+        <Takeaways conversationId={id} items={takeaways} />
+      )}
       {blocked ? (
         <SafetyCheck
           region={region}
@@ -209,5 +231,93 @@ export function Conversation({
         </form>
       )}
     </div>
+  );
+}
+
+/** What the person said or decided, each keepable as a memory card. */
+function Takeaways({
+  conversationId,
+  items,
+}: {
+  conversationId: string;
+  items: TakeawayView[];
+}) {
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId}>
+      <h2 id={headingId}>Takeaways</h2>
+      <ul className="plain-list">
+        {items.map((t, i) => (
+          <Takeaway
+            key={i}
+            conversationId={conversationId}
+            index={i}
+            item={t}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function Takeaway({
+  conversationId,
+  index,
+  item,
+}: {
+  conversationId: string;
+  index: number;
+  item: TakeawayView;
+}) {
+  const [step, setStep] = useState<"idle" | "confirm" | "kept">(
+    item.kept ? "kept" : "idle",
+  );
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
+  return (
+    <li>
+      <p>{item.text}</p>
+      {step === "kept" ? (
+        <p className="meta" role="status">
+          Kept in What Koe knows.
+        </p>
+      ) : step === "confirm" ? (
+        <div className="actions">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const r = await keepTakeaway(conversationId, index);
+                if (r.ok) setStep("kept");
+                else setError(r.error ?? "");
+              })
+            }
+          >
+            Keep it
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setStep("idle")}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="text"
+          onClick={() => setStep("confirm")}
+        >
+          Keep as memory card
+        </button>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </li>
   );
 }

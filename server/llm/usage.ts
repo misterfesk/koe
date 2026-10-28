@@ -8,6 +8,7 @@ import { env } from "../env";
 export const aiPurposes = [
   "talk",
   "talk_safety",
+  "talk_summary",
   "coach",
   "intake",
   "interview_turn",

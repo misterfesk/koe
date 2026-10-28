@@ -116,6 +116,20 @@ describe("tool schemas", () => {
 });
 
 describe("checking a call", () => {
+  it("never offers to shrink a This week thing (D036)", () => {
+    const v = base();
+    expect(vetCall("shrink_item", { itemId: "walk" }, v)).not.toBeNull();
+    v.items[0] = { ...v.items[0], weekItemId: "thing-1" };
+    expect(vetCall("shrink_item", { itemId: "walk" }, v)).toBeNull();
+    expect(
+      vetCall(
+        "shrink_item",
+        { itemId: "walk", smallerTitle: "Walk to the door" },
+        v,
+      ),
+    ).toBeNull();
+  });
+
   it("turns a valid move into a pending card that names the item", () => {
     const { proposals, dropped } = vetCalls(
       [call("move_item", { itemId: "walk", minuteOfDay: 1020 })],

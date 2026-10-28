@@ -1,7 +1,12 @@
 import "server-only";
-import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { Db } from "../db";
-import { conversation, message } from "../db/schema";
+import {
+  conversation,
+  conversationSummary,
+  memoryCard,
+  message,
+} from "../db/schema";
 import { open, seal } from "../crypto";
 
 export type { TalkMode } from "@/domain/talk";
@@ -28,6 +33,8 @@ export type ConversationView = {
   mode: TalkMode;
   title: string;
   safetyPaused: boolean;
+  /** What it was opened from (Stuck? Ask Koe); kept for every later turn. */
+  context: { kind: "thing"; id: string } | null;
   updatedAt: string;
 };
 
@@ -37,6 +44,10 @@ function toConversation(r: typeof conversation.$inferSelect): ConversationView {
     mode: r.mode,
     title: r.titleEnc ? open(r.titleEnc) : "Conversation",
     safetyPaused: !!r.safetyPausedAt,
+    context:
+      r.contextKind && r.contextId
+        ? { kind: r.contextKind, id: r.contextId }
+        : null,
     updatedAt: r.updatedAt.toISOString(),
   };
 }
@@ -62,8 +73,10 @@ export async function getConversation(db: Db, userId: string, id: string) {
     .from(message)
     .where(and(eq(message.userId, userId), eq(message.conversationId, id)))
     .orderBy(asc(message.createdAt));
+  const summary = await getSummary(db, userId, id);
   return {
     ...toConversation(row),
+    takeaways: summary?.takeaways ?? [],
     messages: messages.map((m): MessageView => ({
       id: m.id,
       role: m.role,
@@ -81,10 +94,17 @@ export async function startConversation(
   userId: string,
   mode: TalkMode,
   title: string,
+  context?: ConversationView["context"],
 ) {
   const [row] = await db
     .insert(conversation)
-    .values({ userId, mode, titleEnc: seal(title) })
+    .values({
+      userId,
+      mode,
+      titleEnc: seal(title),
+      contextKind: context?.kind ?? null,
+      contextId: context?.id ?? null,
+    })
     .returning({ id: conversation.id });
   return row.id;
 }
@@ -286,4 +306,120 @@ export async function purgeExpiredTranscripts(db: Db) {
       and p."keep_transcripts" = false
       and c."updated_at" < now() - interval '1 day'
   `);
+}
+
+// --- Takeaways ---------------------------------------------------------------
+
+/** A conversation's takeaways and the newest message they cover. Owner-scoped. */
+export async function getSummary(
+  db: Db,
+  userId: string,
+  conversationId: string,
+) {
+  const [row] = await db
+    .select()
+    .from(conversationSummary)
+    .where(
+      and(
+        eq(conversationSummary.userId, userId),
+        eq(conversationSummary.conversationId, conversationId),
+      ),
+    );
+  if (!row) return null;
+  return {
+    takeaways: JSON.parse(open(row.takeawaysEnc)) as string[],
+    uptoMessageId: row.uptoMessageId,
+  };
+}
+
+/** Writes (or replaces) the takeaways, only for the person's own conversation. */
+export async function saveSummary(
+  db: Db,
+  userId: string,
+  conversationId: string,
+  takeaways: string[],
+  uptoMessageId: string,
+) {
+  const [own] = await db
+    .select({ id: conversation.id })
+    .from(conversation)
+    .where(
+      and(eq(conversation.userId, userId), eq(conversation.id, conversationId)),
+    );
+  if (!own) return;
+  const values = {
+    takeawaysEnc: seal(JSON.stringify(takeaways)),
+    uptoMessageId,
+    createdAt: new Date(),
+  };
+  await db
+    .insert(conversationSummary)
+    .values({ conversationId, userId, ...values })
+    .onConflictDoUpdate({
+      target: conversationSummary.conversationId,
+      set: values,
+    });
+}
+
+/** First takeaway per conversation, for the History rows. */
+export async function firstTakeaways(db: Db, userId: string, ids: string[]) {
+  if (!ids.length) return new Map<string, string>();
+  const rows = await db
+    .select()
+    .from(conversationSummary)
+    .where(
+      and(
+        eq(conversationSummary.userId, userId),
+        inArray(conversationSummary.conversationId, ids),
+      ),
+    );
+  return new Map(
+    rows.flatMap((r) => {
+      const first = (JSON.parse(open(r.takeawaysEnc)) as string[])[0];
+      return first ? [[r.conversationId, first] as const] : [];
+    }),
+  );
+}
+
+/**
+ * Per conversation: how many messages the person sent and the newest message,
+ * so the caller can tell which ones have something new to summarise.
+ */
+export async function messageCounts(db: Db, userId: string, ids: string[]) {
+  if (!ids.length) return new Map<string, { user: number; last: string }>();
+  const rows = await db
+    .select({
+      id: message.id,
+      conversationId: message.conversationId,
+      role: message.role,
+    })
+    .from(message)
+    .where(
+      and(eq(message.userId, userId), inArray(message.conversationId, ids)),
+    )
+    .orderBy(asc(message.createdAt));
+  const out = new Map<string, { user: number; last: string }>();
+  for (const r of rows) {
+    const c = out.get(r.conversationId) ?? { user: 0, last: r.id };
+    out.set(r.conversationId, {
+      user: c.user + (r.role === "user" ? 1 : 0),
+      last: r.id,
+    });
+  }
+  return out;
+}
+
+/** Memory cards already kept from this conversation, by text. */
+export async function keptFrom(db: Db, userId: string, conversationId: string) {
+  const rows = await db
+    .select({ textEnc: memoryCard.textEnc })
+    .from(memoryCard)
+    .where(
+      and(
+        eq(memoryCard.userId, userId),
+        eq(memoryCard.source, "talk"),
+        eq(memoryCard.sourceRef, conversationId),
+      ),
+    );
+  return new Set(rows.map((r) => open(r.textEnc)));
 }

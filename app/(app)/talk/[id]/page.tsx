@@ -5,7 +5,7 @@ import { modeLabels } from "@/domain/talk";
 import { Conversation } from "@/features/talk/conversation";
 import { DeleteConversation } from "@/features/talk/delete";
 import { getConversation } from "@/server/data/talk";
-import { talkScreenState } from "@/server/talk-page";
+import { conversationExtras, talkScreenState } from "@/server/talk-page";
 import { requireViewer } from "@/server/viewer";
 
 export const metadata: Metadata = { title: "Talk" };
@@ -30,6 +30,7 @@ export default async function Page({
         <ActionLink href="/talk">Start a new one</ActionLink>
       </>
     );
+  const extras = await conversationExtras(v, convo);
   return (
     <>
       <PageHeading eyebrow={"Talk · " + modeLabels[convo.mode]}>
@@ -42,6 +43,7 @@ export default async function Page({
         paused={convo.safetyPaused || !!v.profile.coachingPausedAt}
         region={v.profile.region}
         {...screen}
+        {...extras}
       />
       <div className="actions">
         <Link className="button secondary" href="/talk">

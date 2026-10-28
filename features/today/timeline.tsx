@@ -12,6 +12,7 @@ import { notToday, rateVsExpected, tooMuchToday } from "@/server/actions/plan";
 import { reportHowItWent, takeBackReport } from "@/server/actions/steps";
 import { RemindControl, type PushState } from "../reminders/remind-control";
 import { SafetyCheck } from "../safety/safety-check";
+import { openTalk } from "@/components/talk-panel";
 import { AddSomething } from "./add-something";
 import type { Entry } from "./model";
 import styles from "./today.module.css";
@@ -122,6 +123,15 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
             Not today
           </button>
         </div>
+      )}
+      {entry.weekItemId && !open && report?.outcome !== "done" && (
+        <button
+          type="button"
+          className="text"
+          onClick={() => openTalk({ kind: "thing", id: entry.weekItemId! })}
+        >
+          Stuck? Ask Koe →
+        </button>
       )}
 
       {!report && open && (

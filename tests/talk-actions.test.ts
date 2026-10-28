@@ -44,14 +44,20 @@ const fake = vi.hoisted(() => ({
   risk: "none" as string,
   calls: 0,
   options: [] as Record<string, unknown>[],
+  sent: [] as unknown[],
+  summary: (async () => ({
+    takeaways: ["You chose to send the email first."],
+  })) as () => Promise<unknown>,
+  summaryCalls: 0,
 }));
 vi.mock("@/server/llm/nebius", () => ({
   completeWithTools: (
-    _messages: unknown,
+    messages: unknown,
     _tools: unknown,
     options: Record<string, unknown>,
   ) => {
     fake.calls++;
+    fake.sent.push(messages);
     fake.options.push(options);
     return fake.reply();
   },
@@ -61,6 +67,10 @@ vi.mock("@/server/llm/nebius", () => ({
     options: { purpose: string },
   ) => {
     if (options.purpose === "talk_safety") return { level: fake.risk };
+    if (options.purpose === "talk_summary") {
+      fake.summaryCalls++;
+      return fake.summary();
+    }
     throw new Error("no structured reply in this suite");
   },
   complete: async () => {
@@ -82,6 +92,11 @@ beforeEach(() => {
   fake.risk = "none";
   fake.calls = 0;
   fake.options = [];
+  fake.sent = [];
+  fake.summary = async () => ({
+    takeaways: ["You chose to send the email first."],
+  });
+  fake.summaryCalls = 0;
   searches.run.mockClear();
   searches.run.mockResolvedValue({ ok: true, count: 3 });
 });
@@ -539,7 +554,7 @@ describe("Talk with tools", { timeout: 40_000 }, () => {
       "a",
       r2.conversationId!,
     ))!.messages.at(-1)!;
-    expect(last.content).toBe("Here's something you could do.");
+    expect(last.content).toBe("You could try this.");
   });
 
   it("replaces words that say it is already done", async () => {
@@ -755,5 +770,290 @@ describe("Talk with tools", { timeout: 40_000 }, () => {
     await s.as("b");
     expect(await loadConversation(r.conversationId)).toEqual({ ok: false });
     expect(await listTalkHistory()).toEqual([]);
+  });
+});
+
+/** A This week thing for `userId`, in a new week. */
+async function thing(
+  s: Awaited<ReturnType<typeof setup>>,
+  userId: string,
+  title: string,
+) {
+  const { saveWeek } = await import("@/server/data/week");
+  const w = await saveWeek(s.db, userId, {
+    draft: {
+      items: [
+        {
+          captured: {
+            what: `Private words about ${title}`,
+            when: "by Friday",
+            title,
+          },
+        },
+      ],
+    },
+    today: TODAY,
+    eatingConcern: false,
+  });
+  return w.items[0].id;
+}
+
+const GONE = { ok: false, error: "This conversation is gone." };
+
+describe("Stuck? Ask Koe and This week", { timeout: 40_000 }, () => {
+  it("a thing context loads only the person's own thing and keeps the focus", async () => {
+    const s = await setup();
+    const mine = await thing(s, "a", "Email the landlord");
+    const theirs = await thing(s, "b", "Their secret thing");
+    const { loadConversation, sendMessage } =
+      await import("@/server/actions/talk");
+
+    expect(await loadConversation(null, { kind: "thing", id: theirs })).toEqual(
+      GONE,
+    );
+    expect(await loadConversation(null, { kind: "thing", id: "nope" })).toEqual(
+      GONE,
+    );
+    expect(
+      await sendMessage({ text: "hi", context: { kind: "thing", id: theirs } }),
+    ).toEqual(GONE);
+    expect(fake.calls).toBe(0);
+    expect(await s.db.select().from(s.schema.conversation)).toEqual([]);
+
+    const open = await loadConversation(null, { kind: "thing", id: mine });
+    expect(open.ok && open.focus).toEqual({ title: "Email the landlord" });
+    const r = await sendMessage({
+      text: "I keep putting it off",
+      context: { kind: "thing", id: mine },
+    });
+    if (!r.ok) throw new Error(r.error);
+    // A later turn sends no context; the conversation remembers it.
+    await say("it feels awkward", r.conversationId);
+    const second = JSON.stringify(fake.sent[1]);
+    expect(second).toContain(
+      '\\"focus\\":{\\"title\\":\\"Email the landlord\\"',
+    );
+    expect(second).toContain("Private words about Email the landlord");
+    expect(second).not.toContain("Their secret thing");
+    const again = await loadConversation(r.conversationId);
+    expect(again.ok && again.focus).toEqual({ title: "Email the landlord" });
+  });
+
+  it("the thisWeek block lists titles, when and state, or only a count with memory off", async () => {
+    const steps = await import("@/server/data/steps");
+    const { buildTalkContext } = await import("@/server/llm/talk-context");
+    const { requireViewer } = await import("@/server/viewer");
+    for (const memoryOn of [true, false]) {
+      const s = await setup({ memoryOn });
+      const id = await thing(s, "a", "Email the landlord");
+      const step = await steps.createStep(
+        s.db,
+        "a",
+        {
+          area: "do",
+          title: "Email the landlord",
+          when: "today",
+          weekItemId: id,
+        },
+        TODAY,
+      );
+      await steps.reportStep(s.db, "a", step, "partly", TODAY);
+      const ctx = await buildTalkContext(await requireViewer(), 1);
+      expect(ctx.packet.thisWeek).toEqual(
+        memoryOn
+          ? [
+              {
+                title: "Email the landlord",
+                when: "by Friday",
+                state: "moved forward 1 time",
+              },
+            ]
+          : { openThings: 1 },
+      );
+      const { weekThing } = await import("@/server/data/week");
+      const focused = await buildTalkContext(
+        await requireViewer(),
+        1,
+        await weekThing(s.db, "a", id),
+      );
+      expect(focused.packet.focus).toEqual(
+        memoryOn
+          ? {
+              title: "Email the landlord",
+              what: "Private words about Email the landlord",
+              when: "by Friday",
+              state: "moved forward 1 time",
+            }
+          : { state: "moved forward 1 time" },
+      );
+      if (!memoryOn)
+        expect(JSON.stringify(focused.packet)).not.toContain("landlord");
+    }
+  });
+});
+
+describe("Talk replies without AI tells", { timeout: 40_000 }, () => {
+  it("retries once on an em dash, then rewrites the dash if it is still there", async () => {
+    const s = await setup();
+    const { getConversation } = await import("@/server/data/talk");
+    const replies = [
+      "That's clear \u2014 just the facts.",
+      "Just the facts and a direct question.",
+    ];
+    fake.reply = async () => ({ content: replies.shift()!, toolCalls: [] });
+    const r = await say("I will just say the tap leaks");
+    expect(fake.calls).toBe(2);
+    const last = async (id: string) =>
+      (await getConversation(s.db, "a", id))!.messages.at(-1)!.content;
+    expect(await last(r.conversationId!)).toBe(
+      "Just the facts and a direct question.",
+    );
+
+    fake.calls = 0;
+    fake.reply = async () => ({
+      content: "Clear \u2014 and direct.",
+      toolCalls: [],
+    });
+    const again = await say("ok", r.conversationId);
+    expect(fake.calls).toBe(2);
+    expect(await last(again.conversationId!)).toBe("Clear, and direct.");
+
+    fake.calls = 0;
+    fake.reply = async () => ({ content: "Okay. When?", toolCalls: [] });
+    await say("fine", r.conversationId);
+    expect(fake.calls).toBe(1);
+  });
+});
+
+describe("Takeaways", { timeout: 40_000 }, () => {
+  it("checks the output: risk, AI tells, stock phrases and length", async () => {
+    const { checkTakeaways } = await import("@/server/llm/summaries");
+    const ok = (t: string[]) => checkTakeaways({ takeaways: t }, false);
+    expect(ok(["You chose to send the email first."])).toEqual([
+      "You chose to send the email first.",
+    ]);
+    expect(ok([])).toBeNull();
+    expect(ok(["You a.", "You b.", "You c.", "You d."])).toBeNull();
+    expect(ok(["You said " + "x".repeat(90)])).toBeNull();
+    expect(ok(["You said you want to kill yourself."])).toBeNull();
+    expect(ok(["It sounds like you chose the email."])).toBeNull();
+    expect(ok(["You chose the email — first."])).toBeNull();
+    expect(ok(["You took baby steps."])).toBeNull();
+    expect(
+      checkTakeaways({ takeaways: ["You skip meals to lose weight."] }, true),
+    ).toBeNull();
+    // The person's own words pass, even where a plan item's rule would not.
+    const said = [
+      "You want the landlord email to stay factual, not rude",
+      "You will say the tap has leaked for a week and ask when they can fix it.",
+    ];
+    expect(ok(said)).toEqual(said);
+    expect(ok(["You want to ask your therapist about it."])).toBeNull();
+  });
+
+  it("Close stores takeaways once; a failed check stores nothing", async () => {
+    const s = await setup();
+    const { summariseConversation, loadConversation } =
+      await import("@/server/actions/talk");
+    const { getSummary } = await import("@/server/data/talk");
+    const r = await say("I keep putting off the email");
+    // One message from the person is not enough.
+    expect(await summariseConversation(r.conversationId!)).toEqual({
+      ok: false,
+    });
+    expect(fake.summaryCalls).toBe(0);
+    await say("I will send it first", r.conversationId);
+
+    fake.summary = async () => ({ takeaways: ["You " + "y".repeat(95)] });
+    expect(await summariseConversation(r.conversationId!)).toEqual({
+      ok: false,
+    });
+    expect(await getSummary(s.db, "a", r.conversationId!)).toBeNull();
+    // One attempt: the same messages are not tried again.
+    fake.summary = async () => ({
+      takeaways: ["You chose to send the email first."],
+    });
+    expect(await summariseConversation(r.conversationId!)).toEqual({
+      ok: false,
+    });
+    expect(fake.summaryCalls).toBe(1);
+
+    await say("and then tidy the desk", r.conversationId);
+    expect(await summariseConversation(r.conversationId!)).toEqual({
+      ok: true,
+    });
+    const l = await loadConversation(r.conversationId);
+    expect(l.ok && l.takeaways).toEqual([
+      { text: "You chose to send the email first.", kept: false },
+    ]);
+    // Nothing new since: no second call.
+    expect(await summariseConversation(r.conversationId!)).toEqual({
+      ok: false,
+    });
+    expect(fake.summaryCalls).toBe(2);
+    // Another person can't summarise it.
+    await s.as("b");
+    expect(await summariseConversation(r.conversationId!)).toEqual({
+      ok: false,
+    });
+  });
+
+  it("no takeaways with memory off or while safety-paused", async () => {
+    const s = await setup({ memoryOn: false });
+    const { summariseConversation } = await import("@/server/actions/talk");
+    const r = await say("I keep putting off the email");
+    await say("I will send it first", r.conversationId);
+    expect(await summariseConversation(r.conversationId!)).toEqual({
+      ok: false,
+    });
+    await s.db
+      .update(s.schema.profile)
+      .set({ memoryOn: true })
+      .where(eq(s.schema.profile.userId, "a"));
+    await s.as("a");
+    const { setConversationPaused } = await import("@/server/data/talk");
+    await setConversationPaused(s.db, "a", r.conversationId!, true);
+    expect(await summariseConversation(r.conversationId!)).toEqual({
+      ok: false,
+    });
+    expect(fake.summaryCalls).toBe(0);
+  });
+
+  it("History summarises idle conversations lazily and shows the first takeaway", async () => {
+    const s = await setup();
+    const { listTalkHistory } = await import("@/server/actions/talk");
+    const r = await say("I keep putting off the email");
+    await say("I will send it first", r.conversationId);
+    expect((await listTalkHistory())[0].takeaway).toBeNull();
+    expect(fake.summaryCalls).toBe(0);
+    await s.db
+      .update(s.schema.conversation)
+      .set({ updatedAt: new Date(Date.now() - 11 * 60_000) })
+      .where(eq(s.schema.conversation.id, r.conversationId!));
+    expect((await listTalkHistory())[0].takeaway).toBe(
+      "You chose to send the email first.",
+    );
+    expect(fake.summaryCalls).toBe(1);
+  });
+
+  it("keepTakeaway keeps the stored text once, for the owner only", async () => {
+    const s = await setup();
+    const { keepTakeaway, summariseConversation } =
+      await import("@/server/actions/talk");
+    const { listMemory } = await import("@/server/data/memory");
+    const r = await say("I keep putting off the email");
+    await say("I will send it first", r.conversationId);
+    await summariseConversation(r.conversationId!);
+    await s.as("b");
+    expect(await keepTakeaway(r.conversationId!, 0)).toEqual(GONE);
+    expect(await listMemory(s.db, "b")).toEqual([]);
+    await s.as("a");
+    expect(await keepTakeaway(r.conversationId!, 1)).toEqual(GONE);
+    expect(await keepTakeaway(r.conversationId!, 0)).toEqual({ ok: true });
+    expect(await keepTakeaway(r.conversationId!, 0)).toEqual({ ok: true });
+    const cards = await listMemory(s.db, "a");
+    expect(cards.map((c) => [c.kind, c.text, c.source])).toEqual([
+      ["preference", "You chose to send the email first.", "talk"],
+    ]);
   });
 });
