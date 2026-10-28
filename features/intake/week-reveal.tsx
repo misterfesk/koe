@@ -1,164 +1,143 @@
 "use client";
-import { ConfirmDelete, Field } from "@/components/ui";
-import type { Piece, WeekDraft } from "@/domain/week";
+import { useState } from "react";
+import { Field } from "@/components/ui";
+import { whenLabel, type WeekDraft } from "@/domain/week";
 import styles from "./intake.module.css";
 
+type Item = WeekDraft["items"][number];
+
+/**
+ * Reads its starting draft once and keeps removed things locally, so Undo
+ * works even after every thing is removed. Parents stay mounted meanwhile.
+ */
 export function WeekReveal({
   draft,
   onChange,
+  heading = true,
   disabled = false,
 }: {
-  draft: WeekDraft;
+  draft: WeekDraft | undefined;
+  /** Off when the page heading already says This week. */
+  heading?: boolean;
   onChange: (value: WeekDraft | undefined) => void;
   disabled?: boolean;
 }) {
-  const changePiece = (i: number, j: number, change: Partial<Piece>) =>
-    onChange({
-      items: draft.items.map((item, x) =>
-        x === i
-          ? {
-              ...item,
-              pieces: item.pieces.map((piece, y) =>
-                y === j ? { ...piece, ...change } : piece,
-              ),
-            }
-          : item,
-      ),
-    });
-  const resize = (i: number, j: number, piece: Piece, minutes: number) =>
-    changePiece(i, j, {
-      minutes,
-      size: minutes <= 5 ? "tiny" : minutes <= 15 ? "small" : "medium",
-      title: piece.title.replace(/\b\d+\s+minutes?\b/g, `${minutes} minutes`),
-      endpoint: piece.endpoint.replace(
-        /\b\d+\s+minutes?\b/g,
-        `${minutes} minutes`,
-      ),
-    });
+  const [items, setItems] = useState<Item[]>(() => draft?.items ?? []);
+  const [removed, setRemoved] = useState<number[]>([]);
+  const [renaming, setRenaming] = useState<number | null>(null);
+  const [title, setTitle] = useState("");
+  const publish = (next: Item[], gone: number[]) => {
+    setItems(next);
+    setRemoved(gone);
+    const kept = next.filter((_, i) => !gone.includes(i));
+    onChange(kept.length ? { items: kept } : undefined);
+  };
   return (
-    <section aria-labelledby="reveal-week" className={styles.week}>
-      <h2 id="reveal-week">This week</h2>
-      <p className="meta">Change the words and sizes before you save.</p>
-      {draft.items.map((item, i) => (
-        <article
-          className={styles.weekThing}
-          key={i}
-          aria-label={item.captured.what}
-        >
-          <h3>{item.captured.what}</h3>
-          <details>
-            <summary>Change the title</summary>
-            <Field
-              label={`This week title ${i + 1}`}
-              value={item.captured.what}
-              maxLength={400}
-              onChange={(what) =>
-                onChange({
-                  items: draft.items.map((it, x) =>
-                    x === i
-                      ? { ...it, captured: { ...it.captured, what } }
-                      : it,
-                  ),
-                })
+    <section
+      aria-labelledby={heading ? "reveal-week" : undefined}
+      aria-label={heading ? undefined : "This week"}
+      className={styles.week}
+    >
+      {heading && <h2 id="reveal-week">This week</h2>}
+      {items.length > 0 && removed.length === items.length && (
+        <p className="meta">Nothing in This week yet.</p>
+      )}
+      {items.map((item, i) =>
+        removed.includes(i) ? (
+          <p className={styles.weekRemoved} key={item.proposalId ?? i}>
+            Removed.{" "}
+            <button
+              type="button"
+              className="text"
+              disabled={disabled}
+              onClick={() =>
+                publish(
+                  items,
+                  removed.filter((x) => x !== i),
+                )
               }
-            />
-          </details>
-          <ol className={styles.pieces}>
-            {item.pieces.map((piece, j) => (
-              <li key={j}>
-                <h4>{piece.title}</h4>
-                <p className="meta">
-                  {piece.when} · {piece.minutes} minutes
-                </p>
-                <details>
-                  <summary>Change this</summary>
-                  <fieldset disabled={disabled} className={styles.pieceFields}>
-                    <Field
-                      label={`Piece ${i + 1}.${j + 1} title`}
-                      value={piece.title}
-                      maxLength={80}
-                      onChange={(title) => changePiece(i, j, { title })}
-                    />
-                    <Field
-                      label="Stop when"
-                      value={piece.endpoint}
-                      maxLength={240}
-                      onChange={(endpoint) => changePiece(i, j, { endpoint })}
-                    />
-                    <Field
-                      label="When"
-                      value={piece.when}
-                      maxLength={160}
-                      onChange={(when) => changePiece(i, j, { when })}
-                    />
-                    <p className="meta">
-                      Make the words match the size you choose.
-                    </p>
-                    <div className={styles.itemActions}>
-                      <button
-                        type="button"
-                        className="text"
-                        disabled={piece.minutes <= 2}
-                        onClick={() => {
-                          const minutes =
-                            piece.minutes > 15 ? 10 : piece.minutes > 5 ? 5 : 2;
-                          resize(i, j, piece, minutes);
-                        }}
-                      >
-                        Too big
-                      </button>
-                      <button
-                        type="button"
-                        className="text"
-                        disabled={piece.minutes >= 25}
-                        onClick={() => {
-                          const minutes =
-                            piece.minutes < 5
-                              ? 5
-                              : piece.minutes < 15
-                                ? 15
-                                : 25;
-                          resize(i, j, piece, minutes);
-                        }}
-                      >
-                        Too small
-                      </button>
-                      {item.pieces.length > 1 && (
-                        <ConfirmDelete
-                          label="Remove this"
-                          question={`Remove “${piece.title}”?`}
-                          onConfirm={() =>
-                            onChange({
-                              items: draft.items.map((it, x) =>
-                                x === i
-                                  ? {
-                                      ...it,
-                                      pieces: it.pieces.filter(
-                                        (_, y) => y !== j,
-                                      ),
-                                    }
-                                  : it,
-                              ),
-                            })
-                          }
-                        />
-                      )}
-                    </div>
-                  </fieldset>
-                </details>
-              </li>
-            ))}
-          </ol>
-          <ConfirmDelete
-            label="Remove from this week"
-            question={`Remove “${item.captured.what}” and its pieces?`}
-            onConfirm={() => {
-              const items = draft.items.filter((_, x) => x !== i);
-              onChange(items.length ? { items } : undefined);
-            }}
-          />
-        </article>
-      ))}
+            >
+              Undo
+            </button>
+          </p>
+        ) : (
+          <article
+            className={styles.weekThing}
+            key={item.proposalId ?? i}
+            aria-label={item.captured.title}
+          >
+            {renaming === i ? (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const value = title.trim();
+                  if (!value) return;
+                  publish(
+                    items.map((it, x) =>
+                      x === i
+                        ? { ...it, captured: { ...it.captured, title: value } }
+                        : it,
+                    ),
+                    removed,
+                  );
+                  setRenaming(null);
+                }}
+              >
+                <Field
+                  label="Title"
+                  value={title}
+                  maxLength={60}
+                  onChange={setTitle}
+                />
+                <div className={styles.itemActions}>
+                  <button
+                    type="submit"
+                    className="secondary"
+                    disabled={disabled || !title.trim()}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="text"
+                    onClick={() => setRenaming(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <h3>{item.captured.title}</h3>
+                {item.captured.when && (
+                  <p className="meta">{whenLabel(item.captured.when)}</p>
+                )}
+                <div className={styles.itemActions}>
+                  <button
+                    type="button"
+                    className="text"
+                    disabled={disabled}
+                    onClick={() => {
+                      setTitle(item.captured.title);
+                      setRenaming(i);
+                    }}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    className="text"
+                    disabled={disabled}
+                    onClick={() => publish(items, [...removed, i])}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </>
+            )}
+          </article>
+        ),
+      )}
     </section>
   );
 }

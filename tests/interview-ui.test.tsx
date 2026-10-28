@@ -7,7 +7,6 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { openingTurn, confirmingTurn, fallbackTurn } from "@/domain/interview";
-import { fallbackPieces } from "@/domain/piece-rules";
 import { capturedThingSchema } from "@/domain/week";
 import {
   interviewKey,
@@ -28,8 +27,11 @@ vi.mock("@/features/safety/safety-check", () => ({
   SafetyCheck: () => <h1>Safety check</h1>,
 }));
 import { WorkInterview } from "@/features/intake/interview";
-const thing = capturedThingSchema.parse({ what: "Update the CV" });
-const draft = { items: [{ captured: thing, pieces: fallbackPieces(thing) }] };
+const thing = capturedThingSchema.parse({
+  what: "Update the CV",
+  title: "Update the CV",
+});
+const draft = { items: [{ captured: thing }] };
 const multiTurn = {
   ...openingTurn(),
   message: "Which parts need your attention?",
@@ -199,7 +201,7 @@ it("restores old drafts without picks and rejects selections outside the current
     JSON.stringify({
       ...value,
       turn: confirmingTurn(),
-      selected: ["propose", "add"],
+      selected: ["finish", "add"],
     }),
   );
   expect(readInterviewDraft("a", "return")).toBeNull();
@@ -287,7 +289,9 @@ it("feeds the weekly intake answer into the interview without another opening qu
       onSkip={vi.fn()}
     />,
   );
-  await screen.findByRole("heading", { name: "Where does it get stuck?" });
+  await screen.findByRole("heading", {
+    name: "When does it need to be done?",
+  });
   expect(mocks.advanceInterview).toHaveBeenCalledWith({
     token: "opening",
     text: "Update the CV",
@@ -321,7 +325,7 @@ it("uses canonical confirm intents and clears the draft before successful naviga
   writeInterviewDraft("a", "return", {
     token: "confirm",
     turn: confirmingTurn(),
-    messages: [],
+    messages: [{ id: "a-0", role: "user", text: "Update the CV" }],
     answer: "",
   });
   mocks.advanceInterview.mockResolvedValue({
@@ -341,13 +345,16 @@ it("uses canonical confirm intents and clears the draft before successful naviga
     expect(sessionStorage.getItem(interviewKey("a", "return"))).toBeNull(),
   );
   render(<WorkInterview owner="a" region="SG" />);
-  fireEvent.click(await screen.findByRole("button", { name: "Break it down" }));
-  fireEvent.click(screen.getByRole("button", { name: "Show the pieces" }));
-  await screen.findByRole("heading", { name: "Your week, in smaller pieces" });
+  fireEvent.click(
+    await screen.findByRole("button", { name: "That's enough for now" }),
+  );
+  await screen.findByRole("heading", { name: "This week" });
   expect(mocks.advanceInterview).toHaveBeenCalledWith({
     token: "confirm",
-    intent: "propose",
+    intent: "finish",
   });
+  expect(screen.queryByText(/pieces/i)).toBeNull();
+  expect(screen.getByRole("heading", { name: "Update the CV" })).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Save this week" }));
   await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/today"));
 });
@@ -408,7 +415,7 @@ it("rejects unchecked current questions and options in stored drafts", () => {
         ask: {
           kind: "single",
           allowOther: false,
-          options: [{ id: "propose", label: "Call 988" }],
+          options: [{ id: "finish", label: "Call 988" }],
         },
       },
       messages: [],
@@ -444,4 +451,130 @@ it("keeps the safe typed answer after a confirmed expired-token restart", async 
       "The opening paragraph",
     ),
   );
+});
+it("opens with no info text and a quiet finish under the answer", async () => {
+  mocks.advanceInterview.mockResolvedValue({
+    ok: true,
+    safety: "none",
+    token: "done",
+    turn: null,
+  });
+  render(<WorkInterview owner="a" region="SG" />);
+  await screen.findByRole("heading", {
+    name: "What's one thing you'd like to get done this week?",
+  });
+  expect(screen.getByPlaceholderText("e.g. Update my CV")).toBeVisible();
+  expect(screen.queryByText(/Koe uses your words/)).toBeNull();
+  expect(screen.queryByRole("link", { name: "Leave for Today" })).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "That's enough for now" }),
+  );
+  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/today"));
+  expect(mocks.advanceInterview).not.toHaveBeenCalled();
+});
+it("finishes with what was named from the quiet button on a later turn", async () => {
+  writeInterviewDraft("a", "return", {
+    token: "followup",
+    turn: fallbackTurn(thing, 0),
+    messages: [{ id: "a-0", role: "user", text: "Update the CV" }],
+    answer: "",
+  });
+  mocks.advanceInterview.mockResolvedValue({
+    ok: true,
+    safety: "none",
+    token: "proposal",
+    turn: null,
+    draft,
+  });
+  render(<WorkInterview owner="a" region="SG" />);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "That's enough for now" }),
+  );
+  await screen.findByRole("heading", { name: "Update the CV" });
+  expect(mocks.advanceInterview).toHaveBeenCalledWith({
+    token: "followup",
+    intent: "finish",
+  });
+  expect(mocks.replace).not.toHaveBeenCalled();
+});
+it("skips to the rule-based day from the hard-day choice without a server call", async () => {
+  const onSkip = vi.fn().mockResolvedValue(undefined);
+  writeInterviewDraft("a", "intro", {
+    token: "hard",
+    turn: {
+      message: "Heavy day. Today can be really small.",
+      phase: "confirming",
+      captured: {},
+      ask: {
+        kind: "single",
+        allowOther: false,
+        options: [{ id: "skip", label: "No plan today" }],
+      },
+    },
+    messages: [],
+    answer: "",
+  });
+  render(
+    <WorkInterview owner="a" region="SG" onReady={vi.fn()} onSkip={onSkip} />,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "No plan today" }));
+  await waitFor(() => expect(onSkip).toHaveBeenCalled());
+  expect(mocks.advanceInterview).not.toHaveBeenCalled();
+});
+it("renames, removes and undoes This week things before saving", async () => {
+  const two = {
+    items: [
+      { proposalId: crypto.randomUUID(), captured: thing },
+      {
+        proposalId: crypto.randomUUID(),
+        captured: { what: "Essay", when: "Friday", title: "Finish the essay" },
+      },
+    ],
+  };
+  writeInterviewDraft("a", "return", {
+    token: "proposal",
+    turn: null,
+    draft: two,
+    messages: [],
+    answer: "",
+  });
+  mocks.saveInterviewWeek.mockResolvedValue({
+    ok: true,
+    safety: "none",
+    turn: null,
+    week: { id: "saved" },
+  });
+  render(<WorkInterview owner="a" region="SG" />);
+  await screen.findByRole("heading", { name: "Finish the essay" });
+  expect(screen.getByText("By Friday")).toBeVisible();
+  expect(screen.queryByText(/Change the words/)).toBeNull();
+  expect(
+    screen.getByText("Nothing is saved until you tap Save this week."),
+  ).toBeVisible();
+  fireEvent.click(screen.getAllByRole("button", { name: "Rename" })[1]);
+  fireEvent.change(screen.getByLabelText("Title"), {
+    target: { value: "Essay conclusion" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("heading", { name: "Essay conclusion" });
+  fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]);
+  expect(screen.getByText("Removed.")).toBeVisible();
+  fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]);
+  expect(screen.getByText("Nothing in This week yet.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Save this week" })).toBeDisabled();
+  fireEvent.click(screen.getAllByRole("button", { name: "Undo" })[1]);
+  expect(screen.queryByText("Nothing in This week yet.")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Save this week" }));
+  await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/today"));
+  expect(mocks.saveInterviewWeek).toHaveBeenCalledWith({
+    token: "proposal",
+    draft: {
+      items: [
+        {
+          ...two.items[1],
+          captured: { ...two.items[1].captured, title: "Essay conclusion" },
+        },
+      ],
+    },
+  });
 });

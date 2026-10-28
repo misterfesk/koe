@@ -364,7 +364,11 @@ test("inline Other and weekly words reach a saved lean plan", async ({
   });
   expect(body.userModel.model.support).toBeUndefined();
   expect(body.userModel.model.puttingOff).toBeUndefined();
-  expect(body.weeks[0].items[0].captured.what).toBe("Update my CV");
+  expect(body.weeks[0].items[0].captured).toEqual({
+    what: "Update my CV",
+    when: "By the weekend",
+    title: "Update my CV",
+  });
   expect(
     body.memoryCards.some((card: { text: string }) =>
       /keep putting off/i.test(card.text),

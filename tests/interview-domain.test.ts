@@ -1,43 +1,39 @@
 import { describe, expect, it } from "vitest";
 import {
   confirmingTurn,
+  fallbackTurn,
+  followUpTurn,
+  groundedCapture,
+  hardDayTurn,
+  literalInterviewCapture,
   openingTurn,
   replyIsSafe,
-  groundedCapture,
-  fallbackTurn,
-  literalInterviewCapture,
+  whenFromAnswer,
+  looksLikeWhen,
 } from "@/domain/interview";
 import {
-  fallbackPieces,
-  pieceIssues,
+  asksForMore,
+  eatingSafe,
+  hasAiTell,
   safeInterviewText,
-  statedAvailabilityMinutes,
-  weekIssues,
-} from "@/domain/piece-rules";
+  samplePlaceholder,
+} from "@/domain/interview-text";
 import {
   capturedThingSchema,
-  pieceSchema,
+  fallbackTitle,
+  readCaptured,
+  tidyTitle,
   reviewDate,
   reviewDue,
-  whatMoved,
+  weekDraftSchema,
+  whenLabel,
 } from "@/domain/week";
 
 const thing = capturedThingSchema.parse({
   what: "Updating my CV",
-  left: "the opening paragraph",
-  stuck: "choosing words",
+  title: "Update my CV",
 });
-describe("weekly pieces and interview rules", () => {
-  it("names the thing rather than treating a status answer as the action", () => {
-    const item = capturedThingSchema.parse({
-      what: "Updating my CV",
-      left: "Nothing is written yet",
-    });
-    expect(fallbackPieces(item)[0].title).toBe(
-      "Write three rough words for your CV",
-    );
-    expect(fallbackPieces(item)[0].title).not.toMatch(/nothing is written/i);
-  });
+describe("This week things and interview rules", () => {
   it("keeps only explicit current-thing replacements and the latest stated deadline", () => {
     expect(
       literalInterviewCapture(
@@ -49,17 +45,67 @@ describe("weekly pieces and interview rules", () => {
       {},
     );
   });
-  it("checks sizes and exact source grounding", () => {
-    const p = fallbackPieces(thing)[0];
-    expect(pieceIssues(p, thing)).toEqual([]);
-    expect(pieceIssues({ ...p, size: "tiny", minutes: 6 }, thing)).toContain(
-      "size",
+  it("stores what, when and a 1-60 character title, and nothing else", () => {
+    const parsed = capturedThingSchema.parse({
+      what: "Essay",
+      title: "Finish my essay",
+      stuck: "retired field",
+    });
+    expect(parsed).toEqual({
+      what: "Essay",
+      when: "",
+      title: "Finish my essay",
+    });
+    expect(
+      capturedThingSchema.safeParse({ what: "Essay", title: "x".repeat(61) })
+        .success,
+    ).toBe(false);
+    expect(capturedThingSchema.safeParse({ what: "Essay" }).success).toBe(
+      false,
     );
     expect(
-      pieceIssues({ ...p, sourcePhrase: "an invented deadline" }, thing),
-    ).toContain("source");
-    expect(pieceSchema.safeParse({ ...p, minutes: 26 }).success).toBe(false);
-    expect(pieceSchema.safeParse({ ...p, endpoint: "" }).success).toBe(false);
+      weekDraftSchema.parse({ items: [{ captured: thing, pieces: [] }] }),
+    ).toEqual({ items: [{ captured: thing }] });
+  });
+  it("reads older rows leniently with a fallback title", () => {
+    expect(
+      readCaptured({
+        what: "updating my CV. I open it, then close it again.",
+        originalWhat: "x",
+        done: "",
+        left: "the opening",
+        stuck: "words",
+        when: "Friday",
+      }),
+    ).toEqual({
+      what: "updating my CV. I open it, then close it again.",
+      when: "Friday",
+      title: "Updating my CV",
+    });
+    expect(readCaptured({ ...thing, extra: 1 })).toEqual(thing);
+  });
+  it.each([
+    ["update my CV. I open it, then close it again.", "Update my CV"],
+    ["sort the records!", "Sort the records"],
+    [
+      "write the long introduction for the community garden funding application",
+      "Write the long introduction for the community garden funding",
+    ],
+    ["x".repeat(70), "X" + "x".repeat(59)],
+    ["Email the landlord —", "Email the landlord"],
+  ])("builds a fallback title from %s", (what, title) => {
+    const result = fallbackTitle(what);
+    expect(result).toBe(title);
+    expect(result.length).toBeLessThanOrEqual(60);
+  });
+  it("labels deadlines without doubling by/due/before/on", () => {
+    expect(whenLabel("Friday")).toBe("By Friday");
+    expect(whenLabel("by the weekend")).toBe("By the weekend");
+    expect(whenLabel("due Monday")).toBe("Due Monday");
+    expect(whenLabel("on Tuesday")).toBe("On Tuesday");
+    expect(whenLabel("This week")).toBe("This week");
+    expect(whenLabel("next Monday")).toBe("Next Monday");
+    expect(whenLabel("")).toBe("");
   });
   it.each([
     "You've got this",
@@ -73,417 +119,161 @@ describe("weekly pieces and interview rules", () => {
   ])("rejects forbidden output: %s", (text) =>
     expect(safeInterviewText(text)).toBe(false),
   );
-  it("allows ordinary deadlines and minute counts, and plain AI disclosure", () => {
+  it.each([
+    "Update my CV — the opening",
+    "It sounds like the CV is heavy",
+    "That's a great start",
+    "Absolutely, when is it due?",
+    "Great question",
+    "I hear you",
+    "Here's an idea",
+    "Let's dive in",
+    "Go gently",
+    "A gentle start",
+    "Your writing journey",
+    "Lean into the draft",
+    "Unlock your week",
+    "Empower yourself",
+    "Be mindful of time",
+    "Hold space for it",
+  ])("rejects AI tells: %s", (text) => {
+    expect(hasAiTell(text)).toBe(true);
+    expect(safeInterviewText(text)).toBe(false);
+  });
+  it("allows ordinary deadlines, minute counts, the person's own words and plain AI disclosure", () => {
     expect(safeInterviewText("Spend 10 minutes reviewing the 2026 notes")).toBe(
       true,
     );
     expect(safeInterviewText("Koe is an AI, not a therapist.")).toBe(true);
+    expect(safeInterviewText("Update my CV")).toBe(true);
+    expect(safeInterviewText("Plan the next step for the project")).toBe(true);
   });
-  it("keeps every deterministic question safe and under the follow-up budget", () => {
+  it("keeps eating-sensitive titles free of food, exercise and weight", () => {
+    expect(safeInterviewText("Get fit", true)).toBe(false);
+    expect(safeInterviewText("Go for a run", true)).toBe(false);
+    expect(safeInterviewText("Sort my playlist", true)).toBe(true);
+  });
+  it("uses the fixed copy for every deterministic turn", () => {
+    expect(openingTurn()).toMatchObject({
+      message: "What's one thing you'd like to get done this week?",
+      ask: { kind: "text", placeholder: "e.g. Update my CV" },
+    });
+    expect(openingTurn().ask?.info).toBeUndefined();
+    expect(followUpTurn()).toMatchObject({
+      message: "When does it need to be done?",
+      ask: {
+        kind: "single",
+        allowOther: true,
+        placeholder: "e.g. Friday",
+        options: [
+          { label: "This week" },
+          { label: "By the weekend" },
+          { label: "No deadline" },
+        ],
+      },
+    });
+    expect(confirmingTurn().message).toBe(
+      "Anything else you'd like to get done this week?",
+    );
+    expect(confirmingTurn().ask?.options).toEqual([
+      { id: "add", label: "Add another" },
+      { id: "finish", label: "That's enough for now" },
+    ]);
+    expect(confirmingTurn(false).ask?.options).toEqual([
+      { id: "finish", label: "That's enough for now" },
+    ]);
+    expect(hardDayTurn(true)).toMatchObject({
+      message: "Heavy day. Today can be really small.",
+      ask: {
+        options: [
+          { id: "finish", label: "Add it to my week" },
+          { id: "skip", label: "No plan today" },
+        ],
+      },
+    });
+    expect(hardDayTurn(false).ask?.options).toEqual([
+      { id: "skip", label: "No plan today" },
+    ]);
     for (const t of [
       openingTurn(),
-      fallbackTurn(thing, 0),
-      fallbackTurn(thing, 1),
-      fallbackTurn(thing, 2),
+      followUpTurn(),
       confirmingTurn(),
+      hardDayTurn(true),
     ])
       expect(replyIsSafe(t)).toBe(true);
-    expect(fallbackTurn(thing, 2).phase).toBe("confirming");
+  });
+  it("asks the deadline once, and skips it when one is already known", () => {
+    expect(fallbackTurn(thing, 0).message).toBe(
+      "When does it need to be done?",
+    );
+    expect(fallbackTurn(thing, 1).phase).toBe("confirming");
+    expect(fallbackTurn({ ...thing, when: "Friday" }, 0).phase).toBe(
+      "confirming",
+    );
+    expect(whenFromAnswer("No deadline")).toBe("");
+    expect(whenFromAnswer("By the weekend")).toBe("By the weekend");
+    for (const ok of [
+      "Friday",
+      "by the end of the month",
+      "This week",
+      "the 14th",
+      "tonight",
+    ])
+      expect(looksLikeWhen(ok), ok).toBe(true);
+    for (const no of [
+      "Sorting the receipts for my tax return",
+      "Also call my landlord about the boiler",
+    ])
+      expect(looksLikeWhen(no), no).toBe(false);
+  });
+  it("grounds what and when but lets the title rephrase", () => {
     expect(groundedCapture({ when: "Friday" }, "Essay due Friday")).toBe(true);
     expect(groundedCapture({ when: "Monday" }, "Essay due Friday")).toBe(false);
-  });
-  it("keeps fallback contact work unsent and eating-sensitive work excluded", () => {
-    const email = capturedThingSchema.parse({ what: "email the landlord" });
-    expect(fallbackPieces(email)[0].title).toMatch(/unsent/);
-    expect(pieceIssues(fallbackPieces(email)[0], email)).toEqual([]);
     expect(
-      fallbackPieces(capturedThingSchema.parse({ what: "get fit" }), true),
-    ).toEqual([]);
-    expect(fallbackPieces(thing, true)).toHaveLength(1);
-    const sending = {
-      ...fallbackPieces(email)[0],
-      title: "Send the email",
-      endpoint: "Stop after sending",
-    };
-    expect(pieceIssues(sending, email)).toContain("contact");
-    expect(pieceIssues(sending, { ...email, left: "send the email" })).toEqual(
-      [],
-    );
-    expect(
-      pieceIssues(sending, { ...email, left: "not sending today" }),
-    ).toContain("contact");
+      groundedCapture(
+        { what: "Essay due Friday", title: "Finish the essay" },
+        "Essay due Friday",
+      ),
+    ).toBe(true);
   });
-  it("uses a rolling week and counts only done pieces", () => {
+  it("checks the title with the reply", () => {
+    expect(
+      replyIsSafe({ ...confirmingTurn(), captured: { title: "Your journey" } }),
+    ).toBe(false);
+  });
+  it("uses a rolling week", () => {
     expect(reviewDate("2026-10-28")).toBe("2026-11-04");
     expect(reviewDue({ reviewOn: "2026-11-04" }, "2026-11-03")).toBe(false);
-    expect(
-      whatMoved({
-        id: "w",
-        version: 1,
-        startedOn: "2026-10-28",
-        reviewOn: "2026-11-04",
-        items: [
-          {
-            id: "i",
-            captured: thing,
-            pieces: [
-              {
-                ...fallbackPieces(thing)[0],
-                id: "p",
-                status: "done",
-                order: 0,
-              },
-            ],
-          },
-        ],
-      }),
-    ).toBe(1);
-  });
-  it("uses only explicitly stated availability, including original answers", () => {
-    expect(statedAvailabilityMinutes(thing)).toBeNull();
-    expect(
-      statedAvailabilityMinutes(thing, "Only five minutes free at a time."),
-    ).toBe(5);
-    expect(statedAvailabilityMinutes(thing, "I only have 3 minutes.")).toBe(3);
-    expect(
-      statedAvailabilityMinutes(thing, "I can spare twenty-one minutes."),
-    ).toBe(21);
-    for (const words of [
-      "Due in five minutes.",
-      "Five minutes are already done.",
-      "Only one shelf.",
-      "I used to have only five minutes.",
-      "Not only five minutes free.",
-    ])
-      expect(statedAvailabilityMinutes(thing, words)).toBeNull();
-    const fallback = fallbackPieces(
-      thing,
-      false,
-      "Only five minutes free at a time.",
-    )[0];
-    expect(fallback.minutes).toBe(5);
-    expect(fallback.size).toBe("tiny");
-    expect(
-      pieceIssues(
-        { ...fallback, minutes: 10, size: "small" },
-        thing,
-        false,
-        "Only five minutes free at a time.",
-      ),
-    ).toContain("availability");
-    expect(fallbackPieces(thing)[0].minutes).toBe(10);
-    expect(fallbackPieces(thing, false, "One minute free.")[0].minutes).toBe(1);
   });
   it.each([
-    "Toss the loose papers",
-    "Recycle the papers",
-    "Shred the papers",
-    "Discard the papers",
-    "Throw the papers away",
-    "Delete the file",
-  ])(
-    "requires explicit permission for destructive suggestions: %s",
-    (title) => {
-      const papers = capturedThingSchema.parse({
-        what: "Sort the appointment papers",
-      });
-      const p = {
-        ...fallbackPieces(papers)[0],
-        title,
-        endpoint: "Stop after this pile",
-      };
-      expect(pieceIssues(p, papers)).toContain("destructive");
-    },
+    ["Finish my essay due Friday", "due Friday", "Finish my essay"],
+    ["Finish my essay by Friday", "Friday", "Finish my essay"],
+    ["Update my CV, by Thursday.", "by Thursday", "Update my CV"],
+    ["Sort the papers by", "", "Sort the papers"],
+    ["sorting my records", "", "Sorting my records"],
+    ["Friday", "Friday", ""],
+  ])("tidies the title %s (when %s)", (title, when, expected) =>
+    expect(tidyTitle(title, when)).toBe(expected),
   );
-  it("permits requested disposal but treats questions and negation conservatively", () => {
-    const papers = capturedThingSchema.parse({
-      what: "Sort the appointment papers",
-    });
-    const p = {
-      ...fallbackPieces(papers)[0],
-      title: "Shred the junk mail",
-      endpoint: "Stop after the junk mail",
-    };
-    expect(pieceIssues(p, papers, false, "Shred the junk mail.")).not.toContain(
-      "destructive",
-    );
-    for (const words of [
-      "Don't shred the papers.",
-      "Don’t shred the papers.",
-      "Should I shred these?",
-      "Already shredded the papers.",
-    ])
-      expect(pieceIssues(p, papers, false, words)).toContain("destructive");
-    expect(
-      pieceIssues(
-        { ...p, title: "Keep every paper", endpoint: "Do not shred anything" },
-        papers,
-      ),
-    ).not.toContain("destructive");
-  });
-  it("keeps unsent-message examples out of essays and playlists", () => {
-    for (const what of ["Finish the essay", "Sort your music playlist"]) {
-      const captured = capturedThingSchema.parse({ what });
-      expect(
-        pieceIssues(
-          {
-            ...fallbackPieces(captured)[0],
-            title: "Draft two unsent lines",
-            endpoint: "Stop with two unsent lines",
-          },
-          captured,
-        ),
-      ).toContain("unrelated_message");
-    }
-    const email = capturedThingSchema.parse({
-      what: "Write the landlord email",
-    });
-    expect(pieceIssues(fallbackPieces(email)[0], email)).toEqual([]);
-  });
-  it("starts writing at the named opening instead of repeating the open-close loop", () => {
-    const captured = capturedThingSchema.parse({
-      what: "Updating my CV. I open it, then close it again.",
-      stuck: "The opening paragraph feels too big.",
-    });
-    const [piece] = fallbackPieces(captured, false, "Nothing is written yet.");
-    expect(piece.title).toBe(
-      "Write three rough words for your CV's opening paragraph",
-    );
-    expect(piece.endpoint).toContain("three rough words");
-    expect(piece.sourcePhrase).toBe(captured.stuck);
-    expect(pieceIssues(piece, captured)).toEqual([]);
-    const [fromAnswer] = fallbackPieces(
-      { ...captured, stuck: "" },
+  it.each([
+    ["e.g., Friday", "e.g. Friday"],
+    ["e.g. The opening paragraph", "e.g. The opening paragraph"],
+    [
+      "e.g., finish a work task, study for an hour, clean the kitchen",
+      "e.g. Update my CV",
+    ],
+    ["e.g. the bills, or the letters", "e.g. Update my CV"],
+    [undefined, "e.g. Update my CV"],
+  ])("keeps one short placeholder sample: %s", (text, expected) =>
+    expect(samplePlaceholder(text)).toBe(expected),
+  );
+  it("spots a model question about more things, and eating words", () => {
+    expect(asksForMore.test("Anything else for this week?")).toBe(true);
+    expect(asksForMore.test("Is there another thing on your mind?")).toBe(true);
+    expect(asksForMore.test("When does the essay need to be done?")).toBe(
       false,
-      captured.stuck,
     );
-    expect(fromAnswer.title).toBe(piece.title);
-  });
-  it("keeps one-shelf scope from original answers even when capture omits it", () => {
-    const captured = capturedThingSchema.parse({
-      what: "Maybe sorting my records.",
-    });
-    const [piece] = fallbackPieces(captured, false, "Only one shelf.");
-    expect(piece.title).toBe(
-      "Put two records from that one shelf in name order",
-    );
-    expect(piece.endpoint).toContain("that one shelf");
-    expect(piece.sourcePhrase).toBe(captured.what);
-    expect(pieceIssues(piece, captured, false, "Only one shelf.")).toEqual([]);
-  });
-  it("gives papers and a safe replacement playlist observable endpoints", () => {
-    const papers = capturedThingSchema.parse({
-      what: "Sort the appointment papers",
-    });
-    const [paper] = fallbackPieces(
-      papers,
-      false,
-      "Only five minutes free at a time. The papers are in a pile.",
-    );
-    expect(paper.title).toBe(
-      "Compare two appointment papers and group them by subject",
-    );
-    expect(paper.endpoint).toContain("Keep both");
-    expect(paper.minutes).toBe(5);
-    const playlist = capturedThingSchema.parse({
-      what: "Sorting my music playlist",
-    });
-    const [song] = fallbackPieces(
-      playlist,
-      true,
-      "Get fit. Sorting my music playlist instead. The songs are already picked.",
-    );
-    expect(song.title).toBe("Choose the first song for your playlist");
-    expect(pieceIssues(song, playlist, true)).toEqual([]);
-  });
-  it("keeps unfamiliar work usable without claiming to resolve its explicit blocker", () => {
-    const captured = capturedThingSchema.parse({
-      what: "Repair the clock",
-      stuck: "The mechanism is jammed",
-    });
-    const [piece] = fallbackPieces(captured);
-    expect(piece.title).toContain("Name one unfinished part");
-    expect(piece.sourcePhrase).toBe(captured.stuck);
-    expect(pieceIssues(piece, captured)).toEqual([]);
-    expect(piece.title).toMatch(/repair the clock/i);
-  });
-  it.each(["now", "later today", "tonight", "this evening"])(
-    "rejects %s after a literal no-work-today answer omitted from capture",
-    (when) => {
-      const original =
-        "I can't do anything today.\nOnly an unsent draft, not sending today.";
-      const email = capturedThingSchema.parse({
-        what: "Write the landlord email",
-      });
-      const [piece] = fallbackPieces(email, false, original);
-      expect(piece.when).toBe("On a later day");
-      expect(pieceIssues(piece, email, false, original)).toEqual([]);
-      expect(pieceIssues({ ...piece, when }, email, false, original)).toContain(
-        "not_today",
-      );
-      expect(
-        pieceIssues(
-          { ...piece, when: "Tomorrow, not today" },
-          email,
-          false,
-          original,
-        ),
-      ).toEqual([]);
-    },
-  );
-  it("uses captured broad timing limits while allowing drafts when only sending is deferred", () => {
-    const email = capturedThingSchema.parse({
-      what: "Write the landlord email",
-      stuck: "I cannot work today.",
-    });
-    const [piece] = fallbackPieces(email);
-    expect(piece.when).toBe("On a later day");
-    expect(pieceIssues({ ...piece, when: "now" }, email)).toContain(
-      "not_today",
-    );
-    const available = {
-      ...email,
-      stuck: "Only an unsent draft, not sending today.",
-    };
-    expect(
-      pieceIssues({ ...fallbackPieces(available)[0], when: "now" }, available),
-    ).toEqual([]);
-    expect(
-      pieceIssues(
-        { ...fallbackPieces(available)[0], when: "later today" },
-        available,
-        false,
-        "Not sending today.",
-      ),
-    ).toEqual([]);
-  });
-  it("requires a send request even when the endpoint also names a draft", () => {
-    const email = capturedThingSchema.parse({
-      what: "Write the landlord email",
-    });
-    const draft = fallbackPieces(email)[0];
-    const sending = {
-      ...draft,
-      title: "Review and send email to landlord",
-      endpoint: "Email sent from draft",
-      when: "tomorrow",
-    };
-    expect(pieceIssues(sending, email)).toContain("contact");
-    expect(
-      pieceIssues({ ...sending, title: "Review the email draft" }, email),
-    ).toContain("contact");
-    expect(
-      pieceIssues(sending, email, false, "Send the email tomorrow."),
-    ).toEqual([]);
-    expect(
-      pieceIssues(sending, email, false, "Do not send the email."),
-    ).toContain("contact");
-    expect(pieceIssues(sending, email, false, "Not sending today.")).toContain(
-      "contact",
-    );
-    expect(
-      pieceIssues(
-        { ...draft, endpoint: "Keep the draft unsent. Do not send today." },
-        email,
-      ),
-    ).toEqual([]);
-  });
-  it("rejects the observed invented bill folder but allows an originally named folder", () => {
-    const papers = capturedThingSchema.parse({
-      what: "Sort the papers on my desk",
-      stuck: "The bills are still mixed up",
-    });
-    const piece = {
-      ...fallbackPieces(papers)[0],
-      title: "File the sorted bills into your bill folder",
-      endpoint: "All bills filed in the designated folder",
-    };
-    expect(pieceIssues(piece, papers, false, papers.what)).toContain(
-      "invented_storage",
-    );
-    expect(
-      pieceIssues(piece, papers, false, "The bill folder is on the desk."),
-    ).toEqual([]);
-    expect(
-      pieceIssues(
-        piece,
-        { ...papers, left: "Put bills in the folder" },
-        false,
-        papers.what,
-      ),
-    ).toEqual([]);
-  });
-  it.each(["shelf", "drawer", "container"])(
-    "requires existing %s to be named but permits new proposed storage",
-    (noun) => {
-      const papers = capturedThingSchema.parse({
-        what: "Sort the papers on my desk",
-      });
-      const base = fallbackPieces(papers)[0];
-      const piece = {
-        ...base,
-        title: `Put the sorted papers in your ${noun}`,
-        endpoint: `Sorted papers in the designated ${noun}`,
-      };
-      expect(pieceIssues(piece, papers, false, papers.what)).toContain(
-        "invented_storage",
-      );
-      expect(pieceIssues(piece, papers, false, `Use the ${noun}.`)).toEqual([]);
-      expect(
-        pieceIssues(
-          {
-            ...piece,
-            title: `Create a new ${noun}`,
-            endpoint: `The ${noun} is ready`,
-          },
-          papers,
-          false,
-          papers.what,
-        ),
-      ).toEqual([]);
-    },
-  );
-  it("keeps original-only shelf facts and new groups distinct from invented storage", () => {
-    const records = capturedThingSchema.parse({ what: "Sort my records" });
-    const [piece] = fallbackPieces(records, false, "Only one shelf.");
-    expect(pieceIssues(piece, records, false, "Only one shelf.")).toEqual([]);
-    // Full-word owner approval passes; its captured-only transaction recheck
-    // must not claim the originally named shelf was invented.
-    expect(
-      weekIssues({ items: [{ captured: records, pieces: [piece] }] }),
-    ).toEqual([]);
-    const changed = {
-      ...piece,
-      title: "Put the records in your folder",
-      endpoint: "Records in the designated folder",
-    };
-    expect(pieceIssues(changed, records, false, "Only one shelf.")).toContain(
-      "invented_storage",
-    );
-    expect(
-      weekIssues({
-        items: [
-          {
-            captured: records,
-            pieces: [{ ...piece, minutes: 20, size: "tiny" }],
-          },
-        ],
-      }),
-    ).toContain("size");
-    const papers = capturedThingSchema.parse({
-      what: "Sort the papers on my desk",
-    });
-    expect(
-      pieceIssues(
-        {
-          ...fallbackPieces(papers)[0],
-          title: "Create two groups of papers",
-          endpoint: "The two groups are separated on the desk",
-        },
-        papers,
-        false,
-        papers.what,
-      ),
-    ).toEqual([]);
+    expect(eatingSafe("Get fit.")).toBe(false);
+    expect(eatingSafe("Sorting my music playlist")).toBe(true);
   });
 });

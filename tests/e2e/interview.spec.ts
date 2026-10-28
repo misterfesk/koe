@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { noHorizontalScroll, proposeInterview, startAsGuest } from "./helpers";
 
-test("returning interview saves edited pieces without rewriting the intro or day", async ({
+test("returning interview saves a renamed thing without rewriting the intro or day", async ({
   page,
 }) => {
   test.setTimeout(90_000);
@@ -17,7 +17,11 @@ test("returning interview saves edited pieces without rewriting the intro or day
   await page.getByRole("link", { name: /Tell Koe one thing/ }).click();
   await expect(page).toHaveURL(/\/intake#interview$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Tell me about something you'd like to get done this week.",
+    "What's one thing you'd like to get done this week?",
+  );
+  await expect(page.getByPlaceholder("e.g. Update my CV")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Leave for Today" })).toHaveCount(
+    0,
   );
   await page.getByLabel("Your answer").fill("Update the CV");
   await page.getByRole("button", { name: "Reply", exact: true }).click();
@@ -26,23 +30,14 @@ test("returning interview saves edited pieces without rewriting the intro or day
   expect(
     (await (await page.request.get("/api/export")).json()).weeks,
   ).toHaveLength(0);
-  await page.getByText("Change the title", { exact: true }).click();
-  await page.getByLabel("This week title 1").fill("Refresh the CV");
-  await page.getByText("Change this", { exact: true }).click();
-  await page.getByLabel("Piece 1.1 title").fill("Write only the opening line");
-  await page.getByRole("button", { name: "Too big", exact: true }).click();
-  await expect(
-    page.getByText(/5 minutes/, { exact: false }).first(),
-  ).toBeVisible();
+  await expect(page.getByText(/pieces/i)).toHaveCount(0);
+  await expect(page.getByText("By the weekend", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Rename", exact: true }).click();
+  await page.getByLabel("Title").fill("Refresh the CV");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.reload();
   await expect(
     page.getByRole("heading", { level: 3, name: "Refresh the CV" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", {
-      level: 4,
-      name: "Write only the opening line",
-    }),
   ).toBeVisible();
   const axe = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
@@ -57,12 +52,12 @@ test("returning interview saves edited pieces without rewriting the intro or day
   expect(after.planDays).toEqual(before.planDays);
   expect(after.steps).toEqual(before.steps);
   expect(after.weeks).toHaveLength(1);
-  expect(after.weeks[0].items[0].captured.what).toBe("Refresh the CV");
-  expect(after.weeks[0].items[0].pieces[0]).toMatchObject({
-    title: "Write only the opening line",
-    minutes: 5,
-    size: "tiny",
+  expect(after.weeks[0].items[0].captured).toEqual({
+    what: "Update the CV",
+    when: "By the weekend",
+    title: "Refresh the CV",
   });
+  expect(after.weeks[0].items[0].pieces).toBeUndefined();
   expect(
     await page.evaluate(() =>
       Object.keys(sessionStorage).filter((key) =>
@@ -106,6 +101,24 @@ test("a risk phrase stops the interview and never persists its words", async ({
   expect(
     (await (await page.request.get("/api/export")).json()).weeks,
   ).toHaveLength(0);
+});
+
+test("remove can be undone before saving", async ({ page }) => {
+  await startAsGuest(page);
+  await page.getByRole("link", { name: /Tell Koe one thing/ }).click();
+  await page.getByLabel("Your answer").fill("Update the CV");
+  await page.getByRole("button", { name: "Reply", exact: true }).click();
+  await proposeInterview(page);
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(page.getByText("Removed.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Nothing in This week yet.")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save this week", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { level: 3, name: "Update the CV" }),
+  ).toBeVisible();
 });
 
 test("an interrupted save keeps the proposal and confirms only once on retry", async ({

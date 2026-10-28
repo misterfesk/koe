@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AskCard, ChatThread, TypingDots } from "@/components/chat";
@@ -50,7 +49,9 @@ export function WorkInterview({
   const started = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const count = useRef(0);
-  const hasProposal = Boolean(state?.draft);
+  // Stays true after every thing is removed, so Undo remains reachable.
+  const [emptied, setEmptied] = useState(false);
+  const hasProposal = Boolean(state?.draft) || emptied;
   const remember = (next: InterviewDraft) => {
     setState(next);
     writeInterviewDraft(owner, mode, next);
@@ -146,19 +147,23 @@ export function WorkInterview({
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [state?.turn?.message, hasProposal, flagged]);
 
-  function send() {
+  function send(choice?: string[]) {
     if (!state || pending) return;
-    const selected = state.selected ?? [];
+    const selected = choice ?? state.selected ?? [];
     const option = state.turn?.ask?.options?.find((o) =>
       selected.includes(o.id),
     );
     const confirming = state.turn?.phase === "confirming";
     const intent =
-      confirming && option && ["propose", "add", "finish"].includes(option.id)
-        ? (option.id as "propose" | "add" | "finish")
+      confirming && option && ["add", "finish", "skip"].includes(option.id)
+        ? (option.id as "add" | "finish" | "skip")
         : "answer";
-    if (intent === "finish") {
+    if (intent === "skip") {
       enough();
+      return;
+    }
+    if (intent === "finish") {
+      finish();
       return;
     }
     const text = interviewAnswer(state);
@@ -191,6 +196,32 @@ export function WorkInterview({
       }
     });
   }
+  /** Shows This week when something was named; otherwise ends like skipping. */
+  function finish() {
+    if (!state || pending) return;
+    // Nothing answered yet: leave without spending the token, keeping the draft.
+    if (!state.messages.some((m) => m.role === "user")) {
+      enough();
+      return;
+    }
+    setError("");
+    startTransition(async () => {
+      try {
+        const next = receive(
+          await advanceInterview({ token: state.token, intent: "finish" }),
+          state,
+        );
+        if (next && !next.draft) {
+          if (onSkip) await onSkip();
+          else router.replace("/today");
+        }
+      } catch {
+        setError(
+          "Your answer couldn't be confirmed. Try again. Your draft is kept.",
+        );
+      }
+    });
+  }
   function enough() {
     if (pending) return;
     setError("");
@@ -204,7 +235,11 @@ export function WorkInterview({
     });
   }
   function approve() {
-    if (!state?.draft || pending) return;
+    if (!state || pending) return;
+    if (!state.draft) {
+      if (onReady) enough();
+      return;
+    }
     setError("");
     startTransition(async () => {
       try {
@@ -258,14 +293,12 @@ export function WorkInterview({
       <header
         className={`page-heading ${hasProposal ? styles.proposalHeading : ""}`}
       >
-        <p className="eyebrow">This week</p>
+        {!hasProposal && <p className="eyebrow">This week</p>}
         <h1 ref={heading} tabIndex={-1}>
-          {state?.draft
-            ? "Your week, in smaller pieces"
-            : (turn?.message ?? "Your week")}
+          {hasProposal ? "This week" : (turn?.message ?? "This week")}
         </h1>
       </header>
-      {state && !state.draft && turn?.ask && (
+      {state && !hasProposal && turn?.ask && (
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -291,6 +324,11 @@ export function WorkInterview({
             value={selected}
             other={state.answer}
             onChange={(value) => {
+              // Confirming choices (add another, enough, no plan) act on the first tap.
+              if (turn.phase === "confirming" && value.length) {
+                send(value);
+                return;
+              }
               remember({
                 ...state,
                 selected: value,
@@ -307,43 +345,35 @@ export function WorkInterview({
             maxLength={400}
             disabled={pending}
           />
-          <div className="actions">
-            <button
-              type="submit"
-              className="secondary"
-              disabled={pending || restart}
-            >
-              {turn.phase === "confirming"
-                ? selected[0] === "propose"
-                  ? "Show the pieces"
-                  : selected[0] === "add"
-                    ? "Ask about another thing"
-                    : "Choose this"
-                : "Reply"}
-            </button>
-          </div>
+          {turn.phase !== "confirming" && (
+            <div className="actions">
+              <button
+                type="submit"
+                className="secondary"
+                disabled={pending || restart}
+              >
+                Reply
+              </button>
+            </div>
+          )}
         </form>
       )}
-      {state?.draft && (
+      {state && hasProposal && (
         <>
           <WeekReveal
             draft={state.draft}
+            heading={false}
             disabled={pending}
             onChange={(draft) => {
               remember({ ...state, draft });
-              if (!draft) {
-                setRestart(true);
-                setError(
-                  "Nothing left to save. You can stop here or name something else.",
-                );
-              }
+              setEmptied(!draft);
             }}
           />
           <div className="actions">
             <button
               type="button"
               className="secondary"
-              disabled={pending}
+              disabled={pending || (!onReady && !state.draft)}
               onClick={approve}
             >
               {onReady ? "Review your first day" : "Save this week"}
@@ -396,17 +426,18 @@ export function WorkInterview({
             Try again
           </button>
         ))}
-      <div className={styles.interviewExit}>
-        <button
-          type="button"
-          className="text"
-          disabled={pending}
-          onClick={enough}
-        >
-          That&apos;s enough for now
-        </button>
-        <Link href="/today">Leave for Today</Link>
-      </div>
+      {state && !hasProposal && turn?.phase === "gathering" && (
+        <div className={styles.interviewExit}>
+          <button
+            type="button"
+            className="text"
+            disabled={pending}
+            onClick={restart ? enough : finish}
+          >
+            That&apos;s enough for now
+          </button>
+        </div>
+      )}
       {!!state?.messages.length && (
         <details className={styles.transcript}>
           <summary>Your earlier replies</summary>

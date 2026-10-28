@@ -1,15 +1,16 @@
 import "server-only";
 import { and, desc, eq } from "drizzle-orm";
 import {
+  readCaptured,
   reviewDate,
   weekDraftSchema,
   type WeekDraft,
   type WeekView,
 } from "@/domain/week";
-import { weekIssues } from "@/domain/piece-rules";
+import { safeInterviewText } from "@/domain/interview-text";
 import { seal, open } from "../crypto";
 import type { Db } from "../db";
-import { week, weekItem, piece } from "../db/schema";
+import { week, weekItem } from "../db/schema";
 
 export type WeekTx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Reader = Db | WeekTx;
@@ -41,24 +42,10 @@ export async function getWeek(
     version: row.version,
     startedOn: row.startedOn,
     reviewOn: row.reviewOn,
-    items: await Promise.all(
-      items.map(async (item) => ({
-        id: item.id,
-        captured: JSON.parse(open(item.capturedEnc)),
-        pieces: (
-          await db
-            .select()
-            .from(piece)
-            .where(and(eq(piece.weekItemId, item.id), eq(piece.userId, userId)))
-            .orderBy(piece.order)
-        ).map((p) => ({
-          ...JSON.parse(open(p.dataEnc)),
-          id: p.id,
-          order: p.order,
-          status: p.status,
-        })),
-      })),
-    ),
+    items: items.map((item) => ({
+      id: item.id,
+      captured: readCaptured(JSON.parse(open(item.capturedEnc))),
+    })),
   };
 }
 export async function listWeeks(db: Reader, userId: string) {
@@ -78,8 +65,12 @@ export async function saveWeekInTransaction(
   input: WeekSave,
 ) {
   const draft = weekDraftSchema.parse(input.draft);
-  if (weekIssues(draft, input.eatingConcern).length)
-    throw new Error("Check the words and sizes before saving.");
+  if (
+    draft.items.some(
+      (item) => !safeInterviewText(item.captured.title, input.eatingConcern),
+    )
+  )
+    throw new Error("Check the titles before saving.");
   let id = input.weekId;
   let offset = 0;
   if (id) {
@@ -139,22 +130,12 @@ export async function saveWeekInTransaction(
     id = row.id;
   }
   for (const [order, item] of draft.items.entries()) {
-    const [row] = await tx
-      .insert(weekItem)
-      .values({
-        userId,
-        weekId: id,
-        capturedEnc: seal(JSON.stringify(item.captured)),
-        order: order + offset,
-      })
-      .returning({ id: weekItem.id });
-    for (const [position, value] of item.pieces.entries())
-      await tx.insert(piece).values({
-        userId,
-        weekItemId: row.id,
-        dataEnc: seal(JSON.stringify(value)),
-        order: position,
-      });
+    await tx.insert(weekItem).values({
+      userId,
+      weekId: id,
+      capturedEnc: seal(JSON.stringify(item.captured)),
+      order: order + offset,
+    });
   }
   return (await getWeek(tx, userId, id))!;
 }

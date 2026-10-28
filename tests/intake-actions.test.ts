@@ -202,33 +202,34 @@ describe("startMyDay", { timeout: 30_000 }, () => {
       intent: "answer",
     });
     if (!answer.ok || !answer.token) throw new Error("answer failed");
-    const pieces = await advanceInterview({
+    const week = await advanceInterview({
       token: answer.token,
-      intent: "propose",
+      intent: "finish",
     });
-    if (!pieces.ok || !pieces.token || !pieces.draft)
+    if (!week.ok || !week.token || !week.draft)
       throw new Error("proposal failed");
-    return { token: pieces.token, draft: pieces.draft };
+    return { token: week.token, draft: week.draft };
   };
 
   it("saves intro and confirmed week atomically and keeps a retry idempotent", async () => {
     const { db, schema } = await setup();
     const interview = await proposed();
     const original = interview.draft.items[0].captured.what;
-    interview.draft.items[0].captured.what = "Refresh the CV title";
+    interview.draft.items[0].captured.title = "Refresh the CV";
+    interview.draft.items[0].captured.what = "forged words";
     expect(await run({ ...payload(), interview })).toEqual({ ok: true });
     expect(await db.select().from(schema.week)).toHaveLength(1);
     expect(await db.select().from(schema.weekItem)).toHaveLength(1);
-    expect(await db.select().from(schema.piece)).toHaveLength(1);
+    expect(await db.select().from(schema.piece)).toHaveLength(0);
     expect(await db.select().from(schema.planDay)).toHaveLength(1);
     const { getWeek } = await import("@/server/data/week");
     const [row] = await db.select().from(schema.week);
     const approved = await getWeek(db, "a", row.id);
-    expect(approved!.items[0].captured).toMatchObject({
-      what: "Refresh the CV title",
-      originalWhat: original,
+    expect(approved!.items[0].captured).toEqual({
+      what: original,
+      when: "",
+      title: "Refresh the CV",
     });
-    expect(approved!.items[0].pieces[0].sourcePhrase).toBe(original);
     expect(await run({ ...payload(), interview })).toEqual({ ok: true });
     expect(await db.select().from(schema.weekItem)).toHaveLength(1);
     expect(await db.select().from(schema.planDay)).toHaveLength(1);

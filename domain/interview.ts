@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { chatTurnSchema, type ChatTurn } from "./chat-turn";
-import { fallbackPieces, safeInterviewText } from "./piece-rules";
+import { safeInterviewText } from "./interview-text";
 import { capturedThingSchema, type CapturedThing } from "./week";
 
 export const interviewReplySchema = chatTurnSchema.extend({
@@ -12,21 +12,32 @@ export type InterviewHistory = {
   role: "user" | "assistant";
   content: string;
 }[];
-export function replyIsSafe(turn: ChatTurn, eatingConcern = false) {
+/** At most this many Koe turns per interview, opening and confirming included. */
+export const MAX_TURNS = 7;
+export const MAX_THINGS = 3;
+export const WHEN_QUESTION = "When does it need to be done?";
+export const NO_DEADLINE = "No deadline";
+export const HARD_DAY = /can['’]?t do anything|overwhelm/i;
+export function replyIsSafe(
+  turn: ChatTurn & { captured?: Partial<CapturedThing> },
+  eatingConcern = false,
+) {
   return [
     turn.message,
     turn.ask?.placeholder,
     turn.ask?.info,
+    turn.captured?.title,
     ...(turn.ask?.options ?? []).map((o) => o.label),
   ]
     .filter((s): s is string => !!s)
     .every((s) => safeInterviewText(s, eatingConcern));
 }
+/** `what` and `when` must be the person's own words; `title` may rephrase them. */
 export function groundedCapture(
   captured: Partial<CapturedThing>,
   words: string,
 ) {
-  return Object.values(captured).every(
+  return [captured.what, captured.when].every(
     (value) => !value || words.includes(value),
   );
 }
@@ -49,76 +60,82 @@ export function literalInterviewCapture(
   }
   return captured;
 }
-export function confirmingTurn(): InterviewReply {
+/** The answer to the fixed deadline question; "No deadline" leaves it empty. */
+export function whenFromAnswer(text: string) {
+  return text.trim() === NO_DEADLINE ? "" : text.trim().slice(0, 200);
+}
+const TIME_WORDS =
+  /\b(?:mon|tues|wednes|thurs|fri|satur|sun)day|\b(?:today|tonight|tomorrow|week|weekend|month|morning|afternoon|evening|night|noon|midnight|soon|asap|deadline|end of|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\d/i;
+/** A deadline is kept only when it reads like a time; other words stay out of "By …". */
+export function looksLikeWhen(text: string) {
+  return TIME_WORDS.test(text);
+}
+export function openingTurn(): InterviewReply {
   return {
-    message: "Want to break this into pieces for the week?",
+    message: "What's one thing you'd like to get done this week?",
+    phase: "gathering",
+    captured: {},
+    ask: {
+      kind: "text",
+      allowOther: false,
+      placeholder: "e.g. Update my CV",
+    },
+  };
+}
+export function followUpTurn(): InterviewReply {
+  return {
+    message: WHEN_QUESTION,
+    phase: "gathering",
+    captured: {},
+    ask: {
+      kind: "single",
+      allowOther: true,
+      placeholder: "e.g. Friday",
+      options: [
+        { id: "this-week", label: "This week" },
+        { id: "weekend", label: "By the weekend" },
+        { id: "none", label: NO_DEADLINE },
+      ],
+    },
+  };
+}
+export function confirmingTurn(canAdd = true): InterviewReply {
+  return {
+    message: "Anything else you'd like to get done this week?",
     phase: "confirming",
     captured: {},
     ask: {
       kind: "single",
       allowOther: false,
       options: [
-        { id: "propose", label: "Break it down" },
-        { id: "add", label: "Add another thing" },
+        ...(canAdd ? [{ id: "add", label: "Add another" }] : []),
         { id: "finish", label: "That's enough for now" },
       ],
     },
   };
 }
-export function openingTurn(): InterviewReply {
+export function hardDayTurn(hasThing: boolean): InterviewReply {
   return {
-    message: "Tell me about something you'd like to get done this week.",
-    phase: "gathering",
-    captured: {},
-    ask: {
-      kind: "text",
-      allowOther: false,
-      placeholder: "e.g. Updating my CV. I open it, then close it again.",
-      info: "Koe uses your words to suggest smaller pieces. A few words are enough.",
-    },
-  };
-}
-export function hardDayTurn(
-  thing: CapturedThing,
-  eatingConcern = false,
-): InterviewReply {
-  const piece = fallbackPieces(thing, eatingConcern)[0];
-  return {
-    message: "Today can be smaller. What would you like to keep?",
+    message: "Heavy day. Today can be really small.",
     phase: "confirming",
     captured: {},
     ask: {
       kind: "single",
       allowOther: false,
       options: [
-        ...(piece ? [{ id: "propose", label: piece.title }] : []),
-        { id: "finish", label: "No plan today" },
+        ...(hasThing ? [{ id: "finish", label: "Add it to my week" }] : []),
+        { id: "skip", label: "No plan today" },
       ],
     },
   };
 }
+/** Fixed turns when the model is off or fails: ask the deadline once, then confirm. */
 export function fallbackTurn(
   thing: CapturedThing,
   followups: number,
+  canAdd = true,
 ): InterviewReply {
-  if (followups >= 2) return confirmingTurn();
-  return {
-    message: /everything|don't know|get my life together|sleep better/i.test(
-      thing.what,
-    )
-      ? "What would that look like this week?"
-      : followups === 0
-        ? "Where does it get stuck?"
-        : "What would finishing look like this week?",
-    phase: "gathering",
-    captured: {},
-    ask: {
-      kind: "text",
-      allowOther: false,
-      placeholder:
-        followups === 0
-          ? "e.g. Only the opening paragraph. Choosing the words feels hard."
-          : "e.g. Your notes are ready. Friday would work.",
-    },
-  };
+  return followups === 0 && !thing.when
+    ? followUpTurn()
+    : confirmingTurn(canAdd);
 }

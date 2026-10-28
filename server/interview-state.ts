@@ -7,7 +7,8 @@ import {
   type WeekDraft,
 } from "@/domain/week";
 import { detectEatingConcern } from "@/domain/plan-menu";
-import { pieceIssues } from "@/domain/piece-rules";
+import { MAX_TURNS } from "@/domain/interview";
+import { safeInterviewText } from "@/domain/interview-text";
 import type { RiskLevel } from "@/domain/safety";
 import { open, seal } from "./crypto";
 import { env } from "./env";
@@ -22,11 +23,13 @@ const stateSchema = z.object({
   userId: z.string(),
   expires: z.number(),
   sequence: z.number().int().min(0),
-  turns: z.number().int().min(1).max(10),
+  turns: z.number().int().min(1).max(MAX_TURNS),
   phase: z.enum(["gathering", "confirming", "done"]),
   intake: intakeModel,
   things: z.array(capturedThingSchema).max(3),
-  followups: z.number().int().min(0).max(2),
+  followups: z.number().int().min(0).max(1),
+  /** The last Koe turn was the fixed deadline question. */
+  askedWhen: z.boolean().optional(),
   words: z.array(z.string().max(1600)).max(3),
   history: z
     .array(
@@ -69,11 +72,8 @@ export function readInterview(token: string, userId: string) {
 }
 export function interviewTexts(draft: WeekDraft) {
   return draft.items
-    .flatMap((i) => [
-      ...Object.values(i.captured),
-      ...i.pieces.flatMap((p) => [p.title, p.endpoint, p.when, p.sourcePhrase]),
-    ])
-    .filter((text): text is string => typeof text === "string");
+    .flatMap((i) => [i.captured.what, i.captured.when, i.captured.title])
+    .filter(Boolean);
 }
 /** No personal text, saved OR freshly supplied, reaches any model with memory off. */
 export async function interviewSafety(
@@ -114,26 +114,24 @@ export async function consumeInterviewApproval(
   if (v.profile.coachingPausedAt || state.phase !== "done" || !state.proposed)
     throw new Error("Open the interview again before saving.");
   const draft = weekDraftSchema.parse(raw);
-  // The person may edit/remove proposals, but cannot inject extra things/pieces.
+  // The person may rename or remove proposals, but cannot inject or reword things.
   if (
     draft.items.length > state.proposed.items.length ||
     new Set(draft.items.map((i) => i.proposalId)).size !== draft.items.length ||
-    draft.items.some((item) => {
-      const original = state.proposed!.items.find(
-        (candidate) =>
-          !!item.proposalId && candidate.proposalId === item.proposalId,
-      );
-      return !original || item.pieces.length > original.pieces.length;
-    })
+    draft.items.some(
+      (item) =>
+        !state.proposed!.items.some(
+          (candidate) =>
+            !!item.proposalId && candidate.proposalId === item.proposalId,
+        ),
+    )
   )
-    throw new Error("Keep the proposed pieces or open another interview.");
-  // Renaming keeps the person's original phrase available for piece provenance.
+    throw new Error("Review This week before starting again.");
   for (const item of draft.items) {
     const original = state.proposed.items.find(
       (candidate) => candidate.proposalId === item.proposalId,
     )!;
-    item.captured.originalWhat =
-      original.captured.originalWhat ?? original.captured.what;
+    item.captured = { ...original.captured, title: item.captured.title };
   }
   const words = [...freeTexts(state.intake), ...interviewTexts(draft)];
   const saved = await getUserModel(v.db, v.user.id);
@@ -144,21 +142,12 @@ export async function consumeInterviewApproval(
   const gate = await interviewSafety(v, words);
   if (gate.safety !== "none" || gate.unavailable)
     return { ...gate, approval: null };
-  const issues = draft.items.flatMap((item) => {
-    const index = state.proposed!.items.findIndex(
-      (original) => original.proposalId === item.proposalId,
-    );
-    return item.pieces.flatMap((piece) =>
-      pieceIssues(
-        piece,
-        item.captured,
-        eatingConcern,
-        state.words[index] ?? "",
-      ),
-    );
-  });
-  if (issues.length)
-    throw new Error("Check the words and sizes before saving.");
+  if (
+    draft.items.some(
+      (item) => !safeInterviewText(item.captured.title, eatingConcern),
+    )
+  )
+    throw new Error("Check the titles before saving.");
   return {
     ...gate,
     approval: {

@@ -1,21 +1,21 @@
 import "server-only";
-import { z } from "zod";
 import { plainTextAsk } from "@/domain/chat-turn";
 import {
-  fallbackTurn,
-  hardDayTurn,
   confirmingTurn,
-  literalInterviewCapture,
+  fallbackTurn,
   groundedCapture,
+  HARD_DAY,
+  hardDayTurn,
   interviewReplySchema,
+  literalInterviewCapture,
   replyIsSafe,
   type InterviewHistory,
 } from "@/domain/interview";
-import { fallbackPieces, pieceIssues } from "@/domain/piece-rules";
-import { pieceSchema, type CapturedThing } from "@/domain/week";
+import type { CapturedThing } from "@/domain/week";
+import { asksForMore, samplePlaceholder } from "@/domain/interview-text";
 import { env } from "../env";
 import { completeJson } from "./nebius";
-import { breakdownSystem, system } from "./prompts/interview";
+import { system } from "./prompts/interview";
 
 export type InterviewContext = {
   intake: unknown;
@@ -25,6 +25,8 @@ export type InterviewContext = {
   thing: CapturedThing;
   followups: number;
   turnsLeft: number;
+  /** Whether a confirming turn may still offer "Add another". */
+  canAdd?: boolean;
   /** Read-only owner-checked answers for this thing; never persisted as model memory. */
   originalWords?: string;
 };
@@ -60,9 +62,9 @@ export async function interviewTurn(
     context.originalWords ?? words,
     context.eatingConcern,
   );
-  const fallback = /can['’]?t do anything|overwhelm/i.test(latest)
-    ? hardDayTurn(context.thing, context.eatingConcern)
-    : fallbackTurn(context.thing, context.followups);
+  const fallback = HARD_DAY.test(latest)
+    ? hardDayTurn(true)
+    : fallbackTurn(context.thing, context.followups, context.canAdd);
   fallback.captured = { ...fallback.captured, ...literal };
   if (env().KOE_AI === "off")
     return { turn: fallback, source: "fallback" as const };
@@ -70,6 +72,10 @@ export async function interviewTurn(
     (t) =>
       replyIsSafe(t, context.eatingConcern) &&
       groundedCapture(t.captured, words),
+    {
+      message:
+        "Use plain words with no AI tells, and copy what and when exactly from the person's words.",
+    },
   );
   try {
     const turn = await completeJson(
@@ -92,116 +98,30 @@ export async function interviewTurn(
     );
     turn.captured = { ...turn.captured, ...literal };
     if (
-      context.followups >= 2 ||
-      context.turnsLeft <= 0 ||
-      turn.phase !== "gathering"
+      context.followups >= 1 ||
+      context.turnsLeft <= 1 ||
+      turn.phase !== "gathering" ||
+      // Only the server asks whether there is more.
+      asksForMore.test(turn.message)
     )
       return {
-        turn: { ...confirmingTurn(), captured: turn.captured },
+        turn: { ...confirmingTurn(context.canAdd), captured: turn.captured },
         source: "ai" as const,
       };
+    const ask = turn.ask ?? { ...plainTextAsk };
     return {
-      turn: { ...turn, ask: turn.ask ?? { ...plainTextAsk } },
+      turn: {
+        ...turn,
+        ask: {
+          ...ask,
+          ...(ask.placeholder !== undefined || ask.kind === "text"
+            ? { placeholder: samplePlaceholder(ask.placeholder) }
+            : {}),
+        },
+      },
       source: "ai" as const,
     };
   } catch {
     return { turn: fallback, source: "fallback" as const };
-  }
-}
-export async function breakDown(context: InterviewContext, userId?: string) {
-  const fallback = () => ({
-    pieces: fallbackPieces(
-      context.thing,
-      context.eatingConcern,
-      context.originalWords,
-    ),
-    source: "fallback" as const,
-  });
-  if (env().KOE_AI === "off") return fallback();
-  const shape = z
-    .object({ pieces: z.array(pieceSchema).min(3).max(6) })
-    .superRefine((result, validation) => {
-      const corrections: Record<string, string> = {
-        availability:
-          "Every piece must fit the person's stated available minutes.",
-        not_today:
-          "Work is unavailable today. Suggest a later day for every piece, including unsent drafts.",
-        destructive:
-          "No destruction was requested. Propose sorting and keeping instead.",
-        unrelated_message:
-          "Unsent messages are only for contact work, not this thing.",
-        source: "Copy sourcePhrase exactly from a captured field.",
-        words:
-          "Use safe plain second-person words without banned phrases or excluded subjects.",
-        contact: "Use an unsent draft. Sending requires an explicit request.",
-        size: "Minutes must fit tiny <=5, small <=15, medium <=25.",
-        duplicate_outcome:
-          "Give each piece a different result. Expand, revise, or add to earlier work.",
-        unchanged_outcome:
-          "Keeping an earlier result unchanged is not another piece. Add a concrete change within the person's scope.",
-        invented_storage:
-          "Use only storage the person named. Keep sorted groups in that place.",
-      };
-      const endpoints = new Set<string>();
-      result.pieces.forEach((piece, index) => {
-        const issues = pieceIssues(
-          piece,
-          context.thing,
-          context.eatingConcern,
-          context.originalWords,
-        );
-        if (context.caring && piece.size === "medium")
-          issues.push("availability");
-        const endpoint = piece.endpoint
-          .normalize("NFKC")
-          .toLowerCase()
-          .replace(/[^\p{L}\p{N}]+/gu, " ")
-          // Roughness changes the writing standard, not the amount of work.
-          // Preserve revision verbs, quantities, and objects: this is not a
-          // general semantic similarity check.
-          .replace(/\b(?:deliberately|rough)\b/gu, " ")
-          .replace(/\s+/gu, " ")
-          .trim();
-        if (endpoints.has(endpoint)) issues.push("duplicate_outcome");
-        endpoints.add(endpoint);
-        // A preservation instruction can describe a constraint on earlier
-        // work, but cannot fill another slot in a cumulative breakdown.
-        // Require both fields: "Keep writing" can produce additional words.
-        if (
-          index > 0 &&
-          /^(?:leave|keep|maintain)\b/i.test(piece.title) &&
-          !/^keep\s+[\p{L}]+ing\b/iu.test(piece.title) &&
-          /\b(?:stays?|remains?|unchanged)\b/i.test(piece.endpoint)
-        )
-          issues.push("unchanged_outcome");
-        for (const issue of issues)
-          validation.addIssue({
-            code: "custom",
-            path: ["pieces", index],
-            message:
-              corrections[issue] ??
-              "Check this piece against the supplied rules.",
-          });
-      });
-    });
-  try {
-    const result = await completeJson(
-      [
-        { role: "system", content: breakdownSystem },
-        { role: "user", content: JSON.stringify(boundedContext(context)) },
-      ],
-      shape,
-      {
-        purpose: "interview_breakdown",
-        userId,
-        model: env().KOE_CHAT_MODEL,
-        schemaName: "interview_breakdown",
-        maxTokens: 1800,
-        temperature: 0.3,
-      },
-    );
-    return { ...result, source: "ai" as const };
-  } catch {
-    return fallback();
   }
 }

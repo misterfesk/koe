@@ -57,6 +57,15 @@ export function RevealScreen({
     reveal.model.names.map((n) => ({ ...n, name: n.name })),
   );
   const [items, setItems] = useState<PlanItem[]>(reveal.items);
+  // Kept locally so This week stays on screen, with Undo, after every removal.
+  const [weekToken, setWeekToken] = useState(interview?.token);
+  const [weekDraft, setWeekDraft] = useState(interview?.draft);
+  // The week can arrive after the first render: the interview's onReady sets
+  // it inside a transition, while the reveal stage commits first.
+  if (interview?.token && interview.token !== weekToken) {
+    setWeekToken(interview.token);
+    setWeekDraft(interview.draft);
+  }
   const [morningOn, setMorningOn] = useState(false);
   const [morning, setMorning] = useState<MorningPlan>(
     reveal.model.morningPlan ?? "none",
@@ -133,7 +142,9 @@ export function RevealScreen({
           items,
           remindItems: itemsOn,
           morningPlanMinute: morningOn ? morningMinute : null,
-          ...(interview ? { interview } : {}),
+          ...(weekToken && weekDraft
+            ? { interview: { token: weekToken, draft: weekDraft } }
+            : {}),
         });
         if (!r.ok) return setError(Object.values(r.errors)[0]);
         if (r.safety && r.safety !== "none") return setFlagged(true);
@@ -162,7 +173,7 @@ export function RevealScreen({
   return (
     <>
       <header
-        className={`page-heading ${interview ? styles.proposalHeading : ""}`}
+        className={`page-heading ${weekToken ? styles.proposalHeading : ""}`}
       >
         <p className="eyebrow">Your first day</p>
         <h1 ref={heading} tabIndex={-1}>
@@ -173,11 +184,12 @@ export function RevealScreen({
         )}
       </header>
 
-      {interview && (
+      {weekToken && (
         <WeekReveal
-          draft={interview.draft}
+          draft={weekDraft}
           disabled={pending}
           onChange={(draft) => {
+            setWeekDraft(draft);
             onWeekChange?.(draft);
             if (owner) {
               const stored = readInterviewDraft(owner, "intro");

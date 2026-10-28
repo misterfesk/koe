@@ -46,24 +46,16 @@ export async function noHorizontalScroll(page: Page) {
 /** Completes the deterministic interview after a first thing has been supplied. */
 export async function proposeInterview(page: Page) {
   const title = page.getByRole("heading", { level: 1 });
-  await expect(title).toHaveText("Where does it get stuck?");
+  await expect(title).toHaveText("When does it need to be done?");
   await page
-    .getByLabel("Your answer")
-    .fill("Choosing which words to use feels hard");
-  await page.getByRole("button", { name: "Reply", exact: true }).click();
-  await expect(title).toHaveText("What would finishing look like this week?");
-  await page
-    .getByLabel("Your answer")
-    .fill("Only the opening paragraph is left");
+    .getByRole("button", { name: "By the weekend", exact: true })
+    .click();
   await page.getByRole("button", { name: "Reply", exact: true }).click();
   await expect(title).toHaveText(
-    "Want to break this into pieces for the week?",
+    "Anything else you'd like to get done this week?",
   );
   await page
-    .getByRole("button", { name: "Break it down", exact: true })
+    .getByRole("button", { name: "That's enough for now", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Show the pieces", exact: true })
-    .click();
-  await expect(title).toHaveText("Your week, in smaller pieces");
+  await expect(title).toHaveText("This week");
 }
