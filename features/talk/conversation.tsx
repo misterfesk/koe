@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 import {
   useEffect,
+  useId,
   useOptimistic,
   useRef,
   useState,
@@ -34,6 +35,7 @@ export function Conversation({
   region,
   push,
   hour12,
+  onChanged,
 }: {
   id: string | null;
   mode: TalkMode;
@@ -42,7 +44,12 @@ export function Conversation({
   region: string | null;
   push: PushState;
   hour12: boolean;
+  /** Set by the side panel: reload this conversation instead of changing the page. */
+  onChanged?: (conversationId: string) => void | Promise<void>;
+  /** What the person opened Talk from (used by Stuck? Ask Koe, A4b). */
+  context?: { kind: "thing" | "day"; id: string };
 }) {
+  const inputId = useId();
   const router = useRouter();
   const [mode, setMode] = useState<TalkMode>(initialMode);
   const [text, setText] = useState("");
@@ -72,9 +79,9 @@ export function Conversation({
     if (!content) return setError("Write something first.");
     setError("");
     setNotice("");
+    setText("");
     startTransition(async () => {
       addShown(content);
-      setText("");
       const r = await sendMessage({
         conversationId: id ?? undefined,
         mode,
@@ -91,7 +98,8 @@ export function Conversation({
         setNotice(
           "Koe can't reply right now. What you wrote is saved. Try again in a little while.",
         );
-      if (!id) router.replace("/talk/" + r.conversationId);
+      if (onChanged) await onChanged(r.conversationId);
+      else if (!id) router.replace("/talk/" + r.conversationId);
     });
   }
 
@@ -167,11 +175,11 @@ export function Conversation({
         />
       ) : (
         <form onSubmit={send} className={styles.composer}>
-          <label htmlFor="talk-input" className="sr-only">
+          <label htmlFor={inputId} className="sr-only">
             Your message
           </label>
           <textarea
-            id="talk-input"
+            id={inputId}
             rows={3}
             maxLength={4000}
             value={text}
@@ -181,10 +189,10 @@ export function Conversation({
               if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
             }}
             aria-invalid={!!error}
-            aria-describedby={error ? "talk-error" : undefined}
+            aria-describedby={error ? inputId + "-error" : undefined}
           />
           {error && (
-            <p id="talk-error" className="error" role="alert">
+            <p id={inputId + "-error"} className="error" role="alert">
               {error}
             </p>
           )}

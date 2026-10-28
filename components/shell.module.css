@@ -13,6 +13,8 @@
   max-width: 1440px;
   margin: auto;
   padding: 22px 48px;
+  min-height: 89px; /* the Talk panel starts under it */
+  box-sizing: border-box;
   border-bottom: 1px solid var(--line);
 }
 .wordmark {
@@ -37,6 +39,11 @@
   min-height: 44px;
   background: var(--wine);
   color: var(--cream);
+}
+@media (min-width: 1024px) {
+  .app:has(.sidebar) .help {
+    display: none;
+  }
 }
 .layout {
   max-width: 1440px;
@@ -66,7 +73,8 @@
   gap: 6px;
   border-right: 1px solid var(--line);
 }
-.nav a {
+.nav a,
+.nav .navButton {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -76,9 +84,32 @@
   border-radius: 8px;
   font-size: 1rem;
 }
-.nav a[aria-current="page"] {
+/* The More and Talk buttons look like the links beside them. */
+.nav .navButton {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  font-weight: 400;
+  justify-content: flex-start;
+}
+.nav a[aria-current="page"],
+.nav .navButton[data-active] {
   background: var(--coffee);
   color: var(--cream);
+}
+.moreList {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 36px;
+}
+.nav .moreList a {
+  min-height: 44px;
+  font-size: 0.9375rem;
+}
+.tabs,
+.scrim,
+.sheet {
+  display: none;
 }
 .main {
   padding: 44px 64px 72px;
@@ -107,22 +138,19 @@
 .footer a {
   text-decoration: none;
 }
-@media (max-width: 800px) {
-  .header {
-    padding: 14px 16px;
-    gap: 12px;
-  }
-  .wordmark {
-    font-size: 1.75rem;
-  }
+@media (max-width: 1023px) {
   .layout {
     display: block;
   }
+  .sidebar {
+    display: none;
+  }
   /* Bottom tab bar on phones: thumb reach, and content starts at the top. */
-  .nav {
+  .tabs {
     position: fixed;
     inset: auto 0 0 0;
     z-index: 20;
+    display: flex;
     flex-direction: row;
     gap: 0;
     padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
@@ -130,8 +158,10 @@
     border-top: 1px solid var(--line);
     background: var(--canvas);
   }
-  .nav a {
+  .nav.tabs a,
+  .nav.tabs .navButton {
     flex: 1 1 0;
+    min-width: 0;
     flex-direction: column;
     gap: 2px;
     padding: 6px 2px;
@@ -139,11 +169,51 @@
     font-size: 0.75rem;
     justify-content: center;
   }
-  .main {
-    padding: 28px 16px 48px;
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgb(56 45 41 / 0.4);
+  }
+  .sheet {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 40;
+    display: grid;
+    gap: 4px;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    border-radius: 16px 16px 0 0;
+  }
+  .sheet a {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 10px 12px;
+    text-decoration: none;
+    border-radius: 8px;
   }
   [data-signed-in="true"] .footer {
     padding-bottom: 96px;
+  }
+  .sheet a[aria-current="page"] {
+    background: var(--coffee);
+    color: var(--cream);
+  }
+}
+@media (max-width: 800px) {
+  .header {
+    padding: 14px 16px;
+    min-height: 0;
+    gap: 12px;
+  }
+  .wordmark {
+    font-size: 1.75rem;
+  }
+  .main {
+    padding: 28px 16px 48px;
   }
   .footer {
     padding: 20px 16px;

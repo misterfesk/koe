@@ -2,6 +2,7 @@ import Link from "next/link";
 import { type ReactNode } from "react";
 import { Mascot } from "./mascot";
 import { Nav } from "./nav";
+import { TalkButton, TalkPanel, TalkProvider } from "./talk-panel";
 import styles from "./shell.module.css";
 
 export type Appearance = {
@@ -20,7 +21,7 @@ export function Shell({
   signedIn: boolean;
   appearance?: Appearance;
 }) {
-  return (
+  const app = (
     <div
       className={styles.app}
       data-plain={appearance?.plain ?? false}
@@ -40,6 +41,7 @@ export function Shell({
           Koe<span aria-hidden="true">.</span>
         </Link>
         {appearance?.mascot && !appearance.plain && <Mascot />}
+        {signedIn && <TalkButton />}
         <Link className={styles.help} href="/help">
           Help
         </Link>
@@ -57,6 +59,8 @@ export function Shell({
         </div>
         <p>Koe is an AI tool, not a person or a clinician.</p>
       </footer>
+      {signedIn && <TalkPanel />}
     </div>
   );
+  return signedIn ? <TalkProvider>{app}</TalkProvider> : app;
 }

@@ -20,6 +20,8 @@ import {
   deleteConversation,
   getConversation,
   getMessage,
+  listConversations,
+  purgeOldConversations,
   setConversationPaused,
   startConversation,
   updateTool,
@@ -33,7 +35,8 @@ import { talkStubbed } from "../llm/talk-stub";
 import { addToToday, moveItemTo } from "../plan-edit";
 import { screen } from "../safety";
 import { requireViewer, type Viewer } from "../viewer";
-import { formatClock, uses12Hour } from "@/domain/time";
+import { formatClock, localDay, readableDay, uses12Hour } from "@/domain/time";
+import { talkScreenState } from "../talk-page";
 import { remindMe, turnOnMorningPlan } from "./settings";
 import { refreshShelfFor } from "../search/shelf";
 
@@ -498,4 +501,54 @@ export async function resumeConversation(conversationId: string) {
     .where(and(eq(conversation.userId, v.user.id), eq(conversation.id, id)));
   await updateProfile(v.db, v.user.id, { coachingPausedAt: null });
   refresh();
+}
+
+/**
+ * One conversation (or an empty one for null) with what the Talk screen needs,
+ * for the side panel. Another person's id gives nothing.
+ */
+export async function loadConversation(id: string | null) {
+  const v = await requireViewer();
+  const screen = await talkScreenState(v);
+  const base = { region: v.profile.region, ...screen };
+  const paused = !!v.profile.coachingPausedAt;
+  if (id === null)
+    return {
+      ok: true as const,
+      id: null,
+      mode: "talk" as const,
+      messages: [],
+      paused,
+      ...base,
+    };
+  const convo = await getConversation(
+    v.db,
+    v.user.id,
+    z.string().max(64).parse(id),
+  );
+  if (!convo) return { ok: false as const };
+  return {
+    ok: true as const,
+    id: convo.id,
+    mode: convo.mode,
+    messages: convo.messages,
+    paused: convo.safetyPaused || paused,
+    ...base,
+  };
+}
+
+/** The 8 newest conversations `/talk` lists, with a readable date for each. */
+export async function listTalkHistory() {
+  const v = await requireViewer();
+  if (!v.profile.keepTranscripts) await purgeOldConversations(v.db, v.user.id);
+  const talks = await listConversations(v.db, v.user.id, 8);
+  return talks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    updatedAt: t.updatedAt,
+    when: readableDay(
+      localDay(v.profile.timezone, new Date(t.updatedAt)),
+      v.today,
+    ),
+  }));
 }

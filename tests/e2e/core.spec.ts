@@ -48,7 +48,6 @@ test("each tab and Help are reachable and show their page", async ({
   await startAsGuest(page);
   const nav = page.getByRole("navigation", { name: "Main navigation" });
   for (const [tab, url, heading] of [
-    ["Talk", /\/talk$/, "Talk it through"],
     ["Shelf", /\/shelf$/, "Shelf"],
     ["You", /\/you$/, "You"],
     ["Today", /\/today$/, /./],
@@ -61,6 +60,10 @@ test("each tab and Help are reachable and show their page", async ({
       "page",
     );
   }
+  // Talk is a button that opens the panel, not a page.
+  await nav.getByRole("button", { name: "Talk" }).click();
+  await expect(page.getByRole("dialog", { name: "Talk" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "Help", exact: true }).click();
   await expect(page).toHaveURL(/\/help/);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();

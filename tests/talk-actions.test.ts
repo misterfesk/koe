@@ -23,6 +23,9 @@ const searches = vi.hoisted(() => ({
 }));
 vi.mock("@/server/search/shelf", () => ({ refreshShelfFor: searches.run }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
+vi.mock("next/headers", () => ({
+  headers: async () => new Headers({ "accept-language": "en-GB" }),
+}));
 vi.mock("next/navigation", () => ({
   redirect: (to: string) => {
     throw new Error("REDIRECT " + to);
@@ -736,5 +739,21 @@ describe("Talk with tools", { timeout: 40_000 }, () => {
         ),
       );
     expect(rows).toEqual([]);
+  });
+
+  it("the side panel loads only the viewer's own conversations", async () => {
+    const s = await setup();
+    const { loadConversation, listTalkHistory } =
+      await import("@/server/actions/talk");
+    const r = await say("hello there");
+    const own = await loadConversation(r.conversationId);
+    expect(own.ok && own.messages.length).toBe(2);
+    expect((await loadConversation(null)).ok).toBe(true);
+    expect((await listTalkHistory()).map((t) => t.id)).toEqual([
+      r.conversationId,
+    ]);
+    await s.as("b");
+    expect(await loadConversation(r.conversationId)).toEqual({ ok: false });
+    expect(await listTalkHistory()).toEqual([]);
   });
 });

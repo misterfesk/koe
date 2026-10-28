@@ -168,7 +168,10 @@ test("a changed answer plans again, and 'too much' lightens the day", async ({
 }) => {
   test.setTimeout(90_000);
   await startWithPlan(page);
-  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page
+    .getByRole("main")
+    .getByRole("button", { name: "More", exact: true })
+    .click();
   await page.getByRole("button", { name: "Update my day" }).click();
   await expect(page.getByText("Arrived: more")).toBeVisible();
   // Nothing was done yet, so nothing steps up, and that is said plainly.
