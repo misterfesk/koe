@@ -3,17 +3,17 @@ import { PageHeading } from "@/components/ui";
 import { Place } from "@/features/settings/preferences";
 import { requireViewer } from "@/server/viewer";
 
-export const metadata: Metadata = { title: "Where you are" };
+export const metadata: Metadata = { title: "Place" };
 
 export default async function Page() {
   const v = await requireViewer();
   return (
     <>
       <PageHeading
-        eyebrow="You · Where you are"
+        eyebrow="You · Place"
         description="Your region sets the phone numbers Help shows. Your timezone sets when your day starts."
       >
-        Where you are
+        Place
       </PageHeading>
       <Place
         region={v.profile.region ?? "OTHER"}

@@ -150,7 +150,9 @@ test("welcome, five questions, reveal and Start my day land on Today", async ({
   // Only the ticked memory was kept, with its source.
   await page.goto("/you/knows");
   await expect(page.locator("p", { hasText: kept })).toBeVisible();
-  await expect(page.getByText("From your intro")).toHaveCount(1);
+  await expect(page.getByText("From your intro", { exact: true })).toHaveCount(
+    1,
+  );
 
   // Someone who has done the intro does not see it again.
   await page.goto("/intake");

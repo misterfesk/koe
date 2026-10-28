@@ -1,7 +1,12 @@
 import "server-only";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { emptyModel, storedModel, type IntakeModel } from "@/domain/intake";
+import {
+  emptyModel,
+  intakeModel,
+  storedModel,
+  type IntakeModel,
+} from "@/domain/intake";
 import type { DayItem } from "@/domain/day-plan";
 import { kindAreas, planItemSchema, type PlanItem } from "@/domain/plan-menu";
 import type { Db } from "../db";
@@ -38,7 +43,7 @@ export async function getUserModel(
   const parsed = storedModel.safeParse(JSON.parse(open(row.dataEnc)));
   return {
     // An unreadable older shape degrades to "knows nothing", never an error.
-    model: parsed.success ? parsed.data : emptyModel(),
+    model: parsed.success ? intakeModel.parse(parsed.data) : emptyModel(),
     summary: open(row.summaryEnc),
     version: row.version,
     updatedAt: row.updatedAt.toISOString(),
@@ -117,6 +122,36 @@ export async function saveSummary(db: Db, userId: string, summary: string) {
     .where(eq(userModel.userId, userId))
     .returning({ id: userModel.userId });
   return rows.length > 0;
+}
+
+/** Compare-and-save prevents an old tab overwriting newer saved information. */
+export async function saveUserModel(
+  db: Db,
+  userId: string,
+  version: number,
+  model: IntakeModel,
+  summary: string,
+) {
+  const values = {
+    dataEnc: seal(JSON.stringify({ ...model, v: 1 })),
+    summaryEnc: seal(summary),
+    updatedAt: new Date(),
+  };
+  const rows =
+    version === 0
+      ? await db
+          .insert(userModel)
+          .values({ userId, ...values })
+          .onConflictDoNothing()
+          .returning({ version: userModel.version })
+      : await db
+          .update(userModel)
+          .set({ ...values, version: sql`${userModel.version} + 1` })
+          .where(
+            and(eq(userModel.userId, userId), eq(userModel.version, version)),
+          )
+          .returning({ version: userModel.version });
+  return rows[0]?.version ?? null;
 }
 
 export async function hasIntro(db: Db, userId: string) {

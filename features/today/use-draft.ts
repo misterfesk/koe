@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import type { z } from "zod";
 
 /** A tab-local, owner-scoped draft; storage failures leave the form usable. */
 export function useDraft<T>(
   key: string,
   initial: T,
+  schema: z.ZodType<T>,
 ): [T, Dispatch<SetStateAction<T>>, () => void, boolean] {
   const storageKey = "koe.plan-draft:" + key;
   const [value, setValue] = useState(initial);
@@ -15,13 +17,15 @@ export function useDraft<T>(
       if (raw) {
         // Browser storage is read after hydration, as with the intake draft.
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setValue(JSON.parse(raw) as T);
+        setValue(schema.safeParse(JSON.parse(raw)).data ?? initial);
       }
     } catch {
       /* A blocked store does not block planning. */
     }
     setReady(true);
-  }, [storageKey]);
+    // initial is a render-local fallback; the schema is stable at module scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey, schema]);
   useEffect(() => {
     if (ready)
       try {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PageHeading } from "@/components/ui";
-import { MemoryCards, SummaryCard } from "@/features/settings/memory";
+import { MemoryCards } from "@/features/settings/memory";
+import { ModelEditor } from "@/features/settings/model-editor";
 import { getUserModel } from "@/server/data/intake";
 import { listMemory } from "@/server/data/memory";
 import { requireViewer } from "@/server/viewer";
@@ -11,19 +12,17 @@ export default async function Page() {
   const v = await requireViewer();
   const [cards, model] = await Promise.all([
     listMemory(v.db, v.user.id),
-    v.profile.memoryOn ? getUserModel(v.db, v.user.id) : null,
+    getUserModel(v.db, v.user.id),
   ]);
   return (
     <>
       <PageHeading
         eyebrow="You · What Koe knows"
-        description="Koe only remembers what you add here or say yes to. It uses these cards to make suggestions fit you. Nothing is remembered without asking."
+        description="Review your saved answers, summary and memory cards. You choose what Koe can use."
       >
         What Koe knows
       </PageHeading>
-      {model?.summary && (
-        <SummaryCard summary={model.summary} region={v.profile.region} />
-      )}
+      <ModelEditor saved={model} region={v.profile.region} owner={v.user.id} />
       <MemoryCards
         cards={cards}
         memoryOn={v.profile.memoryOn}

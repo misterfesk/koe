@@ -2,7 +2,7 @@
 
 Koe is a private AI companion for adults living with depression. It learns about you in a short intake, plans a gentle day, adapts that day when your energy drops, reminds you at the right moments, finds a few trustworthy things to read, and is there to talk. It supports human care and never replaces it.
 
-This document describes the system as built through S6. Remaining You work and the scoped final review are tracked in `../HANDOFF.md`.
+This document describes the system through S7. Verification and the scoped final review are tracked in `../HANDOFF.md`.
 
 ## 1. Principles
 
@@ -136,6 +136,10 @@ The risk patterns and the crisis-flow wording are engineering defaults and have 
 **Talk tools (`domain/talk-tools.ts`).** Talk calls `completeWithTools` with eight tools (add, move, shrink, reminder, memory, find resources, draft, appointment). A call is only ever a proposal: it is checked (schema, words, rules, at most two cards, none on a risky turn) and stored with the reply as a card. Confirm runs the existing action (`server/plan-edit.ts`, `planToday`, `remindMe`, `turnOnMorningPlan`, `addMemory`) once; No thanks writes nothing. `find_resources` runs the same Shelf pipeline and reports the real count. `requestedSearches` recovers older or interrupted confirmed searches. Queries come only from `buildResourceQuery` (runtime-validated enum tags).
 
 **Shelf.** Pages read stored picks without awaiting search; a client action refreshes when needed. Weekly attempts, including empty ones, prevent repeated calls; failed attempts wait 15 minutes. A shared tag/week cache coalesces misses, and each person's searches are capped at three per UTC day. Results are revalidated per person, including local eating constraints with memory off. External publisher prose is screened for resource safety; Koe's own why lines also follow the strict copy and planning guardrails. Only exact approved HTTPS hosts are accepted. YouTube is excluded. Save / Not for me has owner-bound Undo. Search off or coaching paused leaves saved picks readable.
+
+**You.** What Koe knows exposes the saved summary, intake answers and memory cards even when memory is off. Information changes require an explicit save, are sealed and owner-scoped, and reject stale model versions. They do not call a provider or change the current day, people or active reminders. The eating-concern flag is derived locally and retained; it is not accepted from the browser. Saved intro tone and morning-plan preferences are separate from the active controls in Appearance and Reminders.
+
+**Entry paths and drafts.** Legacy `/steps/[id]` links lead to the current entry on Today, including its scroll position, or read-only Look back history. Add and problem-solving forms live under `/today`; People uses the same versioned add action. Weekly choices save intentions only; Today handles plan changes and Undo. Tab-local form drafts are validated and scoped to their owner. A stale information draft needs an explicit choice before it replaces current answers in the editor. A confirmed anonymous-to-account link moves browser drafts using server-confirmed owner IDs; no credential values enter that handoff. A collision retains both drafts under the account's cleanup scope, without automatically loading the extra draft. Successful account deletion also clears the person's browser drafts; failed deletion keeps them. Search-budget reservations write an explicit UTC instant, independently of the database's local timezone.
 
 ## 8. Reminders
 

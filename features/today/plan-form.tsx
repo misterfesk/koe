@@ -3,6 +3,7 @@ import { useId, useState, useTransition } from "react";
 import { kindLabel, planKinds, type PlanKind } from "@/domain/plan-menu";
 import { addPlanItem } from "@/server/actions/plan";
 import { useDraft } from "./use-draft";
+import { planDraft } from "./draft-store";
 import { SafetyCheck } from "../safety/safety-check";
 
 export function PlanForm({
@@ -21,11 +22,15 @@ export function PlanForm({
   draftKey: string;
 }) {
   const id = useId();
-  const [draft, setDraft, clearDraft, ready] = useDraft(draftKey, {
-    kind: initial.kind,
-    title: initial.title,
-    time: "",
-  });
+  const [draft, setDraft, clearDraft, ready] = useDraft(
+    draftKey,
+    {
+      kind: initial.kind,
+      title: initial.title,
+      time: "",
+    },
+    planDraft,
+  );
   const { kind, title, time } = draft;
   const [error, setError] = useState("");
   const [safety, setSafety] = useState(false);

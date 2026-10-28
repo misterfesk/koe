@@ -1,8 +1,12 @@
 "use client";
-import { useActionState, useState } from "react";
-import type { ActionResult } from "@/domain/forms";
+import { useActionState, useState, useSyncExternalStore } from "react";
+import type { CredentialResult } from "@/server/actions/account";
+import { transferOwnerDrafts } from "../today/draft-store";
 
-type Action = (state: unknown, form: FormData) => Promise<ActionResult>;
+type Action = (state: unknown, form: FormData) => Promise<CredentialResult>;
+const subscribe = () => () => {};
+const browserSnapshot = () => true;
+const serverSnapshot = () => false;
 
 /** Email and password form shared by "Sign in" and "Create an account". */
 export function CredentialsForm({
@@ -14,13 +18,42 @@ export function CredentialsForm({
   submitLabel: string;
   newPassword?: boolean;
 }) {
-  const [state, formAction, pending] = useActionState(action, null);
+  const browser = useSyncExternalStore(
+    subscribe,
+    browserSnapshot,
+    serverSnapshot,
+  );
+  const [state, formAction, pending] = useActionState(
+    async (state: unknown, form: FormData) => {
+      const result = await action(state, form);
+      if (result.ok && result.redirectTo) {
+        try {
+          if (result.transferredDrafts)
+            transferOwnerDrafts(
+              sessionStorage,
+              result.transferredDrafts.from,
+              result.transferredDrafts.to,
+            );
+        } catch {
+          /* Blocked storage does not block sign-in. */
+        }
+        window.location.assign(result.redirectTo);
+      }
+      return result;
+    },
+    null,
+  );
   // Controlled, so a failed attempt doesn't wipe what was typed.
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const errors = state && !state.ok ? state.errors : {};
   return (
     <form action={formAction} className="prose" noValidate>
+      <input
+        type="hidden"
+        name="draftHandoff"
+        value={browser ? "browser" : ""}
+      />
       <div className="field">
         <label htmlFor="email">Email</label>
         <input
@@ -44,7 +77,7 @@ export function CredentialsForm({
         <label htmlFor="password">Password</label>
         {newPassword && (
           <p className="hint" id="password-hint">
-            At least 10 characters. A few words together works well.
+            At least 10 characters. Try a short phrase you can remember.
           </p>
         )}
         <input

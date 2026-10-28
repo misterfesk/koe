@@ -7,6 +7,7 @@ import { SafetyCheck } from "../safety/safety-check";
 import { PlanForm } from "./plan-form";
 import Link from "next/link";
 import { useDraft } from "./use-draft";
+import { problemDraft } from "./draft-store";
 
 type Stage = "problem" | "options" | "choose" | "plan";
 
@@ -22,12 +23,17 @@ export function ProblemSolver({
   owner: string;
 }) {
   const router = useRouter();
-  const [draft, setDraft, clearDraft, ready] = useDraft("problem:" + owner, {
-    stage: "problem" as Stage,
-    problem: "",
-    options: ["", ""],
-    chosen: "",
-  });
+  const [draft, setDraft, clearDraft, ready] = useDraft(
+    "problem:" + owner,
+    {
+      stage: "problem" as Stage,
+      problem: "",
+      options: ["", ""],
+      chosen: "",
+      planKey: "",
+    },
+    problemDraft,
+  );
   const { stage, problem, options, chosen } = draft;
   const setStage = (stage: Stage) => setDraft((d) => ({ ...d, stage }));
   const setProblem = (problem: string) => setDraft((d) => ({ ...d, problem }));
@@ -40,6 +46,7 @@ export function ProblemSolver({
     setDraft((d) => ({
       ...d,
       chosen: typeof chosen === "function" ? chosen(d.chosen) : chosen,
+      planKey: "",
     }));
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
@@ -191,7 +198,11 @@ export function ProblemSolver({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            setStage("plan");
+            setDraft((d) => ({
+              ...d,
+              stage: "plan",
+              planKey: d.planKey || crypto.randomUUID(),
+            }));
           }}
         >
           <h2>Which one will you try first?</h2>
@@ -235,7 +246,9 @@ export function ProblemSolver({
           </p>
           <PlanForm
             region={region}
-            draftKey={"problem-plan:" + owner + ":" + chosen}
+            draftKey={
+              "problem-plan:" + owner + ":" + (draft.planKey || "legacy")
+            }
             initial={{
               kind: "problem",
               title: chosen,

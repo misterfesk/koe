@@ -10,6 +10,7 @@ import {
   unsubscribePush,
 } from "@/server/actions/settings";
 import { CredentialsForm } from "../account/credentials";
+import { clearOwnerDrafts } from "../today/draft-store";
 
 type Tone = "expressive" | "calm" | "plain";
 
@@ -214,19 +215,50 @@ export function SignOut() {
   );
 }
 
-export function DeleteEverything({ guest }: { guest: boolean }) {
+export function DeleteEverything({
+  guest,
+  owner,
+}: {
+  guest: boolean;
+  owner: string;
+}) {
   const [state, action, pending] = useActionState(
-    async (_: unknown, form: FormData) =>
-      deleteAccount(String(form.get("confirm") ?? "")),
+    async (_: unknown, form: FormData) => {
+      try {
+        const result = await deleteAccount(String(form.get("confirm") ?? ""));
+        if (!result.ok)
+          return {
+            ok: false,
+            error:
+              "Type DELETE to confirm, or leave this page to keep everything.",
+          };
+        try {
+          clearOwnerDrafts(sessionStorage, owner);
+        } catch {
+          /* Storage may be blocked. */
+        }
+        // A full navigation clears the deleted account's in-memory client state.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        window.location.assign("/?deleted=1");
+        return { ...result, error: "" };
+      } catch {
+        return {
+          ok: false,
+          error:
+            "Deletion could not be confirmed. Your drafts are kept. Reload before trying again.",
+        };
+      }
+    },
     null,
   );
   return (
     <form action={action} className="panel">
       <h3>Delete everything</h3>
       <p>
-        This permanently deletes your {guest ? "guest session" : "account"} and
-        everything in it: steps, notes, conversations, memory cards and
-        reminders. It can&apos;t be undone. Export first if you want a copy.
+        This permanently deletes your {guest ? "guest session" : "account"}.
+        Your saved information, plans, notes, conversations, people, reminders
+        and Shelf picks are deleted. It can&apos;t be undone. Export first if
+        you want a copy.
       </p>
       <div className="field">
         <label htmlFor="confirm-delete">Type DELETE to confirm</label>
@@ -239,7 +271,7 @@ export function DeleteEverything({ guest }: { guest: boolean }) {
         />
         {state?.ok === false && (
           <p id="confirm-error" className="error" role="alert">
-            Type DELETE to confirm, or leave this page to keep everything.
+            {state.error}
           </p>
         )}
       </div>

@@ -10,7 +10,7 @@ export default async function Page() {
   const rows: [string, string, string][] = [
     [
       "What Koe knows",
-      "The memory cards Koe uses to make suggestions fit you.",
+      "Your saved answers, summary and memory cards.",
       "/you/knows",
     ],
     [
@@ -47,7 +47,7 @@ export default async function Page() {
       "Koe's voice, plain view, motion and the mascot.",
       "/you/appearance",
     ],
-    ["Where you are", "Your region and timezone.", "/you/place"],
+    ["Place", "Your region and timezone.", "/you/place"],
   ];
   return (
     <>

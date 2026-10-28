@@ -6,14 +6,32 @@ test("a guest's steps move into a new account and survive sign-out", async ({
 }, info) => {
   await startAsGuest(page);
   const title = await firstEntryTitle(page);
+  await page.goto("/today/add");
+  await page.getByLabel("What is it?").fill("Guest draft to keep");
+  const guestDraftKey = await page.evaluate(() =>
+    Object.keys(sessionStorage).find((k) =>
+      k.startsWith("koe.plan-draft:add:"),
+    )!,
+  );
   const email = `e2e-${info.project.name}-${Date.now()}@example.com`;
 
   await page.goto("/you/account");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("a-long-test-password");
+  await expect(page.locator('input[name="draftHandoff"]')).toHaveValue(
+    "browser",
+  );
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByText("Account created")).toBeVisible();
   await expect(page.getByText(email)).toBeVisible();
+  expect(
+    await page.evaluate((key) => sessionStorage.getItem(key), guestDraftKey),
+  ).toBeNull();
+  await page.goto("/today/add");
+  await expect(page.getByLabel("What is it?")).toHaveValue(
+    "Guest draft to keep",
+  );
+  await page.goto("/you/account");
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/$/);
@@ -44,7 +62,7 @@ test("memory cards can be added, exported and everything deleted", async ({
 
   await page.goto("/you/data");
   const download = page.waitForEvent("download");
-  await page.getByRole("link", { name: /Download my data/ }).click();
+  await page.getByRole("link", { name: /Download your data/ }).click();
   const file = await download;
   const body = await (await file.createReadStream()).toArray();
   const data = JSON.parse(Buffer.concat(body).toString("utf8"));

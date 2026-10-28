@@ -23,12 +23,12 @@ export default async function Page() {
   if (checkIns.length) {
     const low = checkIns.filter((c) => c.energy === "low").length;
     facts.push(
-      `In the last 4 weeks I checked in ${checkIns.length} times; energy was low on ${low} of those days.`,
+      `Your last 4 weeks. Check-ins: ${checkIns.length}. Days with low energy: ${low}.`,
     );
   }
   if (s.answered)
     facts.push(
-      `I tried small everyday steps ${s.answered} times: ${s.done} done, ${s.partly} partly, ${s.not} not.`,
+      `Answers about your day: ${s.answered}. Done: ${s.done}. Partly: ${s.partly}. Not today: ${s.not}.`,
     );
   const helped = [...new Set(s.helped.map((h) => h.title))].slice(0, 5);
   if (helped.length) facts.push("What helped: " + helped.join("; ") + ".");

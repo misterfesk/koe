@@ -89,6 +89,7 @@ test("works at 320px wide", async ({ page }) => {
     "/intake",
     "/today/add",
     "/you/people",
+    "/you/knows",
   ]) {
     await page.goto(path);
     await expect(page.locator("h1")).toBeVisible();

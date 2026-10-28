@@ -2,7 +2,6 @@
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import { EVERY_DAY, inQuietHours } from "@/domain/reminders";
 import { isValidTimeZone, localMinutes } from "@/domain/time";
@@ -10,7 +9,9 @@ import { helpResources } from "@/fixtures/help-resources";
 import { auth } from "../auth";
 import { memoryKinds, tones, user } from "../db/schema";
 import { addMemory, deleteMemory, updateMemory } from "../data/memory";
-import { saveSummary } from "../data/intake";
+import { getUserModel, saveUserModel } from "../data/intake";
+import { editedModel, modelEdit } from "@/domain/model-edit";
+import { freeTexts } from "@/domain/intake";
 import { updateProfile } from "../data/profile";
 import {
   deleteMorningReminder,
@@ -110,25 +111,46 @@ export async function saveMemory(
   return { ok: true, safety };
 }
 
-const summaryInput = z
-  .string()
-  .trim()
-  .min(1, "Write a few words, or leave it as it is.")
-  .max(400, "Use 400 characters or fewer.");
-
-/** The summary from the intro, edited in What Koe knows. */
-export async function editSummary(
-  input: string,
-): Promise<{ ok: boolean; error?: string; safety?: RiskLevel }> {
+/** Saved information stays editable while memory or coaching is off. No AI runs. */
+export async function editUserModel(input: unknown): Promise<{
+  ok: boolean;
+  error?: string;
+  safety?: RiskLevel;
+  version?: number;
+}> {
   const v = await requireViewer();
-  const parsed = summaryInput.safeParse(input);
+  const parsed = modelEdit.safeParse(input);
   if (!parsed.success)
-    return { ok: false, error: parsed.error.issues[0].message };
-  const saved = await saveSummary(v.db, v.user.id, parsed.data);
-  if (!saved) return { ok: false, error: "There is no summary to change yet." };
-  const safety = await screen(v.db, v.user.id, "memory", [parsed.data]);
+    return { ok: false, error: "Check your answers and use the field limits." };
+  const current = await getUserModel(v.db, v.user.id);
+  if ((current?.version ?? 0) !== parsed.data.version)
+    return {
+      ok: false,
+      error: "Your information changed elsewhere. Reload before saving.",
+    };
+  const model = editedModel(
+    parsed.data.model,
+    current?.model,
+    parsed.data.summary,
+  );
+  const version = await saveUserModel(
+    v.db,
+    v.user.id,
+    parsed.data.version,
+    model,
+    parsed.data.summary,
+  );
+  if (version === null)
+    return {
+      ok: false,
+      error: "Your information changed elsewhere. Reload before saving.",
+    };
+  const safety = await screen(v.db, v.user.id, "memory", [
+    parsed.data.summary,
+    ...freeTexts(model),
+  ]);
   refresh();
-  return { ok: true, safety };
+  return { ok: true, version, safety };
 }
 
 export async function toggleMemoryUse(cardId: string, use: boolean) {
@@ -411,5 +433,5 @@ export async function deleteAccount(confirmation: string) {
   } catch {
     // The session row went with the user; the stale cookie points at nothing.
   }
-  redirect("/?deleted=1");
+  return { ok: true };
 }

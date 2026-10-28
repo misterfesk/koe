@@ -55,6 +55,11 @@ const credentials = z.object({
     .max(128, "Use 128 characters or fewer."),
 });
 
+export type CredentialResult = ActionResult & {
+  redirectTo?: string;
+  transferredDrafts?: { from: string; to: string };
+};
+
 const tooMany: ActionResult = {
   ok: false,
   errors: { form: "Too many tries. Wait a few minutes and try again." },
@@ -91,39 +96,61 @@ function authError(error: unknown): ActionResult {
 export async function createAccount(
   _: unknown,
   form: FormData,
-): Promise<ActionResult> {
+): Promise<CredentialResult> {
   const parsed = credentials.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
   if (!(await allow("sign-up", parsed.data.email))) return tooMany;
+  const previous = await getViewer();
+  let accountId: string;
   try {
-    await (
+    const result = await (
       await auth()
     ).api.signUpEmail({
       body: { ...parsed.data, name: "Koe user" },
       headers: await headers(),
     });
+    accountId = result.user.id;
   } catch (error) {
     return authError(error);
   }
+  if (form.get("draftHandoff") === "browser")
+    return {
+      ok: true,
+      redirectTo: "/you/account?created=1",
+      ...(previous?.isGuest && previous.user.id !== accountId
+        ? { transferredDrafts: { from: previous.user.id, to: accountId } }
+        : {}),
+    };
   redirect("/you/account?created=1");
 }
 
 export async function signIn(
   _: unknown,
   form: FormData,
-): Promise<ActionResult> {
+): Promise<CredentialResult> {
   const parsed = credentials
     .extend({ password: z.string().min(1, "Enter your password.").max(128) })
     .safeParse(Object.fromEntries(form));
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
   if (!(await allow("sign-in", parsed.data.email))) return tooMany;
+  const previous = await getViewer();
+  let accountId: string;
   try {
-    await (
+    const result = await (
       await auth()
     ).api.signInEmail({ body: parsed.data, headers: await headers() });
+    accountId = result.user.id;
   } catch (error) {
     return authError(error);
   }
+  if (form.get("draftHandoff") === "browser")
+    return {
+      ok: true,
+      redirectTo: "/today",
+      ...(previous?.isGuest && previous.user.id !== accountId
+        ? { transferredDrafts: { from: previous.user.id, to: accountId } }
+        : {}),
+    };
   redirect("/today");
 }
 

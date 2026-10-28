@@ -25,14 +25,14 @@ export default async function Page() {
         </p>
         <h2>Export</h2>
         <p>
-          One file with everything: steps, reports, notes, conversations, memory
-          cards, people and reminders.
+          Download your saved information, day plans, notes, conversations,
+          people, reminders and Shelf picks.
         </p>
         <a className="button secondary" href="/api/export" download>
-          Download my data (JSON)
+          Download your data (JSON)
         </a>
         <h2>Delete</h2>
-        <DeleteEverything guest={v.isGuest} />
+        <DeleteEverything guest={v.isGuest} owner={v.user.id} />
         <p className="meta">
           How Koe handles your data is explained in{" "}
           <Link href="/privacy">Privacy</Link>.

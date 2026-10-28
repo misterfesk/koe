@@ -1,9 +1,8 @@
 "use client";
-import { useState, useTransition } from "react";
-import { ConfirmDelete, Field } from "@/components/ui";
+import { useOptimistic, useState, useTransition } from "react";
+import { ConfirmDelete } from "@/components/ui";
 import type { RiskLevel } from "@/domain/safety";
 import {
-  editSummary,
   removeMemory,
   saveMemory,
   setPrivacy,
@@ -13,69 +12,11 @@ import type { MemoryKind, MemoryView } from "@/server/data/memory";
 import { SafetyCheck } from "../safety/safety-check";
 
 const kinds: [MemoryKind, string, string][] = [
-  [
-    "helps",
-    "What helps",
-    "Short walks outside help me more than sitting still",
-  ],
-  ["hard", "What gets in the way", "Mornings are hardest for me"],
-  ["people", "People", "My sister Mia is easy to talk to"],
-  ["preference", "How you like things", "I prefer plain, direct suggestions"],
+  ["helps", "What helps", "Something you find helpful"],
+  ["hard", "What gets in the way", "A time you find hard"],
+  ["people", "People", "Someone you find easy to talk to"],
+  ["preference", "How you like things", "How you prefer suggestions"],
 ];
-
-/** What Koe understood in the intro, as the person approved it. Editable. */
-export function SummaryCard({
-  summary,
-  region,
-}: {
-  summary: string;
-  region: string | null;
-}) {
-  const [text, setText] = useState(summary);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
-  const [safety, setSafety] = useState<RiskLevel>("none");
-  const [pending, startTransition] = useTransition();
-  if (safety !== "none")
-    return <SafetyCheck region={region} onResume={() => setSafety("none")} />;
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        startTransition(async () => {
-          const r = await editSummary(text);
-          if (!r.ok) return setError(r.error ?? "");
-          setError("");
-          setSaved(true);
-          setSafety(r.safety ?? "none");
-        });
-      }}
-    >
-      <Field
-        label="Here's what I understood"
-        value={text}
-        onChange={(t) => {
-          setText(t);
-          setSaved(false);
-        }}
-        multiline
-        grow
-        maxLength={400}
-        error={error}
-      />
-      <div className="actions">
-        <button className="secondary" disabled={pending || text === summary}>
-          Save summary
-        </button>
-        {saved && (
-          <p className="meta" role="status">
-            Saved.
-          </p>
-        )}
-      </div>
-    </form>
-  );
-}
 
 export function MemoryCards({
   cards,
@@ -86,24 +27,43 @@ export function MemoryCards({
   memoryOn: boolean;
   region: string | null;
 }) {
-  const [, startTransition] = useTransition();
+  const [pending, startTransition] = useTransition();
+  const [enabled, setEnabled] = useOptimistic(memoryOn);
+  const [error, setError] = useState("");
   return (
     <>
       <label className="toggle">
         <input
           type="checkbox"
-          checked={memoryOn}
-          onChange={(e) =>
-            startTransition(() => setPrivacy({ memoryOn: e.target.checked }))
-          }
+          checked={enabled}
+          disabled={pending}
+          onChange={(e) => {
+            const next = e.target.checked;
+            setError("");
+            startTransition(async () => {
+              setEnabled(next);
+              try {
+                await setPrivacy({ memoryOn: next });
+              } catch {
+                setError(
+                  "Your memory choice could not be confirmed. Reload to check it.",
+                );
+              }
+            });
+          }}
         />
         <span>
-          Memory is {memoryOn ? "on" : "off"}.{" "}
-          {memoryOn
-            ? "Koe can use these cards in Talk and suggestions, and may ask to remember new ones."
-            : "Koe won't use these cards or ask to remember anything. Your cards are kept."}
+          Memory is {enabled ? "on" : "off"}.{" "}
+          {enabled
+            ? "Koe can use your saved information and cards in Talk and suggestions."
+            : "Your saved information and cards stay here. Koe does not use them for personal context."}
         </span>
       </label>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
       {kinds.map(([kind, label, example]) => {
         const list = cards.filter((c) => c.kind === kind);
         return (
@@ -216,7 +176,7 @@ function Card({ card, region }: { card: MemoryView; region: string | null }) {
             <ConfirmDelete
               label="Delete"
               question="Delete this memory card?"
-              detail="Steps that came from it stay."
+              detail="Your day stays as it is."
               onConfirm={() => startTransition(() => removeMemory(card.id))}
             />
           </div>
