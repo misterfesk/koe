@@ -251,10 +251,17 @@ export const step = pgTable(
       () => conversation.id,
       { onDelete: "set null" },
     ),
+    // The This week thing this plan entry came from (v3 A3).
+    weekItemId: text("week_item_id").references(() => weekItem.id, {
+      onDelete: "set null",
+    }),
     createdAt: created(),
     updatedAt: updated(),
   },
-  (t) => [index("step_user_idx").on(t.userId)],
+  (t) => [
+    index("step_user_idx").on(t.userId),
+    index("step_week_item_idx").on(t.weekItemId),
+  ],
 );
 
 /** Every earlier wording of a step, so reports stay tied to what was tried. */

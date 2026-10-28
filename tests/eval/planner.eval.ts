@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { intakeModel, type IntakeInput } from "@/domain/intake";
 import {
   checkComposition,
@@ -10,6 +10,20 @@ import {
   planItemSchema,
 } from "@/domain/plan-menu";
 import { detectRisk } from "@/domain/safety";
+
+// Counts model calls without changing them, so the week path can prove it
+// makes none.
+const ai = vi.hoisted(() => ({ calls: 0 }));
+vi.mock("@/server/llm/nebius", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/server/llm/nebius")>();
+  return {
+    ...real,
+    completeJson: (...args: Parameters<typeof real.completeJson>) => {
+      ai.calls++;
+      return real.completeJson(...args);
+    },
+  };
+});
 
 // Live plan evaluation for the intake synthesiser. Calls the real model, so it
 // costs a little and needs NEBIUS_API_KEY in .env.local:
@@ -244,5 +258,148 @@ describe("plan eval: check-in low adaptation", () => {
       expect(detectRisk(s)).toBe("none");
     }
     expect(r.note).not.toMatch(/\b(I|my)\b/);
+  });
+});
+
+// --- This week things (v3 A3): rules only, no model call ----------------------
+
+const weekCases: {
+  name: string;
+  input: IntakeInput;
+  /** The anchor must not be this kind or mention exercise. */
+  eating?: boolean;
+}[] = [
+  {
+    name: "ordinary week",
+    input: {
+      goals: ["work_study", "basics"],
+      wake: "7to9",
+      days: "working",
+      lifts: ["music"],
+      people: [],
+      names: [],
+    },
+  },
+  {
+    name: "eating concern, fitness lift excluded",
+    input: {
+      goals: ["through_day"],
+      wake: "9to11",
+      lifts: ["walking"],
+      people: [],
+      names: [],
+      eatingConcern: true,
+    },
+    eating: true,
+  },
+];
+
+const things = [
+  {
+    what: "Update my CV. I open it, then close it again because the gap year looks bad and I never know how to word it.",
+    when: "Friday",
+    title: "Update my CV",
+  },
+  {
+    what: "Email the landlord about the boiler",
+    when: "",
+    title: "Email the landlord",
+  },
+  {
+    what: "Sort the pile of letters on the table",
+    when: "",
+    title: "Sort the letters",
+  },
+];
+
+describe.each(weekCases)("plan eval: week, $name", ({ input, eating }) => {
+  const person = intakeModel.parse(input);
+
+  it("builds the day from the things, one anchor, quoted why lines and no AI call", async () => {
+    for (const name of ["DATA_ENCRYPTION_KEY", "AUTH_SECRET"])
+      process.env[name] ||=
+        name === "AUTH_SECRET"
+          ? "eval-only-secret-eval-only-secret-0123456789"
+          : Buffer.alloc(32, 7).toString("base64");
+    const { openDb } = await import("@/server/db");
+    const schema = await import("@/server/db/schema");
+    const { commitIntro, getPlanDay } = await import("@/server/data/intake");
+    const { saveWeek } = await import("@/server/data/week");
+    const { fallbackPlan } = await import("@/domain/plan-menu");
+    const { openToday, planToday } = await import("@/server/llm/planner");
+
+    const DAY1 = "2026-10-26";
+    const TODAY = "2026-10-27";
+    const db = await openDb("memory:");
+    await db
+      .insert(schema.user)
+      .values({ id: "eval", name: "eval", email: "eval@example.test" });
+    await db
+      .insert(schema.profile)
+      .values({ userId: "eval", timezone: "UTC", onboardedAt: new Date() });
+    await commitIntro(db, "eval", {
+      model: person,
+      summary: "You want to get through the week.",
+      memories: [],
+      people: [],
+      items: fallbackPlan(person),
+      memoryOn: true,
+      today: DAY1,
+    });
+    await saveWeek(db, "eval", {
+      draft: { items: things.map((captured) => ({ captured })) },
+      today: DAY1,
+      eatingConcern: !!eating,
+    });
+
+    const before = ai.calls;
+    const plan = await openToday("eval", { db, today: TODAY });
+    const low = await planToday(
+      "eval",
+      { reason: "check_in", energy: "low" },
+      { db, today: TODAY },
+    );
+    const after = (await getPlanDay(db, "eval", TODAY))!;
+    console.log(
+      JSON.stringify({
+        open: plan.items.map((i) => `${i.kind}: ${i.title} | ${i.why}`),
+        low: after.items.map((i) => `${i.kind}: ${i.title} | ${i.why}`),
+        note: low.note,
+      }),
+    );
+    expect(ai.calls - before, "model calls on the week path").toBe(0);
+    expect(low.source).toBe("rules");
+
+    const check = (
+      items: typeof plan.items,
+      count: number,
+      basicsAllowed: boolean,
+    ) => {
+      const mine = items.filter((i) => i.weekItemId);
+      expect(mine, "things by the energy table").toHaveLength(count);
+      for (const i of mine) {
+        const said = things.find((t) => t.title === i.title)!;
+        expect(i.why.startsWith('Because you said "')).toBe(true);
+        expect(i.why.length).toBeLessThanOrEqual(120);
+        const quoted = i.why.slice(18, -1).replace(/…$/, "");
+        expect(said.what.startsWith(quoted), i.why).toBe(true);
+      }
+      // Menu items: exactly one anchor, plus one basics entry only when the
+      // person chose the basics and the day is not low.
+      const generic = items.filter((i) => !i.weekItemId);
+      if (generic.length === 2) {
+        expect(basicsAllowed, "a second menu item").toBe(true);
+        expect(generic.filter((i) => i.kind === "basics")).toHaveLength(1);
+      } else expect(generic, "one anchor").toHaveLength(1);
+      if (eating)
+        for (const i of generic) {
+          expect(i.kind).not.toBe("move");
+          expect(mentionsFood(i.title + " " + i.why), i.title).toBe(false);
+          expect(mentionsExercise(i.title + " " + i.why), i.title).toBe(false);
+        }
+    };
+    const basics = person.goals.includes("basics");
+    check(plan.items, 2, basics);
+    check(after.items, 1, false);
   });
 });

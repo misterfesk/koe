@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   readCaptured,
   reviewDate,
@@ -10,7 +10,8 @@ import {
 import { safeInterviewText } from "@/domain/interview-text";
 import { seal, open } from "../crypto";
 import type { Db } from "../db";
-import { week, weekItem } from "../db/schema";
+import { step, stepReport, week, weekItem } from "../db/schema";
+import type { OpenThing } from "@/domain/week-picker";
 
 export type WeekTx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Reader = Db | WeekTx;
@@ -141,4 +142,66 @@ export async function saveWeekInTransaction(
 }
 export async function saveWeek(db: Db, userId: string, input: WeekSave) {
   return db.transaction((tx) => saveWeekInTransaction(tx, userId, input));
+}
+
+/** A This week thing and what its plan entries recorded. */
+export type ThingState = OpenThing & {
+  /** Answered Not today (or skipped) twice or more; for the week review. */
+  flagged: boolean;
+  /** Answered Not today (or skipped) on `today`: it comes back another day. */
+  letGoToday: boolean;
+};
+
+/**
+ * Every thing in the person's newest week with its state, derived from the
+ * answers on the plan entries made from it. Owner-scoped. Empty without a week.
+ */
+export async function weekThingStates(
+  db: Reader,
+  userId: string,
+  today?: string,
+): Promise<ThingState[]> {
+  const [latest] = await db
+    .select({ id: week.id })
+    .from(week)
+    .where(eq(week.userId, userId))
+    .orderBy(desc(week.createdAt))
+    .limit(1);
+  if (!latest) return [];
+  const current = await getWeek(db, userId, latest.id);
+  if (!current?.items.length) return [];
+  const reports = await db
+    .select({
+      weekItemId: step.weekItemId,
+      outcome: stepReport.outcome,
+      day: stepReport.day,
+    })
+    .from(stepReport)
+    .innerJoin(step, eq(step.id, stepReport.stepId))
+    .where(
+      and(
+        eq(stepReport.userId, userId),
+        eq(step.userId, userId),
+        inArray(
+          step.weekItemId,
+          current.items.map((i) => i.id),
+        ),
+      ),
+    );
+  return current.items.map((item, position) => {
+    const mine = reports.filter((r) => r.weekItemId === item.id);
+    const not = mine.filter((r) => r.outcome === "not" || r.outcome === "skip");
+    return {
+      id: item.id,
+      title: item.captured.title,
+      what: item.captured.what,
+      when: item.captured.when,
+      position,
+      done: mine.some((r) => r.outcome === "done"),
+      partly: mine.filter((r) => r.outcome === "partly").length,
+      notToday: not.length,
+      flagged: not.length >= 2,
+      letGoToday: !!today && not.some((r) => r.day === today),
+    };
+  });
 }

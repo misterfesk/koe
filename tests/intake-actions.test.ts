@@ -1,3 +1,4 @@
+import { introAnchor } from "@/domain/week-picker";
 // @vitest-environment node
 import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -233,6 +234,47 @@ describe("startMyDay", { timeout: 30_000 }, () => {
     expect(await run({ ...payload(), interview })).toEqual({ ok: true });
     expect(await db.select().from(schema.weekItem)).toHaveLength(1);
     expect(await db.select().from(schema.planDay)).toHaveLength(1);
+  });
+
+  it("a week saved with the intro shapes day 1: its things plus one intro anchor", async () => {
+    const { db, schema } = await setup();
+    const interview = await proposed();
+    const { introDay } = await import("@/domain/week-picker");
+    const preview = introDay(
+      payload().items,
+      interview.draft.items,
+      model.wake,
+    );
+    expect(await run({ ...payload(), interview })).toEqual({ ok: true });
+    const { getPlanDay } = await import("@/server/data/intake");
+    const [day] = await db.select().from(schema.planDay);
+    const plan = (await getPlanDay(db, "a", day.day))!;
+    const [thing] = await db.select().from(schema.weekItem);
+    const things = plan.items.filter((i) => i.weekItemId);
+    expect(things.map((i) => [i.title, i.weekItemId])).toEqual([
+      [interview.draft.items[0].captured.title, thing.id],
+    ]);
+    expect(things[0].why).toMatch(/^Because you said "/);
+    const others = plan.items.filter((i) => !i.weekItemId);
+    expect(others).toHaveLength(1);
+    expect(others[0]).toMatchObject(introAnchor(payload().items)!);
+    expect(
+      plan.items.filter(
+        (i) => !i.weekItemId && ["task", "work_chunk"].includes(i.kind),
+      ),
+    ).toEqual([]);
+    // The reveal preview is the same list.
+    expect(
+      plan.items.map(({ title, why, minuteOfDay }) => [
+        title,
+        why,
+        minuteOfDay,
+      ]),
+    ).toEqual(
+      preview.map(({ title, why, minuteOfDay }) => [title, why, minuteOfDay]),
+    );
+    const steps = await db.select().from(schema.step);
+    expect(steps.filter((r) => r.weekItemId === thing.id)).toHaveLength(1);
   });
 
   it("does not save either half when the interview token is foreign or expired", async () => {

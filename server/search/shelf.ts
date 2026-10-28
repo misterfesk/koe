@@ -1,6 +1,6 @@
 import "server-only";
 import { and, count, eq, gte, ne } from "drizzle-orm";
-import { cachedResourceOk, templateWhy, whyOk } from "@/domain/resource-screen";
+import { cachedResourceOk, pickWhy } from "@/domain/resource-screen";
 import {
   buildResourceQuery,
   resourceTagsKey,
@@ -191,10 +191,12 @@ export async function refreshShelfFor(
         if (!fresh || fresh.coachingPausedAt || !searchEnabled())
           throw new Error("paused");
         for (const r of safe.slice(0, 3)) {
-          const proposedWhy = ownerWhys.get(r.url) ?? templateWhy(tags);
-          const why = whyOk(proposedWhy, eatingConcern)
-            ? proposedWhy
-            : templateWhy(tags);
+          const why = pickWhy(
+            ownerWhys.get(r.url),
+            tags,
+            personal?.goals ?? [],
+            eatingConcern,
+          );
           const inserted = await tx
             .insert(shelfItem)
             .values({

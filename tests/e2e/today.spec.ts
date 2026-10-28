@@ -1,6 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { entry, noHorizontalScroll } from "./helpers";
+import {
+  entry,
+  noHorizontalScroll,
+  proposeInterview,
+  startAsGuest,
+} from "./helpers";
 
 /** Welcome dialog, then an intake that leaves one small item to shrink, then Today. */
 async function startWithPlan(page: Page) {
@@ -206,4 +211,61 @@ test("Today with the banner and the sheet open fits a 320px screen", async ({
   await page.getByRole("button", { name: "Move to later" }).click();
   await expect(page.getByRole("group", { name: "Move to" })).toBeVisible();
   await clean(page, "today 320");
+});
+
+test("a This week thing on Today is never made smaller or swapped", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await startAsGuest(page);
+  await page.goto("/intake");
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  for (let n = 0; n < 4; n++)
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
+  await page.getByRole("button", { name: "Start my day" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+  await page.getByRole("link", { name: /Tell Koe one thing/ }).click();
+  await page.getByLabel("Your answer").fill("Update the CV");
+  await page.getByRole("button", { name: "Reply", exact: true }).click();
+  await proposeInterview(page);
+  await page
+    .getByRole("button", { name: "Save this week", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/today$/);
+
+  // A low check-in re-plans the day from the week: one thing plus one anchor.
+  await page.getByRole("button", { name: "Low", exact: true }).click();
+  await page.getByRole("button", { name: "Update my day" }).click();
+  await expect(
+    page.getByRole("region", { name: "What changed" }),
+  ).toBeVisible();
+  const thing = page
+    .locator("li", {
+      has: page.getByRole("heading", { level: 3, name: "Update the CV" }),
+    })
+    .filter({ has: page.getByRole("button", { name: "Not today" }) });
+  await expect(thing).toHaveCount(1);
+  await expect(
+    thing.getByText('Because you said "Update the CV"'),
+  ).toBeVisible();
+
+  await thing.getByRole("button", { name: "Not today" }).click();
+  // The sheet replaces the Not today button, so find it on the page (only one is open).
+  const sheet = page.getByRole("group", { name: "Not today" });
+  await expect(sheet.getByText("That is fine. What would help?")).toBeVisible();
+  await expect(
+    sheet.getByRole("button", { name: "Move to later" }),
+  ).toBeVisible();
+  await expect(
+    sheet.getByRole("button", { name: "Let it go for today" }),
+  ).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Keep it" })).toBeVisible();
+  await expect(
+    sheet.getByRole("button", { name: "Make it smaller" }),
+  ).toHaveCount(0);
+  await expect(
+    sheet.getByRole("button", { name: "Swap for something else" }),
+  ).toHaveCount(0);
+  await sheet.getByRole("button", { name: "Let it go for today" }).click();
+  await expect(thing).toHaveCount(0);
 });

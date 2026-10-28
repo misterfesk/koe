@@ -21,6 +21,7 @@ import { localMinutes } from "@/domain/time";
 import { commitIntroInTransaction, getPlanDay } from "../data/intake";
 import { consumeInterviewApproval } from "../interview-state";
 import { saveWeekInTransaction } from "../data/week";
+import { introDay } from "@/domain/week-picker";
 import {
   setMorningReminder,
   setReminder,
@@ -204,6 +205,10 @@ export async function startMyDay(input: unknown): Promise<ActionResult> {
     }
   }
   await v.db.transaction(async (tx) => {
+    // A week saved here shapes day 1: its things plus one intro anchor.
+    const week = approval
+      ? await saveWeekInTransaction(tx, v.user.id, approval)
+      : null;
     await commitIntroInTransaction(tx, v.user.id, {
       model,
       summary,
@@ -211,11 +216,10 @@ export async function startMyDay(input: unknown): Promise<ActionResult> {
       people: parsed.data.savePeople.filter((n) =>
         saveable.has(n.trim().toLowerCase()),
       ),
-      items,
+      items: week ? introDay(items, week.items, model.wake) : items,
       memoryOn: v.profile.memoryOn,
       today: v.today,
     });
-    if (approval) await saveWeekInTransaction(tx, v.user.id, approval);
   });
   const wantsAny =
     parsed.data.remindItems || parsed.data.morningPlanMinute !== null;

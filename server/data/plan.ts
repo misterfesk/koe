@@ -4,7 +4,7 @@ import type { DayItem, KindOutcome } from "@/domain/day-plan";
 import { asKind, kindAreas, type PlanOrigin } from "@/domain/plan-menu";
 import type { Energy } from "@/domain/steps";
 import type { Db } from "../db";
-import { checkIn, planDay, step, stepReport } from "../db/schema";
+import { checkIn, planDay, step, stepReport, weekItem } from "../db/schema";
 import { open, seal } from "../crypto";
 import { getPlanDay, type PlanDayView } from "./intake";
 import { followItems, parkItems } from "./reminders";
@@ -87,8 +87,25 @@ export async function writePlanVersion(
           ).map((r) => r.id),
         )
       : new Set<string>();
-    const items: DayItem[] = w.items.map((i) => ({
+    // A This week thing is linked only when the thing is this person's.
+    const things = [
+      ...new Set(w.items.flatMap((i) => (i.weekItemId ? [i.weekItemId] : []))),
+    ];
+    const ownedThings = things.length
+      ? new Set(
+          (
+            await tx
+              .select({ id: weekItem.id })
+              .from(weekItem)
+              .where(
+                and(eq(weekItem.userId, userId), inArray(weekItem.id, things)),
+              )
+          ).map((r) => r.id),
+        )
+      : new Set<string>();
+    const items: DayItem[] = w.items.map(({ weekItemId, ...i }) => ({
       ...i,
+      ...(weekItemId && ownedThings.has(weekItemId) ? { weekItemId } : {}),
       stepId: i.stepId && owned.has(i.stepId) ? i.stepId : crypto.randomUUID(),
     }));
 
@@ -136,6 +153,7 @@ export async function writePlanVersion(
           minuteOfDay: item.minuteOfDay,
           size: item.size,
           origin: w.origin,
+          weekItemId: item.weekItemId ?? null,
           when: "today",
         },
         w.day,

@@ -69,6 +69,7 @@ async function hydrate(db: Db, userId: string, rows: StepRow[]) {
     why: openOrNull(r.whyEnc),
     size: r.size,
     origin: r.origin,
+    weekItemId: r.weekItemId,
     createdAt: r.createdAt.toISOString(),
     reports: reports.filter((x) => x.stepId === r.id).map(toReport),
     versions: versions
@@ -115,6 +116,8 @@ export type NewStep = {
   why?: string | null;
   size?: PlanSize | null;
   origin?: PlanOrigin | null;
+  /** The This week thing this entry came from. */
+  weekItemId?: string | null;
 };
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -150,6 +153,7 @@ export async function insertStep(
       whyEnc: sealOrNull(input.why),
       size: input.size ?? null,
       origin: input.origin ?? null,
+      weekItemId: input.weekItemId ?? null,
     })
     .returning({ id: step.id });
   await tx.insert(stepVersion).values({

@@ -128,8 +128,9 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
         <div className={styles.sheet} role="group" aria-label="Not today">
           <p className={styles.sheetTitle}>That is fine. What would help?</p>
           <div className="actions">
-            {/* A tiny entry can rarely get smaller, so that option comes last. */}
-            {entry.size !== "tiny" && (
+            {/* A tiny entry can rarely get smaller, so that option comes last.
+                A This week thing is never made smaller or swapped. */}
+            {!entry.thing && entry.size !== "tiny" && (
               <button
                 type="button"
                 disabled={pending}
@@ -141,7 +142,7 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
             {entry.later.length > 0 && (
               <button
                 type="button"
-                className="secondary"
+                className={entry.thing ? undefined : "secondary"}
                 disabled={pending}
                 aria-expanded={moving}
                 onClick={() => setMoving((m) => !m)}
@@ -149,15 +150,17 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
                 Move to later
               </button>
             )}
-            <button
-              type="button"
-              className={entry.size === "tiny" ? undefined : "secondary"}
-              disabled={pending}
-              onClick={() => choose("swap")}
-            >
-              Swap for something else
-            </button>
-            {entry.size === "tiny" && (
+            {!entry.thing && (
+              <button
+                type="button"
+                className={entry.size === "tiny" ? undefined : "secondary"}
+                disabled={pending}
+                onClick={() => choose("swap")}
+              >
+                Swap for something else
+              </button>
+            )}
+            {!entry.thing && entry.size === "tiny" && (
               <button
                 type="button"
                 className="secondary"
@@ -169,7 +172,9 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
             )}
             <button
               type="button"
-              className="secondary"
+              className={
+                entry.thing && !entry.later.length ? undefined : "secondary"
+              }
               disabled={pending}
               onClick={() => choose("let_go")}
             >

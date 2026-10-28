@@ -349,9 +349,24 @@ test("inline Other and weekly words reach a saved lean plan", async ({
   await proposeInterview(page);
   await page.getByRole("button", { name: "Review your first day" }).click();
   await expect(heading(page, "Here's what I understood")).toBeVisible();
+  // The reveal's plan already shows the week thing, as Today will.
+  const plan = page.getByRole("region", { name: "Today's plan" });
+  await expect(
+    plan.getByRole("heading", { level: 3, name: "Update my CV" }),
+  ).toBeVisible();
+  await expect(plan.getByText('Because you said "Update my CV"')).toBeVisible();
   await page.getByRole("button", { name: "Start my day" }).click();
   await expect(page).toHaveURL(/\/today$/);
   const body = await (await page.request.get("/api/export")).json();
+  // Day 1 is the week thing plus one anchor from the intro plan.
+  const day1 = body.planDays[0].items as {
+    title: string;
+    weekItemId?: string;
+  }[];
+  expect(day1.filter((i) => i.weekItemId).map((i) => i.title)).toEqual([
+    "Update my CV",
+  ]);
+  expect(day1.filter((i) => !i.weekItemId)).toHaveLength(1);
   expect(body.userModel.model).toMatchObject({
     people: [],
     names: [],

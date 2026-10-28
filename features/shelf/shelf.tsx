@@ -134,7 +134,7 @@ export function Shelf({
         >
           <p className="eyebrow">{pick.sourceName}</p>
           <h3>{pick.title}</h3>
-          <p>{pick.why}</p>
+          {pick.why && <p>{pick.why}</p>}
           <a
             href={pick.url}
             target="_blank"

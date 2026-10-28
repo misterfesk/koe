@@ -57,6 +57,7 @@ const snapshot = z.object({
       title: z.string().trim().min(1).max(80),
       stepId: z.string().optional(),
       problem: z.string().optional(),
+      weekItemId: z.string().optional(),
     }),
   ),
 });
@@ -304,6 +305,7 @@ export async function commitIntroInTransaction(
         minuteOfDay: item.minuteOfDay,
         size: item.size,
         origin: "intro",
+        weekItemId: item.weekItemId ?? null,
         when: "today",
       },
       c.today,

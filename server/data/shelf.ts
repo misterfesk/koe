@@ -1,6 +1,6 @@
 import "server-only";
 import { and, desc, eq, gte } from "drizzle-orm";
-import { cachedResourceOk, templateWhy, whyOk } from "@/domain/resource-screen";
+import { cachedResourceOk, pickWhy } from "@/domain/resource-screen";
 import { resourceTagsSchema, type ResourceTags } from "@/domain/resources";
 import { sourceForUrl } from "@/domain/sources";
 import type { Db } from "../db";
@@ -48,7 +48,9 @@ export async function listShelfExport(db: Db, userId: string) {
 /** Read-only: safe to await during page rendering; never calls a provider. */
 export async function getShelf(v: Viewer) {
   const week = shelfWeek(v.today);
-  const { eatingConcern } = await shelfContext(v);
+  const { eatingConcern, model } = await shelfContext(v);
+  // Only goals the person chose may be named in a why line.
+  const chosen = v.profile?.memoryOn === false ? [] : (model?.goals ?? []);
   const rows = await listShelfExport(v.db, v.user.id);
   const picks = rows.flatMap((r) => {
     if (
@@ -82,7 +84,7 @@ export async function getShelf(v: Viewer) {
       {
         ...r,
         sourceName: sourceForUrl(r.url)!.name,
-        why: whyOk(r.why, eatingConcern) ? r.why : templateWhy(tags),
+        why: pickWhy(r.why, tags, chosen, eatingConcern),
       },
     ];
   });

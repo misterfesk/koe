@@ -9,6 +9,7 @@ import { orderedSources, sourceForUrl } from "@/domain/sources";
 import {
   cachedResourceOk,
   resourceRuleReason,
+  pickWhy,
   templateWhy,
   whyOk,
 } from "@/domain/resource-screen";
@@ -133,9 +134,19 @@ describe("Shelf pure safety rules", () => {
     "You will feel better.",
     "You can try this together.",
   ])("rejects unsafe why line %s", (line) => expect(whyOk(line)).toBe(false));
+  it("names a goal only when the person chose it", () => {
+    expect(templateWhy({ goal: "sleep" }, ["sleep"])).toMatch(/^You chose/);
+    expect(templateWhy({ goal: "through_day" })).toBe("");
+    expect(templateWhy({ goal: "sleep" }, ["energy"])).toBe("");
+    const claim = templateWhy({ goal: "sleep" }, ["sleep"]);
+    expect(pickWhy(claim, { goal: "sleep" }, [])).toBe("");
+    expect(pickWhy(claim, { goal: "sleep" }, ["sleep"])).toBe(claim);
+    const plain = "A short page about getting through your day.";
+    expect(pickWhy(plain, { goal: "through_day" }, [])).toBe(plain);
+  });
   it("checks all fixed why lines and all enum query combinations", () => {
     for (const goal of goals) {
-      expect(whyOk(templateWhy({ goal }))).toBe(true);
+      expect(whyOk(templateWhy({ goal }, [goal]))).toBe(true);
       for (const interest of [...resourceInterests, undefined])
         for (const format of [...resourceFormats, undefined]) {
           const tags = { goal, interest, format };

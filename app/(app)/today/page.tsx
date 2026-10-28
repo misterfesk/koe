@@ -84,11 +84,16 @@ export default async function Page() {
       title: s.title,
       why: s.why,
       kind: s.kind,
-      kindLabel: s.kind ? kindLabel(s.kind) : "Something of your own",
+      kindLabel: s.weekItemId
+        ? "This week"
+        : s.kind
+          ? kindLabel(s.kind)
+          : "Something of your own",
       size: s.size,
       time: minute === null ? null : clock(minute),
       minute,
       inPlan,
+      thing: !!s.weekItemId,
       repeats: isRepeating(s) ? describeDays(s.repeatDays!) : null,
       report: r
         ? { id: r.id, outcome: r.outcome, vsExpected: r.vsExpected }

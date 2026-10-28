@@ -191,9 +191,8 @@ describe("Shelf pipeline", { timeout: 30000 }, () => {
     expect(cache).not.toContain("content");
     expect(cache).not.toContain("winding down");
     expect(cache).not.toContain("practical guide");
-    expect((await getShelf(await viewer("b"))).current[0].why).toContain(
-      "You chose sleep",
-    );
+    // Sleep was never chosen in the intake, so no "You chose" line.
+    expect((await getShelf(await viewer("b"))).current[0].why).toBe("");
     const again = await refreshShelfFor(v, tags, "three");
     expect(again.count).toBe(0);
   });
@@ -295,11 +294,8 @@ describe("Shelf pipeline", { timeout: 30000 }, () => {
     const { getShelf } = await import("@/server/data/shelf");
     const v = await viewer();
     await refreshShelfFor(v, tags, "unsafe-why");
-    expect(
-      (await getShelf(v)).current.every((r) =>
-        r.why.startsWith("You chose sleep."),
-      ),
-    ).toBe(true);
+    // The template names only a goal the person chose; sleep was not.
+    expect((await getShelf(v)).current.every((r) => r.why === "")).toBe(true);
   });
   it("sends harmless publisher prose through Nano while keeping strict generated-copy checks", async () => {
     fake.hits = [
@@ -319,9 +315,7 @@ describe("Shelf pipeline", { timeout: 30000 }, () => {
     const v = await viewer();
     expect((await refreshShelfFor(v, tags, "publisher-prose")).count).toBe(1);
     expect(fake.model).toHaveBeenCalledTimes(1);
-    expect((await getShelf(v)).current[0].why).toBe(
-      "You chose sleep. You might find ideas here.",
-    );
+    expect((await getShelf(v)).current[0].why).toBe("");
   });
   it("keeps rules with AI off and rechecks cached eating constraints with memory off", async () => {
     const { refreshShelfFor } = await import("@/server/search/shelf");

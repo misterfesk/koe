@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { goalPhrases } from "./intake";
+import { goalPhrases, type Goal } from "./intake";
 import {
   breaksGuardrails,
   guardrailHits,
@@ -112,8 +112,32 @@ export function whyOk(text: string, eatingConcern = false) {
   );
 }
 
-export const templateWhy = (tags: ResourceTags) =>
-  `You chose ${goalPhrases[tags.goal]}. You might find ideas here.`;
+/**
+ * Names the goal only when the person chose it in the intake. A default or
+ * inferred goal gives no why line at all ("").
+ */
+export const templateWhy = (
+  tags: ResourceTags,
+  chosen: readonly Goal[] = [],
+): string =>
+  chosen.includes(tags.goal)
+    ? `You chose ${goalPhrases[tags.goal]}. You might find ideas here.`
+    : "";
+
+/** A pick's why line: never claims a choice the person did not make. */
+export function pickWhy(
+  proposed: string | undefined,
+  tags: ResourceTags,
+  chosen: readonly Goal[],
+  eatingConcern = false,
+): string {
+  const claims = /\byou (chose|picked|said)\b/i.test(proposed ?? "");
+  return proposed &&
+    whyOk(proposed, eatingConcern) &&
+    (!claims || chosen.includes(tags.goal))
+    ? proposed
+    : templateWhy(tags, chosen);
+}
 
 /** Cache data never bypasses today's allowlist, rules or local eating switch. */
 export function cachedResourceOk(

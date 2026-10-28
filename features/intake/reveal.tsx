@@ -8,6 +8,7 @@ import { morningPlans, type MorningPlan, type Reveal } from "@/domain/intake";
 import { alternativeFor, sizeLabels, type PlanItem } from "@/domain/plan-menu";
 import { inQuietHours } from "@/domain/reminders";
 import type { WeekDraft } from "@/domain/week";
+import { introAnchor, introDay } from "@/domain/week-picker";
 import { formatClock } from "@/domain/time";
 import { startMyDay } from "@/server/actions/intake";
 import { enableNotifications } from "../reminders/notifications";
@@ -91,7 +92,21 @@ export function RevealScreen({
   const { quietStart, quietEnd, nowMinute } = reveal.reminderRules;
   const morningQuiet =
     morningMinute !== null && inQuietHours(morningMinute, quietStart, quietEnd);
-  const noReminder = items.flatMap((it) =>
+  // With a week, day 1 is its things plus one anchor: the same rule Start my
+  // day saves with, so this list is what Today will show.
+  const shown =
+    weekToken && weekDraft?.items.length
+      ? introDay(items, weekDraft.items, reveal.model.wake)
+      : items;
+  const anchor = shown === items ? null : introAnchor(items);
+  // Only intro items can be swapped or removed; a This week thing stays.
+  const source = (it: PlanItem) =>
+    shown === items
+      ? items.indexOf(it)
+      : anchor && it.kind === anchor.kind && it.title === anchor.title
+        ? items.indexOf(anchor)
+        : -1;
+  const noReminder = shown.flatMap((it) =>
     inQuietHours(it.minuteOfDay, quietStart, quietEnd)
       ? [{ title: it.title, why: "it is inside your quiet hours" }]
       : it.minuteOfDay <= nowMinute
@@ -293,35 +308,40 @@ export function RevealScreen({
           Today&apos;s plan
         </h2>
         <ol className={styles.list}>
-          {items.map((it, i) => (
-            <li key={`${it.kind}-${it.title}`} className={styles.item}>
-              <p className="eyebrow">
-                <span className="clock">{clock(it.minuteOfDay)}</span> ·{" "}
-                {sizeLabels[it.size]}
-              </p>
-              <h3>{it.title}</h3>
-              <p className="meta">{it.why}</p>
-              <div className={styles.itemActions}>
-                <button
-                  type="button"
-                  className="text"
-                  onClick={() => swap(i)}
-                  aria-label={`Swap: ${it.title}`}
-                >
-                  Swap
-                </button>
-                <button
-                  type="button"
-                  className="text danger"
-                  disabled={items.length <= 1}
-                  onClick={() => remove(i)}
-                  aria-label={`Remove: ${it.title}`}
-                >
-                  Remove
-                </button>
-              </div>
-            </li>
-          ))}
+          {shown.map((it) => {
+            const i = source(it);
+            return (
+              <li key={`${it.kind}-${it.title}`} className={styles.item}>
+                <p className="eyebrow">
+                  <span className="clock">{clock(it.minuteOfDay)}</span> ·{" "}
+                  {sizeLabels[it.size]}
+                </p>
+                <h3>{it.title}</h3>
+                <p className="meta">{it.why}</p>
+                {i >= 0 && (
+                  <div className={styles.itemActions}>
+                    <button
+                      type="button"
+                      className="text"
+                      onClick={() => swap(i)}
+                      aria-label={`Swap: ${it.title}`}
+                    >
+                      Swap
+                    </button>
+                    <button
+                      type="button"
+                      className="text danger"
+                      disabled={items.length <= 1}
+                      onClick={() => remove(i)}
+                      aria-label={`Remove: ${it.title}`}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ol>
         <p className="sr-only" role="status" aria-live="polite">
           {announce}

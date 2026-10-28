@@ -87,6 +87,8 @@ export type StepView = {
   why: string | null;
   size: PlanSize | null;
   origin: PlanOrigin | null;
+  /** Set when the entry is one of the person's This week things. */
+  weekItemId?: string | null;
   createdAt: string;
   /** Newest first. */
   reports: ReportView[];

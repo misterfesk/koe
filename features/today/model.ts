@@ -15,6 +15,8 @@ export type Entry = {
   minute: number | null;
   /** Part of today's plan, so "Not today" offers the full set of options. */
   inPlan: boolean;
+  /** One of the person's This week things: never made smaller or swapped. */
+  thing: boolean;
   /** Days a repeating entry from before the plan came, if any. */
   repeats: string | null;
   report: {

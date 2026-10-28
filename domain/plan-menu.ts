@@ -277,6 +277,8 @@ export type PlanItem = {
   size: PlanSize;
   /** Minutes after local midnight. */
   minuteOfDay: number;
+  /** Set when the entry is one of the person's This week things. */
+  weekItemId?: string;
 };
 
 export const planItemSchema = z.object({
@@ -691,7 +693,9 @@ export function whyFor(kind: PlanKind, model: IntakeModel): string {
     case "work_chunk":
       return model.goals.includes("work_study")
         ? said("work_study")
-        : "Because you said your days are mostly work or study";
+        : model.days === "working" || model.days === "studying"
+          ? "Because you said your days are mostly work or study"
+          : "Because a small start is easier than the whole job";
     case "wind_down":
       return model.goals.includes("sleep")
         ? said("sleep")
@@ -814,7 +818,19 @@ export function candidatesFor(kind: PlanKind, model: IntakeModel): Candidate[] {
   return out;
 }
 
-function pickFirst(kind: PlanKind, model: IntakeModel): Candidate | null {
+/** Lifts that are safe to name: food and exercise ones drop out on an eating concern. */
+export function usableLifts(model: IntakeModel): Lift[] {
+  return model.lifts.filter(
+    (l) =>
+      !model.eatingConcern ||
+      (!liftExamples[l].food && !liftExamples[l].exercise),
+  );
+}
+
+export function pickFirst(
+  kind: PlanKind,
+  model: IntakeModel,
+): Candidate | null {
   const list = candidatesFor(kind, model);
   if (!list.length) return null;
   // "Send {name} a short hello" is the one reach out wording worth fixing.

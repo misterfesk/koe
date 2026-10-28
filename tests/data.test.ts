@@ -198,6 +198,44 @@ describe("accounts", { timeout: 30_000 }, () => {
     }
   });
 
+  it("carries a step's This week thing to the account, in export and on delete", async () => {
+    const { db, schema } = await setup();
+    const { transferOwnership } = await import("@/server/db/ownership");
+    const steps = await import("@/server/data/steps");
+    const week = await import("@/server/data/week");
+    const saved = await week.saveWeek(db, "a", {
+      draft: {
+        items: [
+          {
+            captured: { what: "Update my CV", when: "", title: "Update my CV" },
+          },
+        ],
+      },
+      today: TODAY,
+      eatingConcern: false,
+    });
+    const thing = saved.items[0].id;
+    const id = await steps.createStep(
+      db,
+      "a",
+      { area: "do", title: "Update my CV", when: "today", weekItemId: thing },
+      TODAY,
+    );
+    await steps.reportStep(db, "a", id, "done", TODAY);
+
+    await transferOwnership(db, "a", "b");
+
+    const [moved] = await steps.listSteps(db, "b");
+    expect(moved.weekItemId).toBe(thing);
+    const states = await week.weekThingStates(db, "b", TODAY);
+    expect(states.map((t) => [t.id, t.done])).toEqual([[thing, true]]);
+    expect(await week.weekThingStates(db, "a", TODAY)).toEqual([]);
+
+    // Deleting the thing keeps the step, unlinked.
+    await db.delete(schema.weekItem).where(eq(schema.weekItem.id, thing));
+    expect((await steps.listSteps(db, "b"))[0].weekItemId).toBeNull();
+  });
+
   it("deletes every record with the account", async () => {
     const { db, schema } = await setup();
     const steps = await import("@/server/data/steps");

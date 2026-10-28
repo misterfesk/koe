@@ -489,3 +489,116 @@ describe("the planner with a model", { timeout: 60_000 }, () => {
     expect(plan.reason).toBe("first_open");
   });
 });
+
+describe("the planner with This week things", { timeout: 60_000 }, () => {
+  async function withWeek() {
+    const s = await setup("2026-10-26");
+    const { saveWeek } = await import("@/server/data/week");
+    const week = await saveWeek(s.db, "a", {
+      draft: {
+        items: [
+          {
+            captured: {
+              what: "Update my CV. I open it, then close it again.",
+              when: "Friday",
+              title: "Update my CV",
+            },
+          },
+          {
+            captured: {
+              what: "Email the landlord about the boiler",
+              when: "",
+              title: "Email the landlord",
+            },
+          },
+          {
+            captured: {
+              what: "Sort the pile of letters on the table",
+              when: "",
+              title: "Sort the letters",
+            },
+          },
+        ],
+      },
+      today: "2026-10-26",
+      eatingConcern: false,
+    });
+    return { ...s, week };
+  }
+
+  it("builds the day from the things plus one anchor, with no AI call", async () => {
+    const { db, week } = await withWeek();
+    const { openToday } = await import("@/server/llm/planner");
+    const plan = await openToday("a", { db, today: TODAY });
+    expect(fake.calls).toHaveLength(0);
+    expect(plan.reason).toBe("draft");
+    const things = plan.items.filter((i) => i.weekItemId);
+    expect(things.map((i) => i.title)).toEqual([
+      "Update my CV",
+      "Email the landlord",
+    ]);
+    expect(things[0].why).toBe(
+      'Because you said "Update my CV. I open it, then close it again."',
+    );
+    expect(plan.items.filter((i) => !i.weekItemId)).toHaveLength(1);
+    // The link is stored on the step.
+    const schema = await import("@/server/db/schema");
+    const { eq } = await import("drizzle-orm");
+    const [row] = await db
+      .select({ w: schema.step.weekItemId })
+      .from(schema.step)
+      .where(eq(schema.step.id, things[0].stepId!));
+    expect(row.w).toBe(week.items[0].id);
+  });
+
+  it("re-picks on a low check-in and never shrinks or swaps a thing", async () => {
+    const { db } = await withWeek();
+    const { openToday, planToday } = await import("@/server/llm/planner");
+    await openToday("a", { db, today: TODAY });
+    const low = await planToday(
+      "a",
+      { reason: "check_in", energy: "low" },
+      { db, today: TODAY },
+    );
+    expect(low.changed).toBe(true);
+    expect(fake.calls).toHaveLength(0);
+    const { getPlanDay } = await import("@/server/data/intake");
+    const plan = (await getPlanDay(db, "a", TODAY))!;
+    expect(plan.items.filter((i) => i.weekItemId)).toHaveLength(1);
+    expect(plan.items.filter((i) => !i.weekItemId)).toHaveLength(1);
+    const thing = plan.items.find((i) => i.weekItemId)!;
+    const shrink = await planToday(
+      "a",
+      { reason: "not_today_shrink", itemId: thing.stepId },
+      { db, today: TODAY },
+    );
+    expect(shrink.changed).toBe(false);
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("derives Done, Partly and Not today; done things leave the pool", async () => {
+    const { db, week } = await withWeek();
+    const { openToday } = await import("@/server/llm/planner");
+    const { reportStep } = await import("@/server/data/steps");
+    const { weekThingStates } = await import("@/server/data/week");
+    const plan = await openToday("a", { db, today: TODAY });
+    const [cv, landlord] = plan.items.filter((i) => i.weekItemId);
+    await reportStep(db, "a", cv.stepId!, "done", TODAY);
+    await reportStep(db, "a", landlord.stepId!, "not", TODAY);
+    const states = await weekThingStates(db, "a", TODAY);
+    expect(states.map((s) => [s.done, s.partly, s.notToday])).toEqual([
+      [true, 0, 0],
+      [false, 0, 1],
+      [false, 0, 0],
+    ]);
+    expect(states[1].letGoToday).toBe(true);
+    // Another person sees nothing of this week.
+    expect(await weekThingStates(db, "b", TODAY)).toEqual([]);
+    const next = await openToday("a", { db, today: "2026-10-28" });
+    expect(next.items.filter((i) => i.weekItemId).map((i) => i.title)).toEqual([
+      "Sort the letters",
+      "Email the landlord",
+    ]);
+    expect(week.items).toHaveLength(3);
+  });
+});

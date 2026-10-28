@@ -57,6 +57,13 @@
       "when": 1793192249310,
       "tag": "0007_gifted_toro",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793215650557,
+      "tag": "0008_normal_tigra",
+      "breakpoints": true
     }
   ]
 }

@@ -41,6 +41,7 @@ import {
   type CompositionContext,
 } from "@/domain/plan-menu";
 import { detectRisk } from "@/domain/safety";
+import { weekDay } from "@/domain/week-picker";
 import type { Energy } from "@/domain/steps";
 import { addDays, localDay } from "@/domain/time";
 import type { Db } from "../db";
@@ -59,6 +60,7 @@ import {
   type TodayReport,
 } from "../data/plan";
 import { reportStep } from "../data/steps";
+import { weekThingStates, type ThingState } from "../data/week";
 import { env } from "../env";
 import { buildContext } from "./context";
 import { toneWording, within } from "./intake";
@@ -130,18 +132,21 @@ type Situation = {
   reports: Map<string, TodayReport>;
   locked: Set<string>;
   history: (KindOutcome & { vsExpected: string | null })[];
+  /** The things in the person's newest week, with their state. */
+  things: ThingState[];
 };
 
 async function situation(userId: string, where: Where): Promise<Situation> {
   const db = where.db ?? (await openDefaultDb());
   const [p] = await db.select().from(profile).where(eq(profile.userId, userId));
   const today = where.today ?? localDay(p?.timezone ?? "UTC");
-  const [view, current, reports, history, earlier] = await Promise.all([
+  const [view, current, reports, history, earlier, things] = await Promise.all([
     getUserModel(db, userId),
     getPlanDay(db, userId, today),
     todayReports(db, userId, today),
     kindOutcomes(db, userId, addDays(today, -6)),
     hasEarlierPlan(db, userId, today),
+    weekThingStates(db, userId, today),
   ]);
   const locked = new Set<string>();
   for (const i of current?.items ?? [])
@@ -166,7 +171,29 @@ async function situation(userId: string, where: Where): Promise<Situation> {
     reports,
     locked,
     history,
+    things,
   };
+}
+
+/** The person has This week things still open: their day is built from those. */
+const weekOn = (sit: Situation) => sit.things.some((t) => !t.done);
+
+/** Today's plan from This week things, by rules. No AI call on this path. */
+function weekItems(
+  sit: Situation,
+  energy: Energy | null,
+  lighter: boolean,
+  replan: boolean,
+): DayItem[] {
+  return weekDay({
+    things: sit.things.filter((t) => !t.done),
+    energy,
+    lighter,
+    model: sit.model,
+    current: replan ? (sit.current?.items ?? []) : [],
+    locked: sit.locked,
+    skip: new Set(sit.things.filter((t) => t.letGoToday).map((t) => t.id)),
+  });
 }
 
 function aiAvailable(sit: Situation) {
@@ -564,6 +591,18 @@ export async function openToday(
     const lighterDay =
       !sit.firstDay &&
       shouldGoLighter(await previousDays(sit.db, userId, sit.today));
+    if (weekOn(sit))
+      return {
+        items: weekItems(sit, null, lighterDay, false),
+        energy: null,
+        mode: lighterDay ? "lighter" : "normal",
+        note: lighterDay
+          ? "Lighter day: only the smallest things today."
+          : null,
+        origin: "planner",
+        // Day 2 on is a draft, so Keep it / Make it lighter stays on offer.
+        reason: sit.firstDay ? "first_open" : "draft",
+      };
     let proposal: Proposal | null = null;
     if (!sit.firstDay) {
       const ctx = {
@@ -633,18 +672,27 @@ export async function planToday(
   if (run.reason === "check_in") {
     if (run.energy !== "low" && run.energy !== "more")
       return noChange("Your plan already fits today.");
-    // Nothing grows on the first day, so there is nothing to ask the model.
-    if (run.energy === "more" && live.firstDay)
+    if (weekOn(live)) {
+      // This week things are re-picked by rules for the new energy.
+      items = weekItems(live, run.energy, false, true);
+    } else if (run.energy === "more" && live.firstDay) {
+      // Nothing grows on the first day, so there is nothing to ask the model.
       return noChange("Your plan already fits today.");
-    const ctx = ctxFor(live, run.energy === "low");
-    const kind = run.energy === "low" ? "low" : "more";
-    proposal = await aiDay(live, run, kind, ctx);
-    items = proposal?.items ?? rulesDay(live, run, false);
+    } else {
+      const ctx = ctxFor(live, run.energy === "low");
+      const kind = run.energy === "low" ? "low" : "more";
+      proposal = await aiDay(live, run, kind, ctx);
+      items = proposal?.items ?? rulesDay(live, run, false);
+    }
   } else if (run.reason === "lighter") {
     mode = "lighter";
-    const ctx = { ...contextFor(live.model, live.firstDay), lighter: true };
-    proposal = await aiDay(live, run, "lighter", ctx);
-    items = proposal?.items ?? rulesDay(live, run, true);
+    if (weekOn(live)) {
+      items = weekItems(live, cur.energy, true, true);
+    } else {
+      const ctx = { ...contextFor(live.model, live.firstDay), lighter: true };
+      proposal = await aiDay(live, run, "lighter", ctx);
+      items = proposal?.items ?? rulesDay(live, run, true);
+    }
   } else {
     return noChange("Your plan already fits today.");
   }
@@ -691,6 +739,9 @@ async function changeOne(sit: Situation, run: PlanRun): Promise<PlanOutcome> {
   if (!item) return stay("That item is not on today's plan any more.");
   if (item.stepId && sit.locked.has(item.stepId))
     return stay("That one is already done.");
+  // A This week thing is never made smaller or swapped; it just comes back.
+  if (item.weekItemId)
+    return stay("Nothing else fits right now. You can move it or let it go.");
   const shrink = run.reason === "not_today_shrink";
   const ctx = ctxFor(sit, false);
 
