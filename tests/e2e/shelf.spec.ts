@@ -7,7 +7,7 @@ test("Shelf finds picks, saves, removes and undoes a choice after reload", async
 }) => {
   await startAsGuest(page);
   await expect(
-    page.getByRole("complementary", { name: "From your Shelf" }),
+    page.getByRole("region", { name: "Shelf", exact: true }),
   ).toHaveCount(0);
   await page.goto("/shelf");
   const current = page.getByRole("region", { name: "This week's picks" });
@@ -49,9 +49,10 @@ test("Shelf finds picks, saves, removes and undoes a choice after reload", async
     saved.getByRole("heading", { name: title, exact: true }),
   ).toBeVisible();
   await page.goto("/today");
-  const compact = page.getByRole("complementary", { name: "From your Shelf" });
+  const compact = page.getByRole("region", { name: "Shelf", exact: true });
   await expect(compact).toBeVisible();
-  await compact.getByRole("link", { name: "See this pick" }).click();
+  await compact.getByRole("link", { name: "View all" }).waitFor();
+  await compact.getByRole("link", { name: "See this pick" }).first().click();
   await expect(page).toHaveURL(/\/shelf#pick-/);
   const target = page.locator(`[id="${new URL(page.url()).hash.slice(1)}"]`);
   await expect(target.getByRole("heading")).toBeInViewport();

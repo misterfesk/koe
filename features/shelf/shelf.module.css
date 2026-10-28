@@ -19,12 +19,33 @@
   margin-bottom: 0;
 }
 .compact {
-  margin-top: 32px;
+  min-width: 0;
   overflow-wrap: anywhere;
+  padding: 20px;
 }
-.compact h2 {
+.todayHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 32px 0 12px;
+}
+.todayTitle {
   font-size: 1.25rem;
-  margin-block: 8px;
+  margin: 0;
+}
+.todayRow {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 32px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+.todayPickTitle {
+  font-size: 1.125rem;
+  font-weight: 500;
+  margin: 8px 0;
 }
 @media (max-width: 400px) {
   .pick {

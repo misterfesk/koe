@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { PageHeading } from "@/components/ui";
 import {
   diffLines,
@@ -20,15 +19,20 @@ import {
   localMinutes,
   uses12Hour,
 } from "@/domain/time";
-import { tone } from "@/domain/tone";
 import { SafetyCheck } from "@/features/safety/safety-check";
 import { ChangeBanner } from "@/features/today/change-banner";
 import { CheckIn } from "@/features/today/check-in";
 import { DraftBanner } from "@/features/today/draft-banner";
 import type { Banner, Entry } from "@/features/today/model";
+import { Greeting } from "@/features/today/greeting";
+import {
+  dateLine,
+  greetingFor,
+  stateLine,
+} from "@/features/today/greeting-copy";
+import { WeekStrip } from "@/features/today/week-strip";
 import { Timeline } from "@/features/today/timeline";
 import { WelcomeBack } from "@/features/today/welcome-back";
-import styles from "@/features/today/today.module.css";
 import { getCheckInView, previousVersion } from "@/server/data/plan";
 import { listReminders, subscriptionsFor } from "@/server/data/reminders";
 import { env } from "@/server/env";
@@ -36,9 +40,9 @@ import { pushConfigured } from "@/server/push";
 import { listSteps } from "@/server/data/steps";
 import { openToday } from "@/server/llm/planner";
 import { requireViewer } from "@/server/viewer";
-import { getTodayShelfPick } from "@/server/data/shelf";
+import { getShelf } from "@/server/data/shelf";
 import { TodayPick } from "@/features/shelf/today-pick";
-import { listWeeks } from "@/server/data/week";
+import { weekThingStates } from "@/server/data/week";
 
 export const metadata: Metadata = { title: "Today" };
 
@@ -58,8 +62,8 @@ export default async function Page() {
   // The first time today is opened, the day is planned (once, even if two
   // requests arrive together).
   const plan = await openToday(v.user.id, { db: v.db, today: v.today });
-  const shelfPick = await getTodayShelfPick(v);
-  const week = (await listWeeks(v.db, v.user.id))[0];
+  const shelfPicks = (await getShelf(v)).current.slice(0, 3);
+  const things = await weekThingStates(v.db, v.user.id, v.today);
   const [steps, checkIn, before, accept, reminders, subs] = await Promise.all([
     listSteps(v.db, v.user.id),
     getCheckInView(v.db, v.user.id, v.today),
@@ -175,14 +179,6 @@ export default async function Page() {
 
   const waiting = entries.filter((e) => !e.report);
   const answered = entries.filter((e) => e.report);
-  const context = waiting.length
-    ? "chosen"
-    : answered.length
-      ? answered.some((e) => e.report!.outcome === "done")
-        ? "enough"
-        : "setback"
-      : "welcome";
-  const voice = tone(p.tone, context, checkIn?.energy ?? null);
 
   // The next reminder still to come today, as a quiet line (and only then).
   const nowMinute = localMinutes(p.timezone);
@@ -212,21 +208,33 @@ export default async function Page() {
 
   return (
     <>
-      <PageHeading eyebrow="Today">{voice.message}</PageHeading>
-      {away && <WelcomeBack older={older} />}
-      <CheckIn
-        checkIn={
-          checkIn && {
-            energy: checkIn.energy,
-            // A word that tripped the safety check is not shown again.
-            word:
-              checkIn.word && detectRisk(checkIn.word) === "none"
-                ? checkIn.word
-                : null,
+      <Greeting
+        greeting={greetingFor(
+          localMinutes(p.timezone),
+          v.isGuest ? null : v.user.name,
+        )}
+        date={dateLine(p.timezone)}
+        state={stateLine({
+          lighter: plan.mode === "lighter",
+          waiting: waiting.length,
+          answered: answered.length,
+        })}
+      >
+        <CheckIn
+          checkIn={
+            checkIn && {
+              energy: checkIn.energy,
+              // A word that tripped the safety check is not shown again.
+              word:
+                checkIn.word && detectRisk(checkIn.word) === "none"
+                  ? checkIn.word
+                  : null,
+            }
           }
-        }
-        region={p.region}
-      />
+          region={p.region}
+        />
+      </Greeting>
+      {away && <WelcomeBack older={older} />}
       {isDraft && <DraftBanner lighter={plan.mode === "lighter"} />}
       {banner && <ChangeBanner banner={banner} />}
       <Timeline
@@ -239,30 +247,25 @@ export default async function Page() {
             : null,
           subscribed: subs.length > 0,
         }}
+        after={
+          <>
+            <WeekStrip
+              things={things.map((t) => ({
+                id: t.id,
+                title: t.title,
+                done: t.done,
+                partly: t.partly,
+              }))}
+            />
+            <TodayPick picks={shelfPicks} />
+          </>
+        }
       />
       {next && (
         <p className="meta">
           Next reminder: {next.time} · {next.title}
         </p>
       )}
-      {!week && (
-        <aside className="panel" aria-label="This week">
-          <p className="meta">
-            Your day can start from something you want to do.
-          </p>
-          <Link href="/intake#interview">
-            Tell Koe one thing you&apos;re working on{" "}
-            <span aria-hidden="true">→</span>
-          </Link>
-        </aside>
-      )}
-      {shelfPick && <TodayPick pick={shelfPick} />}
-      <div className={styles.below}>
-        <p className="meta">Rather talk it through?</p>
-        <Link className="button secondary" href="/talk">
-          Open Talk <span aria-hidden="true">→</span>
-        </Link>
-      </div>
     </>
   );
 }

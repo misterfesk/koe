@@ -272,3 +272,103 @@ test("a This week thing on Today is never made smaller or swapped", async ({
   await sheet.getByRole("button", { name: "Let it go for today" }).click();
   await expect(thing).toHaveCount(0);
 });
+
+test("Today's layout: greeting card, swipe row, week strip and quiet end row", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await startWithPlan(page);
+  const h1 = page.getByRole("heading", { level: 1 });
+  await expect(h1).toHaveText(
+    /^(Good morning|Good afternoon|Good evening|Hello)$/,
+  );
+  const card = page.getByRole("region", { name: "Today", exact: true });
+  await expect(card).toContainText(/\w+day \d{1,2} \w+/);
+  await expect(card).toContainText(/\d things today/);
+  await expect(card.locator("[data-scene-slot]")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  await expect(card.getByText("How are you arriving today?")).toBeVisible();
+
+  // Removed: the slogan heading, the problem link and the Talk block.
+  await expect(page.getByText("Open Talk")).toHaveCount(0);
+  await expect(page.getByText("Work through a problem")).toHaveCount(0);
+  await expect(page.getByText("Rather talk it through?")).toHaveCount(0);
+
+  // Order: greeting, Your day, This week, then the quiet end row.
+  const heads = await page.getByRole("heading", { level: 2 }).allTextContents();
+  expect(heads.slice(0, 2)).toEqual(["Your day", "This week"]);
+  await expect(
+    page.getByRole("link", { name: /Tell Koe one thing/ }),
+  ).toBeVisible();
+  const end = page.getByRole("region", { name: "More for today" });
+  await expect(
+    end.getByRole("button", { name: "Add something" }),
+  ).toBeVisible();
+  await expect(
+    end.getByRole("button", { name: "This is too much today" }),
+  ).toBeVisible();
+  await expect(
+    end.getByRole("link", { name: "Add today to your calendar" }),
+  ).toBeVisible();
+
+  // Answers are outlined buttons; Done shows the filled mark once answered.
+  const first = page
+    .locator("ul li", {
+      has: page.getByRole("heading", { level: 3 }),
+    })
+    .first();
+  await first.getByRole("button", { name: "Done" }).click();
+  await expect(first.getByRole("status")).toContainText("Done");
+  await expect(first.getByText("●")).toBeVisible();
+});
+
+for (const width of [320, 390]) {
+  test(`Today at ${width}px scrolls its cards inside the row and is axe-clean`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width, height: 800 });
+    await startWithPlan(page);
+    await expect(
+      page.getByRole("status").filter({ hasText: /^Card 1 of 3$/ }),
+    ).toHaveCount(1);
+    const row = page.locator("ul", {
+      has: page.getByRole("heading", { level: 3 }),
+    });
+    const sizes = await row.evaluate((el) => ({
+      inner: el.scrollWidth,
+      outer: el.clientWidth,
+      snap: getComputedStyle(el).scrollSnapType,
+    }));
+    expect(sizes.inner).toBeGreaterThan(sizes.outer);
+    expect(sizes.snap).toContain("x mandatory");
+    await row.evaluate((el) => el.scrollBy({ left: 1000 }));
+    await expect(
+      page.getByRole("status").filter({ hasText: /^Card 3 of 3$/ }),
+    ).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Next" })).toBeHidden();
+    await clean(page, `today ${width}`);
+  });
+}
+
+test("Today on desktop shows cards side by side, with Previous and Next only on overflow", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await startWithPlan(page);
+  const row = page.locator("ul", {
+    has: page.getByRole("heading", { level: 3 }),
+  });
+  const cards = row.locator("> li");
+  const [a, b] = await Promise.all([
+    cards.nth(0).boundingBox(),
+    cards.nth(1).boundingBox(),
+  ]);
+  expect(Math.abs(a!.y - b!.y)).toBeLessThan(2);
+  expect(b!.x).toBeGreaterThan(a!.x);
+  await expect(page.getByRole("button", { name: "Next" })).toBeHidden();
+  await clean(page, "today desktop");
+});
