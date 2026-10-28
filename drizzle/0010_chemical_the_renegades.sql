@@ -1,0 +1,1 @@
+ALTER TABLE "profile" ADD COLUMN "scene_style" text DEFAULT 'flat' NOT NULL;

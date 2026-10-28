@@ -17,6 +17,7 @@ export default async function Page() {
           plain={p.plain}
           reducedMotion={p.reducedMotion}
           mascot={p.mascot}
+          sceneStyle={p.sceneStyle}
         />
       </div>
     </>

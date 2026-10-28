@@ -17,6 +17,7 @@ export type ProfileSettings = Partial<
     | "tone"
     | "plain"
     | "reducedMotion"
+    | "sceneStyle"
     | "mascot"
     | "coachingPausedAt"
     | "lastSeenAt"

@@ -114,6 +114,7 @@ export const talkModes = [
   "care",
 ] as const;
 export const tones = ["expressive", "calm", "plain"] as const;
+export const sceneStyles = ["flat", "ink"] as const;
 
 export const profile = pgTable("profile", {
   userId: text("user_id")
@@ -137,6 +138,9 @@ export const profile = pgTable("profile", {
   tone: text("tone", { enum: tones }).notNull().default("expressive"),
   plain: boolean("plain").notNull().default(false),
   reducedMotion: boolean("reduced_motion").notNull().default(false),
+  sceneStyle: text("scene_style", { enum: sceneStyles })
+    .notNull()
+    .default("flat"),
   // Owner decision D027: plain by default, the person can turn it on.
   mascot: boolean("mascot").notNull().default(false),
   // Journey patterns the person said don't fit, by pattern key.

@@ -246,9 +246,14 @@
   min-width: 0;
 }
 .scene {
+  position: relative;
   grid-column: 2;
   grid-row: 1;
-  min-height: 160px;
+  align-self: center;
+  aspect-ratio: 6 / 5;
+  border-radius: var(--radius);
+  background: var(--canvas);
+  overflow: hidden;
 }
 .greetingTitle {
   font-size: clamp(1.75rem, 4vw, 2.5rem);
@@ -292,19 +297,32 @@
     grid-template-columns: minmax(0, 1fr);
     padding: 24px;
   }
-  /* The scene fills the card background; the gradient keeps the text readable. */
+  /* The scene sits behind the heading, top right; the gradient keeps text readable. */
   .scene {
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    width: 74%;
+    aspect-ratio: 8 / 5;
     grid-column: auto;
     grid-row: auto;
-    min-height: 0;
+    border-radius: 0;
+    background: none;
   }
   .scene::after {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(to right, var(--surface) 55%, transparent 100%);
+    background:
+      linear-gradient(to right, var(--surface) 32%, transparent 85%),
+      linear-gradient(to top, var(--surface) 0, transparent 30%);
+  }
+}
+/* On the narrowest phones the heading runs far right, so the scene sits below it. */
+@media (max-width: 380px) {
+  .scene {
+    top: 60px;
+    width: 58%;
   }
 }
 .banner {

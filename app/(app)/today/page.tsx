@@ -24,6 +24,8 @@ import { ChangeBanner } from "@/features/today/change-banner";
 import { CheckIn } from "@/features/today/check-in";
 import { DraftBanner } from "@/features/today/draft-banner";
 import type { Banner, Entry } from "@/features/today/model";
+import { sceneFor, sceneIds, type SceneId } from "@/domain/scene";
+import { talkStubbed } from "@/server/llm/talk-stub";
 import { Greeting } from "@/features/today/greeting";
 import {
   dateLine,
@@ -46,7 +48,15 @@ import { weekThingStates } from "@/server/data/week";
 
 export const metadata: Metadata = { title: "Today" };
 
-export default async function Page() {
+/** Test builds only (the AI stub guard): ?scene= picks a scene for screenshots. */
+const forcedScene = (s?: string): SceneId | undefined =>
+  talkStubbed() ? sceneIds.find((id) => id === s) : undefined;
+
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ scene?: string }>;
+}) {
   const v = await requireViewer();
   const p = v.profile;
 
@@ -214,6 +224,14 @@ export default async function Page() {
           v.isGuest ? null : v.user.name,
         )}
         date={dateLine(p.timezone)}
+        scene={
+          forcedScene((await searchParams).scene) ??
+          sceneFor(
+            Math.floor(localMinutes(p.timezone) / 60),
+            plan.mode === "lighter",
+          )
+        }
+        sceneStyle={p.sceneStyle}
         state={stateLine({
           lighter: plan.mode === "lighter",
           waiting: waiting.length,

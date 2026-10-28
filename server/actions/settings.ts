@@ -7,7 +7,7 @@ import { EVERY_DAY, inQuietHours } from "@/domain/reminders";
 import { isValidTimeZone, localMinutes } from "@/domain/time";
 import { helpResources } from "@/fixtures/help-resources";
 import { auth } from "../auth";
-import { memoryKinds, tones, user } from "../db/schema";
+import { memoryKinds, sceneStyles, tones, user } from "../db/schema";
 import { addMemory, deleteMemory, updateMemory } from "../data/memory";
 import { getUserModel, saveUserModel } from "../data/intake";
 import { editedModel, modelEdit } from "@/domain/model-edit";
@@ -52,6 +52,7 @@ const appearance = z.object({
   plain: z.boolean().optional(),
   reducedMotion: z.boolean().optional(),
   mascot: z.boolean().optional(),
+  sceneStyle: z.enum(sceneStyles).optional(),
 });
 
 export async function setAppearance(input: z.input<typeof appearance>) {

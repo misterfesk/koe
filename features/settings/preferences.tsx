@@ -10,6 +10,7 @@ import {
   unsubscribePush,
 } from "@/server/actions/settings";
 import { CredentialsForm } from "../account/credentials";
+import { SCENE_STYLE_KEY, type SceneStyle } from "../scenes/style";
 import { clearOwnerDrafts } from "../today/draft-store";
 
 type Tone = "expressive" | "calm" | "plain";
@@ -19,13 +20,16 @@ export function Appearance({
   plain,
   reducedMotion,
   mascot,
+  sceneStyle,
 }: {
   tone: Tone;
   plain: boolean;
   reducedMotion: boolean;
   mascot: boolean;
+  sceneStyle: SceneStyle;
 }) {
   const [, startTransition] = useTransition();
+  const [scene, setScene] = useState(sceneStyle);
   const set = (v: Parameters<typeof setAppearance>[0]) =>
     startTransition(() => setAppearance(v));
   return (
@@ -53,6 +57,29 @@ export function Appearance({
           Warm adds encouragement at good moments. Koe is always calm after
           setbacks and in Help.
         </p>
+      </fieldset>
+      <fieldset className="chips">
+        <legend>Scene style</legend>
+        {(
+          [
+            ["flat", "Flat"],
+            ["ink", "Ink line"],
+          ] as const
+        ).map(([value, label]) => (
+          <label key={value} className="toggle">
+            <input
+              type="radio"
+              name="scene-style"
+              checked={scene === value}
+              onChange={() => {
+                setScene(value);
+                localStorage.setItem(SCENE_STYLE_KEY, value);
+                set({ sceneStyle: value });
+              }}
+            />
+            <span>{label}</span>
+          </label>
+        ))}
       </fieldset>
       <label className="toggle">
         <input

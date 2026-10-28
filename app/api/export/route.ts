@@ -43,6 +43,7 @@ export async function GET() {
       nudgesPerDay: v.profile.nudgesPerDay,
       plain: v.profile.plain,
       reducedMotion: v.profile.reducedMotion,
+      sceneStyle: v.profile.sceneStyle,
       mascot: v.profile.mascot,
       adultAttestedAt: v.profile.adultAttestedAt,
       createdAt: v.profile.createdAt,
