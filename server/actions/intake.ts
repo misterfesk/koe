@@ -18,7 +18,9 @@ import {
 import type { RiskLevel } from "@/domain/safety";
 import { EVERY_DAY, inQuietHours } from "@/domain/reminders";
 import { localMinutes } from "@/domain/time";
-import { commitIntro, getPlanDay } from "../data/intake";
+import { commitIntroInTransaction, getPlanDay } from "../data/intake";
+import { consumeInterviewApproval } from "../interview-state";
+import { saveWeekInTransaction } from "../data/week";
 import {
   setMorningReminder,
   setReminder,
@@ -78,6 +80,7 @@ function withEatingFlag(model: IntakeModel): IntakeModel {
 /** The one AI pass: answers in, a reveal to edit and approve out. */
 export async function buildReveal(
   input: unknown,
+  forceFallback = false,
 ): Promise<ActionResult<{ reveal: Reveal | null }>> {
   const v = await requireViewer();
   const parsed = intakeModel.safeParse(input);
@@ -94,9 +97,10 @@ export async function buildReveal(
 
   const model = withEatingFlag(parsed.data);
   // While coaching is paused no model is called for this person.
-  const synthesis = v.profile.coachingPausedAt
-    ? templateResult(model)
-    : await synthesiseIntake(model, v.user.id);
+  const synthesis =
+    v.profile.coachingPausedAt || !v.profile.memoryOn || forceFallback === true
+      ? templateResult(model)
+      : await synthesiseIntake(model, v.user.id);
   return {
     ok: true,
     safety: "none",
@@ -132,11 +136,15 @@ const startInput = z.object({
   // "Remind me for each of these": only honoured once a device is set up.
   remindItems: z.boolean().default(false),
   morningPlanMinute: z.number().int().min(0).max(1439).nullable().default(null),
+  interview: z
+    .object({ token: z.string().min(1).max(100_000), draft: z.unknown() })
+    .optional(),
 });
 
 /** "Start my day": writes approved choices; the caller clears its draft before navigation. */
 export async function startMyDay(input: unknown): Promise<ActionResult> {
   const v = await requireViewer();
+  if (v.profile.coachingPausedAt) return { ok: true, safety: "concern" };
   const parsed = startInput.safeParse(input);
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
   const model = withEatingFlag(parsed.data.model);
@@ -166,16 +174,48 @@ export async function startMyDay(input: unknown): Promise<ActionResult> {
     };
 
   const saveable = new Set(model.names.map((n) => n.name.trim().toLowerCase()));
-  await commitIntro(v.db, v.user.id, {
-    model,
-    summary,
-    memories,
-    people: parsed.data.savePeople.filter((n) =>
-      saveable.has(n.trim().toLowerCase()),
-    ),
-    items,
-    memoryOn: v.profile.memoryOn,
-    today: v.today,
+  let approval: Awaited<
+    ReturnType<typeof consumeInterviewApproval>
+  >["approval"] = null;
+  if (parsed.data.interview) {
+    try {
+      const checked = await consumeInterviewApproval(
+        v,
+        parsed.data.interview.token,
+        parsed.data.interview.draft,
+      );
+      if (checked.safety !== "none")
+        return { ok: true, safety: checked.safety };
+      if (checked.unavailable || !checked.approval)
+        return {
+          ok: false,
+          errors: {
+            form: "Your week couldn't be checked. Try Start my day again.",
+          },
+        };
+      approval = checked.approval;
+    } catch {
+      return {
+        ok: false,
+        errors: {
+          form: "Your week couldn't be confirmed. Open the interview again before saving.",
+        },
+      };
+    }
+  }
+  await v.db.transaction(async (tx) => {
+    await commitIntroInTransaction(tx, v.user.id, {
+      model,
+      summary,
+      memories,
+      people: parsed.data.savePeople.filter((n) =>
+        saveable.has(n.trim().toLowerCase()),
+      ),
+      items,
+      memoryOn: v.profile.memoryOn,
+      today: v.today,
+    });
+    if (approval) await saveWeekInTransaction(tx, v.user.id, approval);
   });
   const wantsAny =
     parsed.data.remindItems || parsed.data.morningPlanMinute !== null;

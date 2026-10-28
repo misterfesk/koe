@@ -74,6 +74,7 @@ All user-owned tables reference `user` with `ON DELETE CASCADE`. Guest data move
 | `profile` | Region, timezone, 18+ attestation, coaching pause, memory and chat-history switches, reminder budget and quiet hours, tone, appearance. |
 | `user_model` | The sealed intake model (goals, routine, what used to help, people, support, tone, morning-plan time) and the summary the person approved. |
 | `plan_day` | One row per plan version per local day: energy, mode (normal/lighter) and a sealed snapshot of the items. Used for "what changed" and undo. |
+| `week`, `week_item`, `piece` | Rolling weeks, the person's approved things and ordered pieces. Captured words, endpoints, source quotes and suggested times are sealed. Approval IDs prevent duplicate saves; adding a thing preserves earlier piece IDs and progress. Ownership transfer, export and cascade deletion cover all three tables. New timestamps carry a timezone. |
 | `step` | An entry in the day (internal name). Kind from the menu, time of day, sealed title and why line, size (tiny/small/medium), origin (intro/planner/you/talk), status. |
 | `step_version`, `step_report` | Earlier wordings, and what happened (done/partly/not today, how it compared with expectations). |
 | `check_in` | The once-a-day energy answer. |
@@ -108,6 +109,7 @@ Model IDs are configuration (`KOE_CHAT_MODEL`, `KOE_FAST_MODEL`, `KOE_SAFETY_MOD
 | Agent | When | Output and checks |
 |---|---|---|
 | Intake synthesiser (`intake.ts`) | End of the four-turn chat intake | Summary, up to 4 memory proposals, 3 plan items. Checked against zod, the composition rules, the guardrails and the safety rules. Failing items are swapped for rules-based ones. AI off: `fallbackPlan`. |
+| Work interview (`interview.ts`) | After intake, or from the Today continuation | Ultra gathers up to three weekly things with two follow-ups each, then proposes pieces. Input rules and the fail-closed classifier run before replies. Output checks cover messages, choices and pieces; deterministic fallbacks remain available. Approval alone writes the week. A3 will connect these pieces to daily picking. |
 | Planner (`planner.ts`) | First open of the day, check-in, "Not today" (smaller/swap), lighter day | A new plan version, plus a one-line note on what changed. Same checks. AI off: deterministic adaptation. |
 | Talk | Each message | Reply text plus tool proposals: add, move or shrink an entry, set a reminder, save a memory, find resources, draft a message, prepare for an appointment. Proposals are written only when the person confirms them. |
 | Resource screener | Weekly Shelf refresh, or a confirmed Talk request | Rules then Nano: exact HTTPS host, adult audience and excluded subjects. Fail-closed on model errors; validated why line or a fixed fallback. AI off uses rules and fixed copy. |
@@ -142,7 +144,9 @@ The risk patterns and the crisis-flow wording are engineering defaults and have 
 
 **Entry paths and drafts.** Legacy `/steps/[id]` links lead to the current entry on Today, including its scroll position, or read-only Look back history. Add and problem-solving forms live under `/today`; People uses the same versioned add action. Weekly choices save intentions only; Today handles plan changes and Undo. Tab-local form drafts are validated and scoped to their owner. A stale information draft needs an explicit choice before it replaces current answers in the editor. A confirmed anonymous-to-account link moves browser drafts using server-confirmed owner IDs; no credential values enter that handoff. A collision retains both drafts under the account's cleanup scope, without automatically loading the extra draft. Successful account deletion also clears the person's browser drafts; failed deletion keeps them. Search-budget reservations write an explicit UTC instant, independently of the database's local timezone.
 
-**Chat intake (v3 A1).** Four turns collect priorities, day/wake context, lifts and an optional weekly thing. The weekly text uses the existing `puttingOff` field until A2 adds the interview. People/support/busy-time questions are absent; tone defaults to calm. Main navigation stays hidden during onboarding, while Help remains available. Every typed answer is screened before the next turn. Validated tab drafts migrate legacy answers, discard hidden fields and unsafe words, and keep the local eating-protection flag. Day and wake notes share the existing 200-character storage limit. Morning reminder time is chosen on the reveal, with reminders off until explicitly enabled. The existing synthesis/reveal and save boundary remain; no new tables or model prompts are introduced in A1.
+**Chat intake and interview (v3 A1–A2).** Four turns collect priorities, day/wake context, lifts and an optional weekly thing. That last answer seeds the work interview without asking it twice. People/support/busy-time questions are absent; tone defaults to calm. Main navigation stays hidden during onboarding, while Help remains available. Intake and interview drafts are validated and scoped to their owner; unscoped legacy drafts are ignored. Day and wake notes share the existing 200-character storage limit. Morning reminders remain off until explicitly enabled. Skipping the interview or turning memory off uses a local reveal.
+
+The interview continuation is an authenticated encrypted browser token, expiring after seven days. No unconfirmed interview transcript is written to a database. In-process sequence checks reject stale turns during the current server lifetime; after a restart the signed token can resume. Durable approval IDs keep week saves idempotent across restarts. Edits are re-screened, owner-checked and checked against local eating protections at approval. Renaming preserves the original source phrase as encrypted provenance. The first intro and week share one database transaction. Returning people can add a thing through `/intake#interview` without rewriting their intro or day. Client navigation follows successful draft cleanup, including after server revalidation.
 
 ## 8. Reminders
 
@@ -168,6 +172,7 @@ Web Push with VAPID. The person turns a reminder on for a timed entry, or for th
 - `npm run test:e2e`: Playwright on desktop and 390 px mobile with the AI off. It covers axe (WCAG 2.2 AA) on every page and no horizontal scroll at 320/390 px.
 - `npm run eval:safety`: a live Talk suite (risk phrasings, no phone numbers, no medication advice, discloses it is an AI, short replies, no "we/us").
 - `npm run eval:plan`: a live planning suite (valid schema, composition, guardrails, personalisation, eating-concern handling).
+- `npm run eval:interview`: eight synthetic interview cases, deterministic safety/structure checks, separately graded dialogue and first-piece quality, and an invalid comparison proposal to check the grader. Actual model routing and transcripts stay under ignored `.data/`. Model grading supplements direct transcript review.
 
 ## 11. Known limits
 

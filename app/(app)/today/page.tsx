@@ -38,6 +38,7 @@ import { openToday } from "@/server/llm/planner";
 import { requireViewer } from "@/server/viewer";
 import { getTodayShelfPick } from "@/server/data/shelf";
 import { TodayPick } from "@/features/shelf/today-pick";
+import { listWeeks } from "@/server/data/week";
 
 export const metadata: Metadata = { title: "Today" };
 
@@ -58,6 +59,7 @@ export default async function Page() {
   // requests arrive together).
   const plan = await openToday(v.user.id, { db: v.db, today: v.today });
   const shelfPick = await getTodayShelfPick(v);
+  const week = (await listWeeks(v.db, v.user.id))[0];
   const [steps, checkIn, before, accept, reminders, subs] = await Promise.all([
     listSteps(v.db, v.user.id),
     getCheckInView(v.db, v.user.id, v.today),
@@ -236,6 +238,17 @@ export default async function Page() {
         <p className="meta">
           Next reminder: {next.time} · {next.title}
         </p>
+      )}
+      {!week && (
+        <aside className="panel" aria-label="This week">
+          <p className="meta">
+            Your day can start from something you want to do.
+          </p>
+          <Link href="/intake#interview">
+            Tell Koe one thing you&apos;re working on{" "}
+            <span aria-hidden="true">→</span>
+          </Link>
+        </aside>
       )}
       {shelfPick && <TodayPick pick={shelfPick} />}
       <div className={styles.below}>

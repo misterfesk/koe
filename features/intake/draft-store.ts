@@ -4,6 +4,8 @@ import { detectEatingConcern } from "@/domain/plan-menu";
 import { detectRisk } from "@/domain/safety";
 
 const KEY = "koe.intake.draft.v1";
+export const intakeKey = (owner?: string) =>
+  owner ? `koe.plan-draft:intake:${owner}` : KEY;
 const unsafe = (text: string) =>
   detectRisk(text) !== "none" || detectEatingConcern(text);
 export type IntakeDraft = {
@@ -18,7 +20,7 @@ export type IntakeDraft = {
   puttingOff: string;
   eatingConcern: boolean;
 };
-export type IntakeStage = "intro" | 1 | 2 | 3 | 4;
+export type IntakeStage = "intro" | "interview" | 1 | 2 | 3 | 4;
 export type StoredDraft = {
   version: 2;
   stage: IntakeStage;
@@ -124,11 +126,14 @@ export function toModel(draft: IntakeDraft): IntakeInput {
     },
   };
 }
-export function loadDraft(): StoredDraft | null {
+export function loadDraft(owner?: string): StoredDraft | null {
   try {
-    const raw = window.sessionStorage.getItem(KEY);
+    const raw =
+      window.sessionStorage.getItem(intakeKey(owner)) ??
+      (owner ? window.sessionStorage.getItem(KEY) : null);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
+    if (owner && parsed?.owner !== owner) return null;
     if (
       !parsed ||
       typeof parsed !== "object" ||
@@ -140,6 +145,7 @@ export function loadDraft(): StoredDraft | null {
     const stage = parsed.stage;
     if (
       stage !== "intro" &&
+      stage !== "interview" &&
       (!Number.isInteger(stage) || stage < 1 || stage > 5)
     )
       return null;
@@ -162,19 +168,28 @@ export function loadDraft(): StoredDraft | null {
     return null;
   }
 }
-export function saveDraft(value: StoredDraft) {
+export function saveDraft(value: StoredDraft, owner?: string) {
   try {
     window.sessionStorage.setItem(
-      KEY,
-      JSON.stringify({ ...value, draft: storable(value.draft) }),
+      intakeKey(owner),
+      JSON.stringify({
+        ...value,
+        ...(owner ? { owner } : {}),
+        draft: storable(value.draft),
+      }),
     );
   } catch {
     /* Blocked storage does not prevent intake. */
   }
 }
-export function clearDraft() {
+export function clearDraft(owner?: string) {
   try {
-    window.sessionStorage.removeItem(KEY);
+    window.sessionStorage.removeItem(intakeKey(owner));
+    if (owner) {
+      const legacy = window.sessionStorage.getItem(KEY);
+      if (legacy && JSON.parse(legacy).owner === owner)
+        window.sessionStorage.removeItem(KEY);
+    }
   } catch {
     /* Nothing to clear. */
   }

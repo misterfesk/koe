@@ -16,6 +16,7 @@
     "db:generate": "drizzle-kit generate",
     "eval:safety": "vitest run --config vitest.eval.config.ts tests/eval/talk.eval.ts",
     "eval:plan": "vitest run --config vitest.eval.config.ts tests/eval/planner.eval.ts",
+    "eval:interview": "vitest run --config vitest.eval.config.ts tests/eval/interview.eval.ts",
     "search:smoke": "tsx --conditions=react-server scripts/search-smoke.ts",
     "ai:usage": "tsx --conditions=react-server scripts/ai-usage.ts"
   },

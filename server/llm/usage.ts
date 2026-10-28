@@ -10,6 +10,8 @@ export const aiPurposes = [
   "talk_safety",
   "coach",
   "intake",
+  "interview_turn",
+  "interview_breakdown",
   "planner",
   "resource_screen",
   "lookback",

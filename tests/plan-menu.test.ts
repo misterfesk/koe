@@ -673,6 +673,7 @@ describe("template summary and memories", () => {
       expect(breaksGuardrails(mem.text)).toBe(false);
     }
     expect(templateMemories(m).length).toBeLessThanOrEqual(4);
-    expect(templateSummary(model())).toMatch(/simple, gentle day/);
+    expect(templateSummary(model())).toMatch(/plan.*change/);
+    expect(templateSummary(model())).not.toMatch(/you skipped/i);
   });
 });

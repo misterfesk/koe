@@ -15,6 +15,7 @@ import { listSteps } from "@/server/data/steps";
 import { getConversation, listConversations } from "@/server/data/talk";
 import { getViewer } from "@/server/viewer";
 import { listShelfExport } from "@/server/data/shelf";
+import { listWeeks } from "@/server/data/week";
 import { shelfRefresh } from "@/server/db/schema";
 
 /** One file with everything the person has in Koe, readable and decrypted. */
@@ -78,6 +79,7 @@ export async function GET() {
     // What Koe knows from the intro, and each day it planned.
     userModel: await getUserModel(v.db, id),
     planDays: await listPlanDays(v.db, id),
+    weeks: await listWeeks(v.db, id),
     // The one word that came with a check-in, when there was one.
     checkInWords: await listCheckInWords(v.db, id),
     conversations: await Promise.all(

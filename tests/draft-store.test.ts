@@ -46,14 +46,19 @@ describe("tab-local drafts", () => {
       "koe.plan-draft:add:a",
       "koe.plan-draft:problem:a",
       "koe.plan-draft:model:a",
+      "koe.plan-draft:intake:a",
       "koe.plan-draft:problem-plan:a:opaque",
       "koe.plan-draft:reach-out:a:person",
+      "koe.plan-draft:interview:a:intro",
+      "koe.plan-draft:interview:a:return",
     ];
     const kept = [
       "unrelated",
       "koe.plan-draft:add:b",
       "koe.plan-draft:problem-plan:aa:opaque",
       "koe.plan-draft:reach-out:b:person",
+      "koe.plan-draft:interview:b:intro",
+      "koe.plan-draft:intake:b",
     ];
     for (const key of [...owned, ...kept])
       sessionStorage.setItem(key, "saved words");
@@ -73,6 +78,14 @@ describe("tab-local drafts", () => {
       "guest reach-out",
     );
     sessionStorage.setItem("koe.plan-draft:add:unrelated", "keep");
+    sessionStorage.setItem(
+      "koe.plan-draft:intake:guest",
+      JSON.stringify({ owner: "guest", stage: 2, draft: {} }),
+    );
+    sessionStorage.setItem(
+      "koe.plan-draft:interview:guest:return",
+      "encrypted continuation",
+    );
     transferOwnerDrafts(sessionStorage, "guest", "account");
     expect(sessionStorage.getItem("koe.plan-draft:add:guest")).toBeNull();
     expect(sessionStorage.getItem("koe.plan-draft:add:account")).toBe(
@@ -91,6 +104,12 @@ describe("tab-local drafts", () => {
     expect(sessionStorage.getItem("koe.plan-draft:model:account")).toBe(
       "guest model draft",
     );
+    expect(
+      JSON.parse(sessionStorage.getItem("koe.plan-draft:intake:account")!),
+    ).toMatchObject({ owner: "account", stage: 2 });
+    expect(
+      sessionStorage.getItem("koe.plan-draft:interview:account:return"),
+    ).toBe("encrypted continuation");
     expect(
       sessionStorage.getItem("koe.plan-draft:reach-out:account:person"),
     ).toBe("guest reach-out");

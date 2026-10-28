@@ -7,11 +7,18 @@ import { AskCard } from "@/components/chat";
 import { morningPlans, type MorningPlan, type Reveal } from "@/domain/intake";
 import { alternativeFor, sizeLabels, type PlanItem } from "@/domain/plan-menu";
 import { inQuietHours } from "@/domain/reminders";
+import type { WeekDraft } from "@/domain/week";
 import { formatClock } from "@/domain/time";
 import { startMyDay } from "@/server/actions/intake";
 import { enableNotifications } from "../reminders/notifications";
 import { SafetyCheck } from "../safety/safety-check";
 import { clearDraft } from "./draft-store";
+import {
+  clearInterviewDraft,
+  writeInterviewDraft,
+  readInterviewDraft,
+} from "./interview-draft";
+import { WeekReveal } from "./week-reveal";
 import styles from "./intake.module.css";
 
 type Card = Reveal["memories"][number] & { keep: boolean };
@@ -25,12 +32,20 @@ export function RevealScreen({
   region,
   publicKey,
   hour12,
+  owner,
+  interview,
+  onWeekChange,
+  onBackToWeek,
 }: {
   reveal: Reveal;
   region: string | null;
   publicKey: string | null;
   /** Whether the person's locale writes times on a 12-hour clock. */
   hour12: boolean;
+  owner?: string;
+  interview?: { token: string; draft: WeekDraft };
+  onWeekChange?: (draft: WeekDraft | undefined) => void;
+  onBackToWeek?: () => void;
 }) {
   const router = useRouter();
   const clock = (m: number) => formatClock(m, hour12);
@@ -118,10 +133,12 @@ export function RevealScreen({
           items,
           remindItems: itemsOn,
           morningPlanMinute: morningOn ? morningMinute : null,
+          ...(interview ? { interview } : {}),
         });
         if (!r.ok) return setError(Object.values(r.errors)[0]);
         if (r.safety && r.safety !== "none") return setFlagged(true);
-        clearDraft();
+        clearDraft(owner);
+        if (owner) clearInterviewDraft(owner, "intro");
         router.replace("/today");
       } catch {
         setError("Your day couldn't be confirmed. Try Start my day again.");
@@ -144,17 +161,32 @@ export function RevealScreen({
 
   return (
     <>
-      <header className="page-heading">
+      <header
+        className={`page-heading ${interview ? styles.proposalHeading : ""}`}
+      >
         <p className="eyebrow">Your first day</p>
         <h1 ref={heading} tabIndex={-1}>
           Here&apos;s what I understood
         </h1>
         {reveal.source === "fallback" && (
-          <p className="lede">
-            Here&apos;s a simple start — Koe will learn more as you go.
-          </p>
+          <p className="lede">Here&apos;s a simple start from your answers.</p>
         )}
       </header>
+
+      {interview && (
+        <WeekReveal
+          draft={interview.draft}
+          disabled={pending}
+          onChange={(draft) => {
+            onWeekChange?.(draft);
+            if (owner) {
+              const stored = readInterviewDraft(owner, "intro");
+              if (stored)
+                writeInterviewDraft(owner, "intro", { ...stored, draft });
+            }
+          }}
+        />
+      )}
 
       <Field
         label="You can change this. It becomes what Koe knows about you."
@@ -373,6 +405,19 @@ export function RevealScreen({
           {pending ? "Starting…" : "Start my day"}
         </button>
       </div>
+      <p className="meta">
+        <Link href="/today">Leave for Today</Link>
+      </p>
+      {onBackToWeek && (
+        <button
+          type="button"
+          className="text"
+          disabled={pending}
+          onClick={onBackToWeek}
+        >
+          Back to this week
+        </button>
+      )}
       <p className="meta">Nothing is saved until you tap Start my day.</p>
     </>
   );

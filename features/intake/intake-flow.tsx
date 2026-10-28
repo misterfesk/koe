@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { AskCard, ChatThread, type ChatMessage } from "@/components/chat";
 import { ActionLink } from "@/components/ui";
 import type { ChatAsk } from "@/domain/chat-turn";
+import type { WeekDraft } from "@/domain/week";
 import {
   dayKinds,
   dayLabels,
@@ -28,6 +29,7 @@ import {
   type IntakeStage,
 } from "./draft-store";
 import { RevealScreen } from "./reveal";
+import { WorkInterview } from "./interview";
 import styles from "./intake.module.css";
 
 type Stage = IntakeStage | "thinking" | "reveal";
@@ -136,14 +138,17 @@ export function IntakeFlow({
   region,
   publicKey,
   hour12,
+  owner,
 }: {
   region: string | null;
   publicKey: string | null;
   hour12: boolean;
+  owner?: string;
 }) {
   const [stage, setStage] = useState<Stage>("intro");
   const [draft, setDraft] = useState<IntakeDraft>(blankDraft);
   const [reveal, setReveal] = useState<RevealData | null>(null);
+  const [week, setWeek] = useState<{ token: string; draft: WeekDraft }>();
   const [flag, setFlag] = useState<Stage | null>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -152,7 +157,7 @@ export function IntakeFlow({
   const set = <K extends keyof IntakeDraft>(key: K, value: IntakeDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
   useEffect(() => {
-    const saved = loadDraft();
+    const saved = loadDraft(owner);
     /* eslint-disable react-hooks/set-state-in-effect */
     if (saved) {
       setDraft(saved.draft);
@@ -161,23 +166,35 @@ export function IntakeFlow({
     }
     setRestored(true);
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  }, [owner]);
   useEffect(() => {
     if (restored)
-      saveDraft({
-        version: 2,
-        stage: stage === "thinking" || stage === "reveal" ? 4 : stage,
-        draft,
-      });
-  }, [restored, stage, draft]);
+      saveDraft(
+        {
+          version: 2,
+          stage:
+            stage === "thinking" || stage === "reveal"
+              ? week
+                ? "interview"
+                : 4
+              : stage,
+          draft,
+        },
+        owner,
+      );
+  }, [restored, stage, draft, owner, week]);
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [stage, flag, restored]);
 
-  const finish = async (d: IntakeDraft) => {
+  const finish = async (d: IntakeDraft, forceFallback = false) => {
     setStage("thinking");
-    const result = await buildReveal(toModel(d));
+    // The weekly answer belongs to the interview, not the retired avoidance field.
+    const result = await buildReveal(
+      { ...toModel(d), puttingOff: undefined },
+      forceFallback,
+    );
     if (!result.ok) {
       setError("Your plan couldn't load. Try Done or Skip again.");
       setStage(4);
@@ -229,7 +246,8 @@ export function IntakeFlow({
             return;
           }
         }
-        if (from === 4) await finish(d);
+        if (from === 4 && d.puttingOff.trim()) setStage("interview");
+        else if (from === 4) await finish(d, true);
         else setStage(next);
       } catch {
         setStage(from as IntakeStage);
@@ -247,7 +265,7 @@ export function IntakeFlow({
           if (next === "thinking")
             startTransition(async () => {
               try {
-                await finish(draft);
+                await finish(draft, true);
               } catch {
                 setStage(4);
                 setError("Your plan couldn't load. Try Done or Skip again.");
@@ -265,8 +283,8 @@ export function IntakeFlow({
             Plan your first day
           </h1>
           <p className="lede">
-            Answer four short questions. Every question is optional. Your draft
-            stays in this tab if you leave.
+            Start with four short questions. Every question is optional. Your
+            draft stays in this tab if you leave.
           </p>
         </header>
         <div className={`actions ${styles.introActions}`}>
@@ -301,6 +319,29 @@ export function IntakeFlow({
         region={region}
         publicKey={publicKey}
         hour12={hour12}
+        owner={owner}
+        interview={week}
+        onWeekChange={(draft) =>
+          setWeek((w) => (w && draft ? { ...w, draft } : undefined))
+        }
+        onBackToWeek={week ? () => setStage("interview") : undefined}
+      />
+    );
+  if (stage === "interview")
+    return (
+      <WorkInterview
+        owner={owner ?? "legacy"}
+        region={region}
+        intake={toModel(draft)}
+        seed={draft.puttingOff}
+        onReady={async (token, proposed) => {
+          setWeek({ token, draft: proposed });
+          await finish(draft);
+        }}
+        onSkip={async () => {
+          setWeek(undefined);
+          await finish(draft, true);
+        }}
       />
     );
   if (typeof stage !== "number") return null;

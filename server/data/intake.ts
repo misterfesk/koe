@@ -191,115 +191,122 @@ export type IntroCommit = {
  * version, so a double tap or a retry writes nothing the second time.
  */
 export async function commitIntro(db: Db, userId: string, c: IntroCommit) {
-  return db.transaction(async (tx) => {
-    const ids = c.items.map(() => crypto.randomUUID());
-    // Someone who skipped the intro and opened Today already has a plan for
-    // today. The intro's plan replaces it as the next version.
-    const [latest] = await tx
-      .select()
-      .from(planDay)
-      .where(and(eq(planDay.userId, userId), eq(planDay.day, c.today)))
-      .orderBy(desc(planDay.version))
+  return db.transaction((tx) => commitIntroInTransaction(tx, userId, c));
+}
+
+/** A2b composes intro and approved week in the same outer transaction. */
+export async function commitIntroInTransaction(
+  tx: Parameters<Parameters<Db["transaction"]>[0]>[0],
+  userId: string,
+  c: IntroCommit,
+) {
+  const ids = c.items.map(() => crypto.randomUUID());
+  // Someone who skipped the intro and opened Today already has a plan for
+  // today. The intro's plan replaces it as the next version.
+  const [latest] = await tx
+    .select()
+    .from(planDay)
+    .where(and(eq(planDay.userId, userId), eq(planDay.day, c.today)))
+    .orderBy(desc(planDay.version))
+    .limit(1);
+  if (latest) {
+    const [done] = await tx
+      .select({ id: step.id })
+      .from(step)
+      .where(and(eq(step.userId, userId), eq(step.origin, "intro")))
       .limit(1);
-    if (latest) {
-      const [done] = await tx
-        .select({ id: step.id })
-        .from(step)
-        .where(and(eq(step.userId, userId), eq(step.origin, "intro")))
-        .limit(1);
-      if (done) return { already: true as const };
-      const old = toView(latest).items.flatMap((i) =>
-        i.stepId ? [i.stepId] : [],
-      );
-      if (old.length)
-        await tx
-          .update(step)
-          .set({ status: "archived", updatedAt: new Date() })
-          .where(and(eq(step.userId, userId), inArray(step.id, old)));
-    }
-    const planned = await tx
-      .insert(planDay)
+    if (done) return { already: true as const };
+    const old = toView(latest).items.flatMap((i) =>
+      i.stepId ? [i.stepId] : [],
+    );
+    if (old.length)
+      await tx
+        .update(step)
+        .set({ status: "archived", updatedAt: new Date() })
+        .where(and(eq(step.userId, userId), inArray(step.id, old)));
+  }
+  const planned = await tx
+    .insert(planDay)
+    .values({
+      userId,
+      day: c.today,
+      mode: "normal",
+      version: (latest?.version ?? 0) + 1,
+      reason: "intro",
+      snapshotEnc: seal(
+        JSON.stringify({
+          items: c.items.map((it, i) => ({ ...it, stepId: ids[i] })),
+        }),
+      ),
+    })
+    .onConflictDoNothing()
+    .returning({ id: planDay.id });
+  if (!planned.length) return { already: true as const };
+
+  // The tone they chose is a setting, not a memory: it applies either way.
+  if (c.model.tone)
+    await tx
+      .update(profile)
+      .set({ tone: c.model.tone, updatedAt: new Date() })
+      .where(eq(profile.userId, userId));
+
+  if (c.memoryOn) {
+    await tx
+      .insert(userModel)
       .values({
         userId,
-        day: c.today,
-        mode: "normal",
-        version: (latest?.version ?? 0) + 1,
-        reason: "intro",
-        snapshotEnc: seal(
-          JSON.stringify({
-            items: c.items.map((it, i) => ({ ...it, stepId: ids[i] })),
-          }),
-        ),
+        dataEnc: seal(JSON.stringify({ ...c.model, v: 1 })),
+        summaryEnc: seal(c.summary),
       })
-      .onConflictDoNothing()
-      .returning({ id: planDay.id });
-    if (!planned.length) return { already: true as const };
-
-    // The tone they chose is a setting, not a memory: it applies either way.
-    if (c.model.tone)
-      await tx
-        .update(profile)
-        .set({ tone: c.model.tone, updatedAt: new Date() })
-        .where(eq(profile.userId, userId));
-
-    if (c.memoryOn) {
-      await tx
-        .insert(userModel)
-        .values({
-          userId,
+      .onConflictDoUpdate({
+        target: userModel.userId,
+        set: {
           dataEnc: seal(JSON.stringify({ ...c.model, v: 1 })),
           summaryEnc: seal(c.summary),
-        })
-        .onConflictDoUpdate({
-          target: userModel.userId,
-          set: {
-            dataEnc: seal(JSON.stringify({ ...c.model, v: 1 })),
-            summaryEnc: seal(c.summary),
-            version: sql`${userModel.version} + 1`,
-            updatedAt: new Date(),
-          },
-        });
-      for (const m of c.memories)
-        await tx.insert(memoryCard).values({
-          userId,
-          kind: m.kind,
-          textEnc: seal(m.text),
-          source: "intro",
-        });
-    }
-
-    if (c.people.length) {
-      const known = new Set(
-        (await tx.select().from(person).where(eq(person.userId, userId))).map(
-          (p) => open(p.nameEnc).trim().toLowerCase(),
-        ),
-      );
-      for (const name of c.people) {
-        if (known.has(name.trim().toLowerCase())) continue;
-        known.add(name.trim().toLowerCase());
-        await tx
-          .insert(person)
-          .values({ userId, nameEnc: seal(name), channel: "message" });
-      }
-    }
-
-    for (const [i, item] of c.items.entries())
-      await insertStep(
-        tx,
-        userId,
-        {
-          id: ids[i],
-          area: kindAreas[item.kind],
-          title: item.title,
-          why: item.why,
-          kind: item.kind,
-          minuteOfDay: item.minuteOfDay,
-          size: item.size,
-          origin: "intro",
-          when: "today",
+          version: sql`${userModel.version} + 1`,
+          updatedAt: new Date(),
         },
-        c.today,
-      );
-    return { already: false as const };
-  });
+      });
+    for (const m of c.memories)
+      await tx.insert(memoryCard).values({
+        userId,
+        kind: m.kind,
+        textEnc: seal(m.text),
+        source: "intro",
+      });
+  }
+
+  if (c.people.length) {
+    const known = new Set(
+      (await tx.select().from(person).where(eq(person.userId, userId))).map(
+        (p) => open(p.nameEnc).trim().toLowerCase(),
+      ),
+    );
+    for (const name of c.people) {
+      if (known.has(name.trim().toLowerCase())) continue;
+      known.add(name.trim().toLowerCase());
+      await tx
+        .insert(person)
+        .values({ userId, nameEnc: seal(name), channel: "message" });
+    }
+  }
+
+  for (const [i, item] of c.items.entries())
+    await insertStep(
+      tx,
+      userId,
+      {
+        id: ids[i],
+        area: kindAreas[item.kind],
+        title: item.title,
+        why: item.why,
+        kind: item.kind,
+        minuteOfDay: item.minuteOfDay,
+        size: item.size,
+        origin: "intro",
+        when: "today",
+      },
+      c.today,
+    );
+  return { already: false as const };
 }

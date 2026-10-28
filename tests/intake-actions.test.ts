@@ -140,6 +140,22 @@ describe("buildReveal", { timeout: 30_000 }, () => {
     expect(r.reveal?.memories).toEqual([]);
   });
 
+  it("keeps memory-off and deliberate Skip reveals local", async () => {
+    const llm = await import("@/server/llm/intake");
+    const synth = vi.spyOn(llm, "synthesiseIntake");
+    await setup(false);
+    expect((await reveal({ puttingOff: "Update the CV" })).reveal?.source).toBe(
+      "fallback",
+    );
+    await setup(true);
+    const { buildReveal } = await import("@/server/actions/intake");
+    expect(
+      await buildReveal({ puttingOff: "Update the CV" }, true),
+    ).toMatchObject({ ok: true, reveal: { source: "fallback" } });
+    expect(synth).not.toHaveBeenCalled();
+    synth.mockRestore();
+  });
+
   it("rejects answers outside the choices", async () => {
     await setup();
     const { buildReveal } = await import("@/server/actions/intake");
@@ -171,6 +187,90 @@ describe("startMyDay", { timeout: 30_000 }, () => {
       return (e as Error).message;
     }
   };
+
+  const proposed = async (weekId?: string, expectedVersion?: number) => {
+    const { startInterview, advanceInterview } =
+      await import("@/server/actions/interview");
+    const start = await startInterview({
+      intake: model,
+      ...(weekId ? { weekId, expectedVersion } : {}),
+    });
+    if (!start.ok || !start.token) throw new Error("start failed");
+    const answer = await advanceInterview({
+      token: start.token,
+      text: "Update the CV",
+      intent: "answer",
+    });
+    if (!answer.ok || !answer.token) throw new Error("answer failed");
+    const pieces = await advanceInterview({
+      token: answer.token,
+      intent: "propose",
+    });
+    if (!pieces.ok || !pieces.token || !pieces.draft)
+      throw new Error("proposal failed");
+    return { token: pieces.token, draft: pieces.draft };
+  };
+
+  it("saves intro and confirmed week atomically and keeps a retry idempotent", async () => {
+    const { db, schema } = await setup();
+    const interview = await proposed();
+    const original = interview.draft.items[0].captured.what;
+    interview.draft.items[0].captured.what = "Refresh the CV title";
+    expect(await run({ ...payload(), interview })).toEqual({ ok: true });
+    expect(await db.select().from(schema.week)).toHaveLength(1);
+    expect(await db.select().from(schema.weekItem)).toHaveLength(1);
+    expect(await db.select().from(schema.piece)).toHaveLength(1);
+    expect(await db.select().from(schema.planDay)).toHaveLength(1);
+    const { getWeek } = await import("@/server/data/week");
+    const [row] = await db.select().from(schema.week);
+    const approved = await getWeek(db, "a", row.id);
+    expect(approved!.items[0].captured).toMatchObject({
+      what: "Refresh the CV title",
+      originalWhat: original,
+    });
+    expect(approved!.items[0].pieces[0].sourcePhrase).toBe(original);
+    expect(await run({ ...payload(), interview })).toEqual({ ok: true });
+    expect(await db.select().from(schema.weekItem)).toHaveLength(1);
+    expect(await db.select().from(schema.planDay)).toHaveLength(1);
+  });
+
+  it("does not save either half when the interview token is foreign or expired", async () => {
+    const { db, schema } = await setup();
+    expect(
+      await run({ ...payload(), interview: { token: "expired", draft: {} } }),
+    ).toMatchObject({ ok: false });
+    expect(await db.select().from(schema.userModel)).toHaveLength(0);
+    expect(await db.select().from(schema.planDay)).toHaveLength(0);
+    expect(await db.select().from(schema.week)).toHaveLength(0);
+  });
+
+  it("does not write an intro while coaching is paused", async () => {
+    const { db, schema, reload } = await setup();
+    await db
+      .update(schema.profile)
+      .set({ coachingPausedAt: new Date() })
+      .where(eq(schema.profile.userId, "a"));
+    await reload();
+    expect(await run(payload())).toEqual({ ok: true, safety: "concern" });
+    expect(await db.select().from(schema.planDay)).toHaveLength(0);
+    expect(await db.select().from(schema.userModel)).toHaveLength(0);
+  });
+
+  it("rolls back the intro when the confirmed week changed in another tab", async () => {
+    const { db, schema } = await setup();
+    const { saveInterviewWeek } = await import("@/server/actions/interview");
+    const saved = await saveInterviewWeek(await proposed());
+    if (!saved.ok || !saved.week) throw new Error("save failed");
+    const interview = await proposed(saved.week.id, saved.week.version);
+    await db
+      .update(schema.week)
+      .set({ version: saved.week.version + 1 })
+      .where(eq(schema.week.id, saved.week.id));
+    expect(await run({ ...payload(), interview })).not.toEqual({ ok: true });
+    expect(await db.select().from(schema.userModel)).toHaveLength(0);
+    expect(await db.select().from(schema.planDay)).toHaveLength(0);
+    expect(await db.select().from(schema.weekItem)).toHaveLength(1);
+  });
 
   it("writes the approved things and returns success for draft cleanup", async () => {
     const { db, schema } = await setup();

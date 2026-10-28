@@ -15,6 +15,15 @@ vi.mock("@/server/actions/intake", () => actions);
 vi.mock("@/features/intake/reveal", () => ({
   RevealScreen: () => <h1>Plan ready</h1>,
 }));
+vi.mock("@/features/intake/interview", () => ({
+  WorkInterview: ({ seed, onSkip }: { seed: string; onSkip: () => void }) => (
+    <>
+      <h1>Weekly interview</h1>
+      <p>{seed}</p>
+      <button onClick={onSkip}>Enough for now</button>
+    </>
+  ),
+}));
 vi.mock("@/features/safety/safety-check", () => ({
   SafetyCheck: ({ onResume }: { onResume: () => void }) => (
     <button onClick={onResume}>Resume safely</button>
@@ -49,6 +58,9 @@ it("recovers a failed text action without losing the answer", async () => {
     expect(screen.getByRole("button", { name: "Done" })).toBeEnabled(),
   );
   fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  await screen.findByRole("heading", { name: "Weekly interview" });
+  expect(screen.getByText("Update my CV")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Enough for now" }));
   await screen.findByRole("heading", { name: "Plan ready" });
 });
 it("screens wake Other and drops it before safety resumes", async () => {
@@ -86,5 +98,5 @@ it("resumes a flagged weekly answer into synthesis without unsafe words", async 
   fireEvent.click(screen.getByRole("button", { name: "Done" }));
   fireEvent.click(await screen.findByRole("button", { name: "Resume safely" }));
   await screen.findByRole("heading", { name: "Plan ready" });
-  expect(actions.buildReveal.mock.calls[0][0].puttingOff).toBe("");
+  expect(actions.buildReveal.mock.calls[0][0].puttingOff).toBeUndefined();
 });

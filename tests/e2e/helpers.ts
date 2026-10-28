@@ -1,5 +1,16 @@
 import { expect, type Page } from "@playwright/test";
 
+export async function intakeDraftText(page: Page) {
+  return page.evaluate(() => {
+    const key = Object.keys(sessionStorage).find((key) =>
+      key.startsWith("koe.plan-draft:intake:"),
+    );
+    return key
+      ? sessionStorage.getItem(key)
+      : sessionStorage.getItem("koe.intake.draft.v1");
+  });
+}
+
 /** Starts a fresh guest session through the real welcome dialog, then skips the intake. */
 export async function startAsGuest(page: Page, region = "SG") {
   await page.goto("/");
@@ -30,4 +41,29 @@ export async function noHorizontalScroll(page: Page) {
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
   expect(overflow).toBeLessThanOrEqual(1);
+}
+
+/** Completes the deterministic interview after a first thing has been supplied. */
+export async function proposeInterview(page: Page) {
+  const title = page.getByRole("heading", { level: 1 });
+  await expect(title).toHaveText("Where does it get stuck?");
+  await page
+    .getByLabel("Your answer")
+    .fill("Choosing which words to use feels hard");
+  await page.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(title).toHaveText("What would finishing look like this week?");
+  await page
+    .getByLabel("Your answer")
+    .fill("Only the opening paragraph is left");
+  await page.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(title).toHaveText(
+    "Want to break this into pieces for the week?",
+  );
+  await page
+    .getByRole("button", { name: "Break it down", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Show the pieces", exact: true })
+    .click();
+  await expect(title).toHaveText("Your week, in smaller pieces");
 }

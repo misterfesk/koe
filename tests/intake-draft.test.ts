@@ -104,3 +104,28 @@ it("fits two long day notes without truncating accepted text during mapping", ()
   expect(restored.notice).toContain("Check them");
   expect(toModel(restored.draft).notes?.day).toHaveLength(200);
 });
+
+it("never attributes unscoped or another owner's words to the current person", () => {
+  saveDraft({
+    version: 2,
+    stage: "interview",
+    draft: { ...blankDraft(), puttingOff: "Open the CV" },
+  });
+  expect(loadDraft("a")).toBeNull();
+  saveDraft(
+    {
+      version: 2,
+      stage: "interview",
+      draft: { ...blankDraft(), puttingOff: "Open the CV" },
+    },
+    "a",
+  );
+  expect(loadDraft("b")).toBeNull();
+  expect(loadDraft("a")?.stage).toBe("interview");
+  saveDraft(
+    { version: 2, stage: 2, draft: { ...blankDraft(), goals: ["sleep"] } },
+    "b",
+  );
+  expect(loadDraft("a")?.draft.puttingOff).toBe("Open the CV");
+  expect(loadDraft("b")?.draft.goals).toEqual(["sleep"]);
+});

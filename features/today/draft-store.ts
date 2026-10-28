@@ -17,14 +17,23 @@ export const problemDraft = z.object({
 
 /** Called only after account deletion succeeded. Other owners and apps stay intact. */
 export function clearOwnerDrafts(storage: Storage, owner: string) {
+  let legacyOwned = true;
+  try {
+    const legacy = JSON.parse(storage.getItem("koe.intake.draft.v1") ?? "null");
+    legacyOwned = !legacy?.owner || legacy.owner === owner;
+  } catch {
+    /* Unattributed legacy words are cleared on deletion. */
+  }
   const keys: string[] = [];
   for (let i = 0; i < storage.length; i++) {
     const key = storage.key(i);
     if (
-      key === "koe.intake.draft.v1" ||
+      (key === "koe.intake.draft.v1" && legacyOwned) ||
       key === `koe.plan-draft:add:${owner}` ||
       key === `koe.plan-draft:problem:${owner}` ||
       key === `koe.plan-draft:model:${owner}` ||
+      key === `koe.plan-draft:intake:${owner}` ||
+      key?.startsWith(`koe.plan-draft:interview:${owner}:`) ||
       key?.startsWith(`koe.plan-draft:problem-plan:${owner}:`) ||
       key?.startsWith(`koe.plan-draft:reach-out:${owner}:`) ||
       key?.startsWith(`koe.plan-draft:linked:${owner}:`)
@@ -46,10 +55,10 @@ export function transferOwnerDrafts(
   ).filter((key): key is string => !!key);
   for (const key of keys) {
     let destination: string | undefined;
-    for (const kind of ["add", "problem", "model"])
+    for (const kind of ["add", "problem", "model", "intake"])
       if (key === `koe.plan-draft:${kind}:${from}`)
         destination = `koe.plan-draft:${kind}:${to}`;
-    for (const kind of ["problem-plan", "reach-out", "linked"]) {
+    for (const kind of ["problem-plan", "reach-out", "linked", "interview"]) {
       const prefix = `koe.plan-draft:${kind}:${from}:`;
       if (key.startsWith(prefix))
         destination =
@@ -63,7 +72,27 @@ export function transferOwnerDrafts(
       storage.getItem(destination) !== raw
     )
       destination = `koe.plan-draft:linked:${to}:` + crypto.randomUUID();
-    storage.setItem(destination, raw);
+    let moved = raw;
+    if (key === `koe.plan-draft:intake:${from}`) {
+      try {
+        moved = JSON.stringify({ ...JSON.parse(raw), owner: to });
+      } catch {
+        /* Validation happens on read. */
+      }
+    }
+    storage.setItem(destination, moved);
     storage.removeItem(key);
+  }
+  // Only a confirmed guest link can move the intake envelope to its new owner.
+  try {
+    const raw = storage.getItem("koe.intake.draft.v1");
+    const draft = raw ? JSON.parse(raw) : null;
+    if (draft?.owner === from)
+      storage.setItem(
+        "koe.intake.draft.v1",
+        JSON.stringify({ ...draft, owner: to }),
+      );
+  } catch {
+    /* Invalid legacy drafts are never revived. */
   }
 }

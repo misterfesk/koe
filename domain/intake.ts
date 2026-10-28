@@ -324,9 +324,7 @@ export function templateSummary(model: IntakeModel): string {
   else if (model.people.includes("nobody"))
     parts.push("Right now you don't have anyone in particular to lean on.");
   if (!parts.length)
-    parts.push(
-      "You skipped the questions, so Koe is starting with a simple, gentle day.",
-    );
+    parts.push("Your first day starts with a plan you can change.");
   return parts.join(" ").slice(0, 400);
 }
 

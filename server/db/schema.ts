@@ -562,7 +562,57 @@ export const shelfRefresh = pgTable(
   ],
 );
 
+/** Rolling weeks intentionally have no owner/date uniqueness: guest collisions survive transfer. */
+export const week = pgTable("week", {
+  id: id(),
+  userId: owner(),
+  startedOn: day("started_on").notNull(),
+  reviewOn: day("review_on").notNull(),
+  labelEnc: text("label_enc").notNull(),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  approvalIds: jsonb("approval_ids").$type<string[]>().notNull().default([]),
+});
+export const weekItem = pgTable("week_item", {
+  id: id(),
+  userId: owner(),
+  weekId: text("week_id")
+    .notNull()
+    .references(() => week.id, { onDelete: "cascade" }),
+  capturedEnc: text("captured_enc").notNull(),
+  order: integer("position").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export const piece = pgTable("piece", {
+  id: id(),
+  userId: owner(),
+  weekItemId: text("week_item_id")
+    .notNull()
+    .references(() => weekItem.id, { onDelete: "cascade" }),
+  dataEnc: text("data_enc").notNull(),
+  order: integer("position").notNull(),
+  status: text("status", { enum: ["ready", "done", "released"] })
+    .notNull()
+    .default("ready"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const movableTables = [
+  week,
+  weekItem,
+  piece,
   shelfItem,
   shelfRefresh,
   checkIn,

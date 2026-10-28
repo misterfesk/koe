@@ -1,6 +1,10 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { noHorizontalScroll } from "./helpers";
+import {
+  intakeDraftText,
+  noHorizontalScroll,
+  proposeInterview,
+} from "./helpers";
 
 /** Opens the welcome dialog and starts, stopping on the intake. */
 async function startIntake(page: Page) {
@@ -157,9 +161,7 @@ test("welcome, four chat turns, reveal and Start my day land on Today", async ({
   await page.getByRole("button", { name: "Start my day" }).click();
   await expect(page).toHaveURL(/\/today$/);
 
-  expect(
-    await page.evaluate(() => sessionStorage.getItem("koe.intake.draft.v1")),
-  ).toBeNull();
+  expect(await intakeDraftText(page)).toBeNull();
 
   // Today shows the three items with their times and reasons.
   const today = page.getByRole("heading", { level: 3 });
@@ -316,9 +318,7 @@ test("a reload picks up the intake where it was", async ({ page }) => {
   await page.getByRole("button", { name: "I'm safe for now" }).click();
   await page.getByRole("button", { name: "Carry on with Koe" }).click();
   await page.reload();
-  const kept = await page.evaluate(() =>
-    window.sessionStorage.getItem("koe.intake.draft.v1"),
-  );
+  const kept = await intakeDraftText(page);
   expect(kept).not.toContain("end it all");
 });
 
@@ -346,12 +346,13 @@ test("inline Other and weekly words reach a saved lean plan", async ({
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByLabel("Your answer").fill("Update my CV");
   await page.getByLabel("Your answer").press("Enter");
+  await proposeInterview(page);
+  await page.getByRole("button", { name: "Review your first day" }).click();
   await expect(heading(page, "Here's what I understood")).toBeVisible();
   await page.getByRole("button", { name: "Start my day" }).click();
   await expect(page).toHaveURL(/\/today$/);
   const body = await (await page.request.get("/api/export")).json();
   expect(body.userModel.model).toMatchObject({
-    puttingOff: "Update my CV",
     people: [],
     names: [],
     tone: "calm",
@@ -362,9 +363,14 @@ test("inline Other and weekly words reach a saved lean plan", async ({
     },
   });
   expect(body.userModel.model.support).toBeUndefined();
+  expect(body.userModel.model.puttingOff).toBeUndefined();
+  expect(body.weeks[0].items[0].captured.what).toBe("Update my CV");
   expect(
-    await page.evaluate(() => sessionStorage.getItem("koe.intake.draft.v1")),
-  ).toBeNull();
+    body.memoryCards.some((card: { text: string }) =>
+      /keep putting off/i.test(card.text),
+    ),
+  ).toBe(false);
+  expect(await intakeDraftText(page)).toBeNull();
   await page.context().clearCookies();
   await startIntake(page);
   await begin(page);
@@ -408,8 +414,17 @@ test("malformed and legacy drafts resume without hidden answers", async ({
   await startIntake(page);
   await page.evaluate(() =>
     sessionStorage.setItem(
-      "koe.intake.draft.v1",
+      Object.keys(sessionStorage).find((key) =>
+        key.startsWith("koe.plan-draft:intake:"),
+      )!,
       JSON.stringify({
+        owner: JSON.parse(
+          sessionStorage.getItem(
+            Object.keys(sessionStorage).find((key) =>
+              key.startsWith("koe.plan-draft:intake:"),
+            )!,
+          )!,
+        ).owner,
         stage: 2,
         draft: {
           goals: "bad",
@@ -479,18 +494,14 @@ test("a risky reveal edit preserves the intake draft", async ({ page }) => {
   await skip(page);
   await skip(page);
   await expect(heading(page, "Here's what I understood")).toBeVisible();
-  const before = await page.evaluate(() =>
-    sessionStorage.getItem("koe.intake.draft.v1"),
-  );
+  const before = await intakeDraftText(page);
   expect(before).toContain("sleep");
   await page.getByLabel(/You can change this/).fill("I want to end it all");
   await page.getByRole("button", { name: "Start my day" }).click();
   await expect(
     page.getByRole("heading", { name: /are you safe right now/ }),
   ).toBeVisible();
-  expect(
-    await page.evaluate(() => sessionStorage.getItem("koe.intake.draft.v1")),
-  ).toBe(before);
+  expect(await intakeDraftText(page)).toBe(before);
 });
 
 test("a failed Start my day request preserves the intake draft", async ({
@@ -500,9 +511,7 @@ test("a failed Start my day request preserves the intake draft", async ({
   await begin(page);
   for (let n = 0; n < 4; n++) await skip(page);
   await expect(heading(page, "Here's what I understood")).toBeVisible();
-  const before = await page.evaluate(() =>
-    sessionStorage.getItem("koe.intake.draft.v1"),
-  );
+  const before = await intakeDraftText(page);
   expect(before).not.toBeNull();
   await page.route("**/intake", async (route) => {
     if (route.request().headers()["next-action"]) await route.abort("failed");
@@ -514,8 +523,6 @@ test("a failed Start my day request preserves the intake draft", async ({
       .getByRole("alert")
       .filter({ hasText: "Your day couldn't be confirmed." }),
   ).toBeVisible();
-  expect(
-    await page.evaluate(() => sessionStorage.getItem("koe.intake.draft.v1")),
-  ).toBe(before);
+  expect(await intakeDraftText(page)).toBe(before);
   await expect(page).toHaveURL(/\/intake$/);
 });
