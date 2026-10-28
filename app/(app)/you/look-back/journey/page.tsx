@@ -46,11 +46,11 @@ export default async function Page({
           node: (
             <>
               <p className="meta">
-                Step · {outcomeLabels[r.outcome]}
+                From your day · {outcomeLabels[r.outcome]}
                 {r.helped ? " · " + helpedLabels[r.helped] : ""}
               </p>
               <p>
-                <Link href={"/steps/" + s.id}>{s.title}</Link>
+                <Link href={"/you/look-back/entry/" + s.id}>{s.title}</Link>
               </p>
               {r.barrier && (
                 <p className="note-text">In the way: {r.barrier}</p>
@@ -150,7 +150,7 @@ export default async function Page({
         ) : (
           <p className="meta">
             {ratings < MIN_RATINGS
-              ? `After ${MIN_RATINGS} steps you've rated with "did it help?", simple counts appear here. So far: ${ratings}.`
+              ? `After ${MIN_RATINGS} answers about what helped, simple counts appear here. So far: ${ratings}.`
               : "Nothing stands out yet. That's normal."}
           </p>
         )}
@@ -158,7 +158,7 @@ export default async function Page({
 
       {days.length === 0 ? (
         <Empty>
-          Nothing here yet. Steps you report on Today, notes and conversations
+          Nothing here yet. Things you report on Today, notes and conversations
           show up here.
         </Empty>
       ) : (

@@ -30,7 +30,7 @@ import { daysBetween } from "./time";
 // UNREVIEWED: engineering defaults; a clinician has not reviewed the wording.
 
 /** A planned item as stored in a plan version: the step it belongs to is optional until saved. */
-export type DayItem = PlanItem & { stepId?: string };
+export type DayItem = PlanItem & { stepId?: string; problem?: string };
 
 const sizeOrder: PlanSize[] = ["tiny", "small", "medium"];
 export const smallerSize = (s: PlanSize): PlanSize =>

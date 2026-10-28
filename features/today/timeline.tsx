@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { RiskLevel } from "@/domain/safety";
 import { sizeLabels } from "@/domain/plan-menu";
 import {
@@ -50,7 +50,12 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
     });
 
   return (
-    <li className={styles.card} data-reported={!!report}>
+    <li
+      id={"entry-" + entry.id}
+      className={styles.card}
+      style={{ scrollMarginTop: "6rem" }}
+      data-reported={!!report}
+    >
       <p className="eyebrow">
         {entry.time && (
           <>
@@ -62,7 +67,7 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
         {entry.repeats ? " · " + entry.repeats : ""}
       </p>
       <h3 className={styles.title}>
-        <Link href={"/steps/" + entry.id}>{entry.title}</Link>
+        <Link href={"#entry-" + entry.id}>{entry.title}</Link>
       </h3>
       {entry.size && (
         <p className={styles.size}>
@@ -277,6 +282,36 @@ export function Timeline({
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const [safety, setSafety] = useState<RiskLevel>("none");
+  const entryIds = entries.map((entry) => entry.id).join(",");
+  useEffect(() => {
+    let frame = 0;
+    const positionEntry = () => {
+      cancelAnimationFrame(frame);
+      // A legacy redirect can deliver the fragment before the timeline streams
+      // in. Wait until hydration and the router's own scroll work have settled.
+      frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(() => {
+          let id: string;
+          try {
+            id = decodeURIComponent(window.location.hash.slice(1));
+          } catch {
+            return;
+          }
+          if (!id.startsWith("entry-")) return;
+          document.getElementById(id)?.scrollIntoView({
+            block: "start",
+            behavior: "instant",
+          });
+        });
+      });
+    };
+    positionEntry();
+    window.addEventListener("hashchange", positionEntry);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("hashchange", positionEntry);
+    };
+  }, [entryIds, safety]);
   if (safety !== "none")
     return <SafetyCheck region={region} onResume={() => setSafety("none")} />;
   return (
@@ -316,6 +351,11 @@ export function Timeline({
           </button>
         )}
       </div>
+      {canAdd && (
+        <p>
+          <Link href="/today/problem">Work through a problem →</Link>
+        </p>
+      )}
       {message && (
         <p className="meta" role="status">
           {message}

@@ -13,6 +13,8 @@ export default defineConfig({
     },
   },
   test: {
+    // PGlite suites each own a database; keep local memory use bounded.
+    maxWorkers: 2,
     environment: "jsdom",
     include: ["tests/**/*.test.{ts,tsx}"],
     setupFiles: ["./tests/setup.ts"],

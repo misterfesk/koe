@@ -31,10 +31,7 @@ export default async function Page() {
       <section aria-labelledby="counts" className="panel">
         <h2 id="counts">What happened</h2>
         {s.answered === 0 ? (
-          <p>
-            No steps reported this week. That&apos;s fine: a look-back is still
-            a good moment to choose one small thing for next week.
-          </p>
+          <p>No answers from your day yet. You can still save a note.</p>
         ) : (
           <p>
             You said how it went {s.answered}{" "}
@@ -63,8 +60,8 @@ export default async function Page() {
               {s.surprises.length === 1
                 ? "Once this week"
                 : `${s.surprises.length} times this week`}
-              , you didn&apos;t expect a step to help, and then it did. Low mood
-              tends to predict things will go worse than they do.
+              , you didn&apos;t expect something to help, and then it did. Low
+              mood tends to predict things will go worse than they do.
             </p>
           </>
         )}

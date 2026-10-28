@@ -130,6 +130,7 @@ export async function writePlanVersion(
           id: item.stepId,
           area: kindAreas[item.kind],
           title: item.title,
+          problem: item.problem,
           why: item.why,
           kind: item.kind,
           minuteOfDay: item.minuteOfDay,

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { randomBytes } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   afterAll,
   beforeAll,
@@ -50,6 +50,7 @@ vi.mock("@/server/llm/usage", () => ({
       purpose: "search",
       model: "tavily",
       ok: !!r.ok,
+      createdAt: new Date(),
     });
   },
 }));
@@ -382,15 +383,66 @@ describe("Shelf pipeline", { timeout: 30000 }, () => {
     const { refreshShelfFor } = await import("@/server/search/shelf");
     await refreshShelfFor(await viewer("b"), tags, "cache");
     for (let i = 0; i < 3; i++)
-      await db
-        .insert(s.agentRun)
-        .values({ userId: "a", purpose: "search", model: "tavily", ok: false });
+      await db.insert(s.agentRun).values({
+        userId: "a",
+        purpose: "search",
+        model: "tavily",
+        ok: false,
+        createdAt: new Date(),
+      });
     const v = await viewer();
     expect((await refreshShelfFor(v, tags, "cached")).count).toBe(3);
     expect((await refreshShelfFor(v, { goal: "energy" }, "cap")).ok).toBe(
       false,
     );
     expect(fake.search).toHaveBeenCalledTimes(1);
+  });
+  it("reserves searches at the real UTC instant with a non-UTC database clock", async () => {
+    const s = await import("@/server/db/schema");
+    const { refreshShelfFor } = await import("@/server/search/shelf");
+    const priorTimezone = await db.execute<{ timezone: string }>(
+      sql`select current_setting('TimeZone') as timezone`,
+    );
+    try {
+      await db.execute(sql`select set_config('TimeZone', 'Etc/GMT+6', false)`);
+      const utcStart = new Date();
+      utcStart.setUTCHours(0, 0, 0, 0);
+      const yesterday = new Date(utcStart.getTime() - 1);
+      for (let i = 0; i < 3; i++)
+        await db.insert(s.agentRun).values({
+          userId: "a",
+          purpose: "search",
+          model: "tavily",
+          ok: false,
+          createdAt: yesterday,
+        });
+      const v = await viewer();
+      const before = Date.now();
+      expect((await refreshShelfFor(v, tags, "clock")).count).toBe(3);
+      const rows = await db
+        .select()
+        .from(s.agentRun)
+        .where(eq(s.agentRun.userId, "a"));
+      const reserved = rows.find((r) => r.ok)!;
+      expect(reserved.createdAt.getTime()).toBeGreaterThanOrEqual(before);
+      expect(reserved.createdAt.getTime()).toBeLessThanOrEqual(Date.now());
+      for (let i = 0; i < 2; i++)
+        await db.insert(s.agentRun).values({
+          userId: "a",
+          purpose: "search",
+          model: "tavily",
+          ok: false,
+          createdAt: new Date(),
+        });
+      expect(
+        (await refreshShelfFor(v, { goal: "energy" }, "clock-cap")).ok,
+      ).toBe(false);
+      expect(fake.search).toHaveBeenCalledTimes(1);
+    } finally {
+      await db.execute(
+        sql`select set_config('TimeZone', ${priorTimezone.rows[0].timezone}, false)`,
+      );
+    }
   });
   it("handles search failure once per cooldown, then permits retry", async () => {
     const { refreshShelfFor } = await import("@/server/search/shelf");

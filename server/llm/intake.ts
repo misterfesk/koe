@@ -38,7 +38,7 @@ import { formatMinutes } from "@/domain/time";
 import { completeJson } from "./nebius";
 
 /** Bump when the prompt or the reply shape changes; evals report it. */
-export const INTAKE_PROMPT_VERSION = "intake-3";
+export const INTAKE_PROMPT_VERSION = "intake-4";
 
 /** How long the person waits before Koe gives up on the model and starts simply. */
 export const INTAKE_TIMEOUT_MS = 40_000;
@@ -94,6 +94,9 @@ function systemPrompt(model: IntakeModel) {
     "",
     "TITLES",
     titleRulesPromptText(),
+    "Give at least two titles a detail from the person's answers when available.",
+    "Avoid generic labels when you can name the actual task, person or interest.",
+    "Use only given details. Do not invent favourite songs, places or routines.",
     "",
     "COMPOSITION RULES",
     compositionPromptText(ctx),

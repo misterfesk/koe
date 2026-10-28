@@ -46,7 +46,14 @@ export async function getUserModel(
 }
 
 const snapshot = z.object({
-  items: z.array(planItemSchema.extend({ stepId: z.string().optional() })),
+  items: z.array(
+    planItemSchema.extend({
+      // The person's own title may be shorter than a generated suggestion.
+      title: z.string().trim().min(1).max(80),
+      stepId: z.string().optional(),
+      problem: z.string().optional(),
+    }),
+  ),
 });
 
 export type PlanDayItem = DayItem;

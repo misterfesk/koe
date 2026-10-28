@@ -117,44 +117,49 @@ test("an answer can be undone, and Partly is its own answer", async ({
   await expect(card.getByRole("button", { name: "Done" })).toBeVisible();
 });
 
-test("plan a repeating step with an if-then cue", async ({ page }) => {
+test("the old add address uses today's plan and undo", async ({ page }) => {
   await startAsGuest(page);
   await page.goto("/steps/new");
-  await page.getByRole("button", { name: "Get something done" }).click();
-  await page.getByLabel("Your step").fill("Water the plants");
-  await page.getByRole("button", { name: "After breakfast" }).click();
-  await page.getByRole("button", { name: "Repeat on days…" }).click();
-  await page.getByRole("button", { name: "Choose this step" }).click();
-  await expect(page.locator("p.error")).toContainText("Pick at least one day");
-  await page.getByText("Sat", { exact: true }).click();
-  await page.getByRole("button", { name: "Choose this step" }).click();
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Water the plants" }),
-  ).toBeVisible();
-  await expect(page.getByText("When: After breakfast")).toBeVisible();
-
-  await page.goto("/steps");
+  await expect(page).toHaveURL(/\/today\/add$/);
+  await page.getByRole("button", { name: "Be kind to yourself" }).click();
+  await page.getByLabel("What is it?").fill("Water the plants");
+  await page.getByLabel("Time, if you have one").fill("17:30");
+  await page.getByRole("button", { name: "Add to today" }).click();
   await expect(page).toHaveURL(/\/today$/);
+  await expect(entry(page, "Water the plants")).toBeVisible();
+  await page
+    .getByRole("region", { name: "What changed" })
+    .getByRole("button", { name: "Undo" })
+    .click();
+  await expect(
+    page.getByRole("heading", { level: 3, name: "Water the plants" }),
+  ).toHaveCount(0);
 });
 
-test("problem solving ends in a planned step", async ({ page }) => {
+test("problem solving ends in today's plan and keeps the person's words", async ({
+  page,
+}) => {
   await startAsGuest(page);
   await page.goto("/steps/problem");
+  await expect(page).toHaveURL(/\/today\/problem$/);
   await page.getByLabel("What's the problem?").fill("I keep missing my bus");
   await page.getByRole("button", { name: "Next: options" }).click();
   await page.getByLabel("Option 1").fill("Set an alarm 10 minutes earlier");
   await page.getByLabel("Option 2").fill("Lay out clothes the night before");
   await page.getByRole("button", { name: "Next: choose one" }).click();
-  await page.getByText("Lay out clothes the night before").click();
+  await page
+    .getByText("Lay out clothes the night before", { exact: true })
+    .click();
   await page.getByRole("button", { name: "Next: plan it" }).click();
-  await page.getByRole("button", { name: "Choose this step" }).click();
+  await page.getByRole("button", { name: "Add to today" }).click();
+  const card = entry(page, "Lay out clothes the night before");
+  await expect(card).toBeVisible();
+  const id = (await card.getAttribute("id"))!.slice("entry-".length);
+  await page.goto("/you/look-back/entry/" + id);
+  await expect(page.getByText(/I keep missing my bus/)).toBeVisible();
   await expect(
-    page.getByRole("heading", {
-      level: 1,
-      name: "Lay out clothes the night before",
-    }),
+    page.getByText(/Option: Set an alarm 10 minutes earlier/),
   ).toBeVisible();
-  await expect(page.getByText("I keep missing my bus")).toBeVisible();
 });
 
 test("a worrying note gets the safety check and pauses coaching until resumed", async ({

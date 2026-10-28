@@ -8,8 +8,8 @@ const pages = [
   "/shelf",
   "/you",
   "/intake",
-  "/steps/new",
-  "/steps/problem",
+  "/today/add",
+  "/today/problem",
   "/you/look-back",
   "/you/look-back/journey",
   "/you/people",
@@ -87,10 +87,11 @@ test("works at 320px wide", async ({ page }) => {
     "/shelf",
     "/you",
     "/intake",
-    "/steps/new",
+    "/today/add",
     "/you/people",
   ]) {
     await page.goto(path);
+    await expect(page.locator("h1")).toBeVisible();
     await noHorizontalScroll(page);
     await expect(
       page.getByRole("link", { name: "Help", exact: true }),

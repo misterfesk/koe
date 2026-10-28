@@ -224,9 +224,14 @@ describe("plan eval: check-in low adaptation", () => {
       if (was) expect(sizeRank(i.size)).toBeLessThanOrEqual(sizeRank(was.size));
       else expect(i.size).not.toBe("medium");
     }
-    // Smaller by shrinking an item or by dropping the biggest one.
+    // Smaller by shrinking, dropping an item, or swapping for a smaller one.
     const d = diffPlans(before.items, after.items);
-    expect(d.shrunk.length + d.removed.length).toBeGreaterThan(0);
+    const smallerSwaps = d.swapped.filter(
+      ({ from, to }) => sizeRank(to.size) < sizeRank(from.size),
+    );
+    expect(
+      d.shrunk.length + d.removed.length + smallerSwaps.length,
+    ).toBeGreaterThan(0);
     expect(r.note).not.toMatch(/_/);
     expect(
       checkComposition(after.items, {

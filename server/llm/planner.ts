@@ -137,7 +137,7 @@ async function situation(userId: string, where: Where): Promise<Situation> {
   const [p] = await db.select().from(profile).where(eq(profile.userId, userId));
   const today = where.today ?? localDay(p?.timezone ?? "UTC");
   const [view, current, reports, history, earlier] = await Promise.all([
-    p?.memoryOn === false ? Promise.resolve(null) : getUserModel(db, userId),
+    getUserModel(db, userId),
     getPlanDay(db, userId, today),
     todayReports(db, userId, today),
     kindOutcomes(db, userId, addDays(today, -6)),
@@ -157,7 +157,10 @@ async function situation(userId: string, where: Where): Promise<Situation> {
     tone: p?.tone ?? "expressive",
     memoryOn: p?.memoryOn !== false,
     coachingPaused: !!p?.coachingPausedAt,
-    model: view?.model ?? emptyModel(),
+    model:
+      p?.memoryOn === false
+        ? { ...emptyModel(), eatingConcern: view?.model.eatingConcern ?? false }
+        : (view?.model ?? emptyModel()),
     firstDay: !earlier,
     current,
     reports,
@@ -600,6 +603,14 @@ export async function planToday(
   where: Where = {},
 ): Promise<PlanOutcome> {
   let live = await situation(userId, where);
+  if (live.coachingPaused)
+    return {
+      changed: false,
+      note: "Open Today to resume before changing your plan.",
+      version: live.current?.version ?? 0,
+      source: "rules",
+      replaced: 0,
+    };
   if (!live.current) {
     await openToday(userId, { db: live.db, today: live.today });
     live = await situation(userId, where);

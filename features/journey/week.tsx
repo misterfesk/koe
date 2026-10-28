@@ -4,9 +4,7 @@ import { useState, useTransition } from "react";
 import type { RiskLevel } from "@/domain/safety";
 import type { StepView } from "@/domain/steps";
 import { saveWeek } from "@/server/actions/reflect";
-import { changeStep } from "@/server/actions/steps";
 import { SafetyCheck } from "../safety/safety-check";
-import { Shrink } from "../steps/shrink";
 
 type Decision = "keep" | "shrink" | "swap" | "pause";
 
@@ -29,7 +27,6 @@ export function WeekDecisions({
   region: string | null;
 }) {
   const [decisions, setDecisions] = useState(initialDecisions);
-  const [shrinking, setShrinking] = useState<string | null>(null);
   const [note, setNote] = useState(initialNote);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -43,15 +40,12 @@ export function WeekDecisions({
     return (
       <section className="panel" aria-live="polite">
         <h2>Saved.</h2>
-        <p>That&apos;s the week. Nothing else to do here.</p>
+        <p>
+          Your note and choices are saved. Today&apos;s plan stays as it is.
+        </p>
         <div className="actions">
-          {Object.values(decisions).includes("swap") && (
-            <Link className="button" href="/today">
-              Pick something new on Today
-            </Link>
-          )}
-          <Link className="button secondary" href="/talk">
-            Back to Talk
+          <Link className="button" href="/today">
+            Back to Today
           </Link>
         </div>
       </section>
@@ -73,7 +67,7 @@ export function WeekDecisions({
         <section aria-labelledby="next-week">
           <h2 id="next-week">For next week</h2>
           <p className="hint">
-            One choice per step. Leave any you&apos;re unsure about.
+            Save what you might try. Change today&apos;s plan on Today.
           </p>
           {steps.map((s) => (
             <fieldset key={s.id} className="chips">
@@ -86,35 +80,11 @@ export function WeekDecisions({
                   aria-pressed={decisions[s.id] === d}
                   onClick={() => {
                     setDecisions((all) => ({ ...all, [s.id]: d }));
-                    setShrinking(d === "shrink" ? s.id : null);
                   }}
                 >
                   {label}
                 </button>
               ))}
-              {shrinking === s.id && (
-                <div style={{ width: "100%" }}>
-                  <Shrink
-                    stepId={s.id}
-                    title={s.title}
-                    onCancel={() => {
-                      setShrinking(null);
-                      setDecisions((all) => ({ ...all, [s.id]: "keep" }));
-                    }}
-                    onPick={(title) =>
-                      startTransition(async () => {
-                        if (!title) return;
-                        const r = await changeStep(s.id, { title });
-                        if (r.ok) {
-                          setShrinking(null);
-                          if (r.safety && r.safety !== "none")
-                            setSafety(r.safety);
-                        }
-                      })
-                    }
-                  />
-                </div>
-              )}
             </fieldset>
           ))}
         </section>

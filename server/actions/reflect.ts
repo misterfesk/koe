@@ -12,7 +12,7 @@ import {
   updateNote,
 } from "../data/notes";
 import { updateProfile } from "../data/profile";
-import { listSteps, setStepStatus } from "../data/steps";
+import { listSteps } from "../data/steps";
 import { screen } from "../safety";
 import { requireViewer } from "../viewer";
 
@@ -97,7 +97,7 @@ const decisions = z.record(
   z.enum(["keep", "shrink", "swap", "pause"]),
 );
 
-/** Saves the weekly look-back. "Swap" lets the step go; "pause" pauses it. */
+/** Saves intentions only. Changes to today happen through its versioned actions. */
 export async function saveWeek(input: {
   note: string;
   decisions: Record<string, string>;
@@ -113,10 +113,6 @@ export async function saveWeek(input: {
   const kept = Object.fromEntries(
     Object.entries(chosen).filter(([id]) => own.has(id)),
   );
-  for (const [id, d] of Object.entries(kept)) {
-    if (d === "pause") await setStepStatus(v.db, v.user.id, id, "paused");
-    if (d === "swap") await setStepStatus(v.db, v.user.id, id, "archived");
-  }
   await saveWeeklyReview(v.db, v.user.id, weekStart(v.today), {
     note: parsedNote.data || null,
     decisions: kept,

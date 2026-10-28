@@ -22,7 +22,7 @@ export default async function Page() {
       >
         Reach out to someone
       </PageHeading>
-      <ReachOut people={people} region={v.profile.region} />
+      <ReachOut people={people} region={v.profile.region} owner={v.user.id} />
       <FollowUps items={reachOuts} people={people} />
       <div className={stepStyles.starts} style={{ marginTop: 36 }}>
         <Link className={stepStyles.start} href="/you/care">

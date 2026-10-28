@@ -15,7 +15,8 @@ import { reportStep } from "../data/steps";
 import { diffPlans, templateNote, type DayItem } from "@/domain/day-plan";
 import { openToday, planToday } from "../llm/planner";
 import { screen } from "../safety";
-import { addToToday, moveItemTo } from "../plan-edit";
+import { addToToday, moveItemTo, planEditPaused } from "../plan-edit";
+import { addNote } from "../data/notes";
 import { requireViewer } from "../viewer";
 
 const refresh = () => revalidatePath("/", "layout");
@@ -99,6 +100,11 @@ export async function notToday(
   input: { choice: string; minute?: number },
 ): Promise<ActionResult<Change>> {
   const v = await requireViewer();
+  if (await planEditPaused(v))
+    return {
+      ok: false,
+      errors: { form: "Open Today to resume before changing your plan." },
+    };
   const parsed = choice.safeParse(input);
   if (!parsed.success)
     return { ok: false, errors: { form: "Choose one of the options." } };
@@ -162,6 +168,11 @@ const addInput = z.object({
     .min(1, "Write a few words.")
     .max(80, "Use 80 characters or fewer."),
   minute: z.number().int().min(0).max(1439).nullable().optional(),
+  problem: z
+    .string()
+    .trim()
+    .max(3000, "Use 3,000 characters or fewer.")
+    .optional(),
 });
 
 /** The person adds an item of their own to today. */
@@ -169,13 +180,31 @@ export async function addPlanItem(input: {
   kind: string;
   title: string;
   minute?: number | null;
+  problem?: string;
 }): Promise<ActionResult<Change>> {
   const v = await requireViewer();
   const parsed = addInput.safeParse(input);
   if (!parsed.success) return { ok: false, errors: fieldErrors(parsed.error) };
-  const { kind, title, minute } = parsed.data;
+  const { kind, title, minute, problem } = parsed.data;
+  if (await planEditPaused(v))
+    return {
+      ok: false,
+      errors: { form: "Open Today to resume before changing your plan." },
+    };
   // Their own words are kept, but a worrying one shows the safety flow.
-  const safety = await screen(v.db, v.user.id, "plan-item", [title]);
+  const safety = await screen(v.db, v.user.id, "plan-item", [title, problem]);
+  if (safety !== "none") {
+    await addNote(v.db, v.user.id, {
+      text: [title, problem].filter(Boolean).join("\n\n"),
+    });
+    refresh();
+    return {
+      ok: true,
+      safety,
+      changed: false,
+      note: "Your words are saved in Notes. Your plan stays as it is.",
+    };
+  }
   const r = await addToToday(v, {
     kind,
     title,
@@ -183,6 +212,7 @@ export async function addPlanItem(input: {
     size: "small",
     minute,
     origin: "you",
+    problem,
   });
   refresh();
   if (!r.ok) return { ok: false, errors: { form: r.error } };
@@ -192,6 +222,11 @@ export async function addPlanItem(input: {
 /** Takes back the latest change to today's plan. */
 export async function undoPlanChange(): Promise<ActionResult> {
   const v = await requireViewer();
+  if (await planEditPaused(v))
+    return {
+      ok: false,
+      errors: { form: "Open Today to resume before changing your plan." },
+    };
   const r = await undoLastChange(v.db, v.user.id, v.today);
   refresh();
   if (!r.ok)

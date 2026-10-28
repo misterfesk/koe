@@ -5,6 +5,8 @@ import type { RiskLevel } from "@/domain/safety";
 import { problemIdeas } from "@/server/actions/steps";
 import { SafetyCheck } from "../safety/safety-check";
 import { PlanForm } from "./plan-form";
+import Link from "next/link";
+import { useDraft } from "./use-draft";
 
 type Stage = "problem" | "options" | "choose" | "plan";
 
@@ -12,17 +14,45 @@ type Stage = "problem" | "options" | "choose" | "plan";
  * Structured problem solving: name one practical problem, list options
  * without judging them, pick the most doable one, and plan it as a step.
  */
-export function ProblemSolver({ region }: { region: string | null }) {
+export function ProblemSolver({
+  region,
+  owner,
+}: {
+  region: string | null;
+  owner: string;
+}) {
   const router = useRouter();
-  const [stage, setStage] = useState<Stage>("problem");
-  const [problem, setProblem] = useState("");
-  const [options, setOptions] = useState<string[]>(["", ""]);
-  const [chosen, setChosen] = useState("");
+  const [draft, setDraft, clearDraft, ready] = useDraft("problem:" + owner, {
+    stage: "problem" as Stage,
+    problem: "",
+    options: ["", ""],
+    chosen: "",
+  });
+  const { stage, problem, options, chosen } = draft;
+  const setStage = (stage: Stage) => setDraft((d) => ({ ...d, stage }));
+  const setProblem = (problem: string) => setDraft((d) => ({ ...d, problem }));
+  const setOptions = (options: string[] | ((v: string[]) => string[])) =>
+    setDraft((d) => ({
+      ...d,
+      options: typeof options === "function" ? options(d.options) : options,
+    }));
+  const setChosen = (chosen: string | ((v: string) => string)) =>
+    setDraft((d) => ({
+      ...d,
+      chosen: typeof chosen === "function" ? chosen(d.chosen) : chosen,
+    }));
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [safety, setSafety] = useState<RiskLevel>("none");
   const [pending, startTransition] = useTransition();
   const filled = options.map((o) => o.trim()).filter(Boolean);
+
+  if (!ready)
+    return (
+      <p className="meta" role="status">
+        Loading your draft…
+      </p>
+    );
 
   if (safety !== "none")
     return <SafetyCheck region={region} onResume={() => setSafety("none")} />;
@@ -30,7 +60,11 @@ export function ProblemSolver({ region }: { region: string | null }) {
   return (
     <div className="prose">
       <p className="meta">
-        Step {["problem", "options", "choose", "plan"].indexOf(stage) + 1} of 4
+        Part {["problem", "options", "choose", "plan"].indexOf(stage) + 1} of 4
+      </p>
+      <p>
+        <Link href="/today">Back to Today</Link>{" "}
+        <span className="meta">Your draft stays in this tab.</span>
       </p>
 
       {stage === "problem" && (
@@ -46,9 +80,7 @@ export function ProblemSolver({ region }: { region: string | null }) {
           <div className="field">
             <label htmlFor="problem">What&apos;s the problem?</label>
             <p className="hint" id="problem-hint">
-              One practical thing, as specific as you can. &ldquo;I keep putting
-              off replying to my landlord&rdquo; works better than
-              &ldquo;everything&apos;s a mess&rdquo;.
+              Name one practical thing, such as replying to your landlord.
             </p>
             <textarea
               id="problem"
@@ -203,9 +235,19 @@ export function ProblemSolver({ region }: { region: string | null }) {
           </p>
           <PlanForm
             region={region}
-            initial={{ area: "do", title: chosen, problem }}
+            draftKey={"problem-plan:" + owner + ":" + chosen}
+            initial={{
+              kind: "problem",
+              title: chosen,
+              problem: [problem, ...filled.map((o) => "Option: " + o)].join(
+                "\n",
+              ),
+            }}
             onCancel={() => setStage("choose")}
-            onDone={(id) => router.push("/steps/" + id)}
+            onDone={() => {
+              clearDraft();
+              router.push("/today");
+            }}
           />
         </>
       )}

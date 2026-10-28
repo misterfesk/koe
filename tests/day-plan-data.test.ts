@@ -450,6 +450,152 @@ describe("the actions around a day", { timeout: 60_000 }, () => {
     expect(empty.ok).toBe(false);
   });
 
+  it("keeps problem words sealed with the version, and undo archives the addition", async () => {
+    const { db, schema, mod } = await actions();
+    const before = await titles(db);
+    const problem =
+      "The bus leaves before your clothes are ready.\nOption: Lay out clothes";
+    expect(
+      await mod.addPlanItem({
+        kind: "problem",
+        title: "Lay out clothes",
+        problem,
+      }),
+    ).toMatchObject({ ok: true, changed: true });
+    const added = (await titles(db)).items.find(
+      (i) => i.title === "Lay out clothes",
+    )!;
+    expect(added.problem).toBe(problem);
+    const { getStep } = await import("@/server/data/steps");
+    expect((await getStep(db, "a", added.stepId!))?.problem).toBe(problem);
+    const rows = await db.select().from(schema.step);
+    expect(JSON.stringify(rows)).not.toContain("The bus leaves");
+    expect(await mod.undoPlanChange()).toEqual({ ok: true });
+    expect((await titles(db)).items).toEqual(before.items);
+    expect((await getStep(db, "a", added.stepId!))?.status).toBe("archived");
+    expect(await getStep(db, "someone-else", added.stepId!)).toBeNull();
+  });
+
+  it("refuses food and movement bypasses even with memory off", async () => {
+    const { db, schema, mod } = await actions();
+    const { seal } = await import("@/server/crypto");
+    await db
+      .update(schema.userModel)
+      .set({
+        dataEnc: seal(JSON.stringify({ ...model, v: 1, eatingConcern: true })),
+      })
+      .where(eq(schema.userModel.userId, "a"));
+    await db
+      .update(schema.profile)
+      .set({ memoryOn: false })
+      .where(eq(schema.profile.userId, "a"));
+    const before = await titles(db);
+    for (const [kind, title] of [
+      ["move", "Stretch your arms"],
+      ["problem", "Cook lunch"],
+      ["kind", "Walk around the block"],
+    ]) {
+      expect(await mod.addPlanItem({ kind, title })).toMatchObject({
+        ok: false,
+      });
+    }
+    expect((await titles(db)).version).toBe(before.version);
+    expect(
+      await mod.addPlanItem({ kind: "problem", title: "Lay out clothes" }),
+    ).toMatchObject({ ok: true, changed: true });
+  });
+
+  it("refuses guarded content and makes additions tiny on a low day", async () => {
+    const { db, mod } = await actions();
+    expect(
+      await mod.addPlanItem({ kind: "problem", title: "Skip lunch" }),
+    ).toMatchObject({ ok: false });
+    await mod.submitCheckIn({ energy: "low" });
+    expect(
+      await mod.addPlanItem({ kind: "kind", title: "Water the plants" }),
+    ).toMatchObject({ ok: true });
+    expect(
+      (await titles(db)).items.find((i) => i.title === "Water the plants")
+        ?.size,
+    ).toBe("tiny");
+  });
+
+  it("keeps worrying words as a note and prevents every plan-edit bypass during the pause", async () => {
+    const { db, schema, mod } = await actions();
+    const before = await titles(db);
+    const title = "I want to end it all";
+    expect(await mod.addPlanItem({ kind: "problem", title })).toMatchObject({
+      ok: true,
+      changed: false,
+      safety: "urgent",
+    });
+    const { listNotes } = await import("@/server/data/notes");
+    expect((await listNotes(db, "a"))[0].text).toBe(title);
+    expect(JSON.stringify(await db.select().from(schema.note))).not.toContain(
+      title,
+    );
+    expect(
+      await mod.addPlanItem({ kind: "problem", title: "Lay out clothes" }),
+    ).toMatchObject({ ok: false });
+    for (const choice of ["shrink", "swap", "later", "let_go"]) {
+      expect(
+        await mod.notToday(before.items[0].stepId!, { choice, minute: 900 }),
+      ).toMatchObject({ ok: false });
+    }
+    expect(await mod.undoPlanChange()).toMatchObject({ ok: false });
+    expect(await mod.tooMuchToday()).toMatchObject({
+      ok: true,
+      changed: false,
+    });
+    expect((await titles(db)).items).toEqual(before.items);
+  });
+
+  it("refuses edits to someone else's or an old entry", async () => {
+    const { db, mod } = await actions();
+    const before = await titles(db);
+    for (const choice of ["shrink", "swap", "later", "let_go"]) {
+      expect(
+        await mod.notToday("not-in-this-plan", { choice, minute: 900 }),
+      ).toMatchObject({ ok: true, changed: false });
+    }
+    expect((await titles(db)).items).toEqual(before.items);
+  });
+
+  it("saves weekly intentions without changing current or old entries", async () => {
+    const { db } = await actions();
+    const { saveWeek } = await import("@/server/actions/reflect");
+    const { getWeeklyReview } = await import("@/server/data/notes");
+    const before = await titles(db);
+    const { listSteps } = await import("@/server/data/steps");
+    const entries = await listSteps(db, "a");
+    expect(
+      await saveWeek({
+        note: "A tiring week",
+        decisions: {
+          [before.items[0].stepId!]: "pause",
+          [before.items[1].stepId!]: "swap",
+          foreign: "pause",
+        },
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await listSteps(db, "a")).toEqual(entries);
+    expect((await titles(db)).items).toEqual(before.items);
+    expect(
+      (await getWeeklyReview(db, "a", "2026-10-26"))?.decisions,
+    ).not.toHaveProperty("foreign");
+  });
+
+  it("can read and undo a short title written by the person", async () => {
+    const { db, mod } = await actions();
+    const before = await titles(db);
+    expect(await mod.addPlanItem({ kind: "enjoy", title: "TV" })).toMatchObject(
+      { ok: true, changed: true },
+    );
+    expect((await titles(db)).items.some((i) => i.title === "TV")).toBe(true);
+    expect(await mod.undoPlanChange()).toEqual({ ok: true });
+    expect((await titles(db)).items).toEqual(before.items);
+  });
+
   it("stops adding at five", async () => {
     const { mod } = await actions();
     for (let n = 0; n < 2; n++)

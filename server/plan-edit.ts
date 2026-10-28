@@ -1,8 +1,11 @@
 import "server-only";
+import { eq } from "drizzle-orm";
 import { diffPlans, templateNote, type DayItem } from "@/domain/day-plan";
 import {
   assignTimes,
   breaksGuardrails,
+  mentionsFood,
+  mentionsExercise,
   type PlanKind,
   type PlanOrigin,
   type PlanSize,
@@ -11,6 +14,15 @@ import { getPlanDay, getUserModel } from "./data/intake";
 import { writePlanVersion } from "./data/plan";
 import { openToday } from "./llm/planner";
 import type { Viewer } from "./viewer";
+import { profile } from "./db/schema";
+
+export async function planEditPaused(v: Viewer) {
+  const [p] = await v.db
+    .select({ paused: profile.coachingPausedAt })
+    .from(profile)
+    .where(eq(profile.userId, v.user.id));
+  return !!p?.paused;
+}
 
 // The person's own edits to today's plan, shared by the Today screen and by
 // Talk's confirmed cards, so there is one way each change is written (a new
@@ -27,6 +39,11 @@ export async function moveItemTo(
   itemId: string,
   minute: number,
 ): Promise<Edit> {
+  if (await planEditPaused(v))
+    return {
+      ok: false,
+      error: "Open Today to resume before changing your plan.",
+    };
   await openToday(v.user.id, { db: v.db, today: v.today });
   const plan = await getPlanDay(v.db, v.user.id, v.today);
   const item = plan?.items.find((i) => i.stepId === itemId);
@@ -63,8 +80,29 @@ export async function addToToday(
     size: PlanSize;
     minute?: number | null;
     origin: PlanOrigin;
+    problem?: string;
   },
 ): Promise<Edit> {
+  if (await planEditPaused(v))
+    return {
+      ok: false,
+      error: "Open Today to resume before changing your plan.",
+    };
+  // Memory off stops model sharing, not local food and movement protections.
+  const storedModel = (await getUserModel(v.db, v.user.id))?.model;
+  if (breaksGuardrails(a.title))
+    return {
+      ok: false,
+      error: "Choose something without weight, diet or treatment advice.",
+    };
+  if (
+    storedModel?.eatingConcern &&
+    (a.kind === "move" || mentionsFood(a.title) || mentionsExercise(a.title))
+  )
+    return {
+      ok: false,
+      error: "Choose something without food or exercise for today.",
+    };
   await openToday(v.user.id, { db: v.db, today: v.today });
   const plan = await getPlanDay(v.db, v.user.id, v.today);
   if (!plan) return { ok: false, error: "Today is not ready yet." };
@@ -73,9 +111,7 @@ export async function addToToday(
       ok: false,
       error: "Your day already has five things. That is plenty.",
     };
-  const model = v.profile.memoryOn
-    ? (await getUserModel(v.db, v.user.id))?.model
-    : undefined;
+  const model = v.profile.memoryOn ? storedModel : undefined;
   const times = assignTimes(
     [...plan.items.map((i) => i.kind), a.kind],
     model?.wake,
@@ -84,7 +120,8 @@ export async function addToToday(
     kind: a.kind,
     title: a.title,
     why: a.why,
-    size: a.size,
+    size: plan.energy === "low" || plan.mode === "lighter" ? "tiny" : a.size,
+    ...(a.problem ? { problem: a.problem } : {}),
     minuteOfDay: a.minute ?? times[times.length - 1],
   };
   const items = [...plan.items, item].sort(

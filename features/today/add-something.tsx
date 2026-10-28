@@ -35,6 +35,7 @@ export function AddSomething({
       const r = await addPlanItem({ kind, title, minute });
       if (!r.ok) return setError(Object.values(r.errors)[0]);
       if (r.safety && r.safety !== "none") onSafety(r.safety);
+      else if (!r.changed) return setError(r.note);
       setOpen(false);
       setKind(null);
       setTitle("");

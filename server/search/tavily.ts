@@ -72,6 +72,8 @@ export async function searchWeb(input: {
           purpose: "search",
           model: "tavily",
           ok: false,
+          // Match recordRun: timestamp columns are read as UTC by the driver.
+          createdAt: new Date(),
         })
         .returning({ id: agentRun.id })
     : [];

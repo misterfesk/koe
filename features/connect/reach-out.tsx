@@ -18,14 +18,17 @@ import {
 import type { PersonView, ReachOutView } from "@/server/data/people";
 import { copyText } from "@/services/clipboard";
 import { SafetyCheck } from "../safety/safety-check";
-import { PlanForm } from "../steps/plan-form";
+import { PlanForm } from "../today/plan-form";
+import Link from "next/link";
 
 export function ReachOut({
   people,
   region,
+  owner,
 }: {
   people: PersonView[];
   region: string | null;
+  owner: string;
 }) {
   const [personId, setPersonId] = useState<string | null>(
     people[0]?.id ?? null,
@@ -47,6 +50,7 @@ export function ReachOut({
 
   return (
     <div className="prose">
+      <p className="hint">Every question is optional.</p>
       <fieldset className="chips">
         <legend>Who?</legend>
         {people.map((p) => (
@@ -71,9 +75,7 @@ export function ReachOut({
       </fieldset>
       {personId === null && (
         <div className="field">
-          <label htmlFor="reach-name">
-            Their name <span className="meta">Optional</span>
-          </label>
+          <label htmlFor="reach-name">Their name</label>
           <input
             id="reach-name"
             value={name}
@@ -97,14 +99,12 @@ export function ReachOut({
         ))}
       </fieldset>
       <div className="field">
-        <label htmlFor="reach-detail">
-          Anything to include? <span className="meta">Optional</span>
-        </label>
+        <label htmlFor="reach-detail">Anything to include?</label>
         <input
           id="reach-detail"
           value={detail}
           maxLength={300}
-          placeholder="We haven't talked since her birthday"
+          placeholder="You haven't talked since her birthday"
           onChange={(e) => setDetail(e.target.value)}
         />
       </div>
@@ -146,9 +146,7 @@ export function ReachOut({
             <label htmlFor="draft" id="draft-label">
               Your message
             </label>
-            <p className="hint">
-              Change anything so it sounds like you. Koe sends nothing.
-            </p>
+            <p className="hint">Change anything so it sounds like you.</p>
             <textarea
               id="draft"
               rows={4}
@@ -199,10 +197,15 @@ export function ReachOut({
               className="text"
               onClick={() => setLater(true)}
             >
-              Make it a step for later
+              Add this to today
             </button>
           </div>
           {status && <Notice>{status}</Notice>}
+          {status.startsWith("Added to today") && (
+            <p>
+              <Link href="/today">See today&apos;s plan →</Link>
+            </p>
+          )}
           {asked && (
             <div className="actions" role="group" aria-label="Did you send it?">
               <span>Did you send it?</span>
@@ -220,7 +223,7 @@ export function ReachOut({
                   })
                 }
               >
-                Yes, I sent it
+                Save that you sent it
               </button>
               <button
                 type="button"
@@ -233,16 +236,19 @@ export function ReachOut({
           )}
           {later && (
             <PlanForm
+              draftKey={"reach-out:" + owner + ":" + (personId ?? "someone")}
               region={region}
-              editTitle
               initial={{
-                area: "connect",
+                kind: "reach_out",
                 title: shownName
                   ? `Send ${shownName} a message`
                   : "Send someone a message",
               }}
               onCancel={() => setLater(false)}
-              onDone={() => setLater(false)}
+              onDone={() => {
+                setLater(false);
+                setStatus("Added to today. Your message stays here.");
+              }}
             />
           )}
         </section>
