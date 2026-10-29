@@ -27,6 +27,11 @@ const schema = z.object({
   KOE_AI: z.enum(["on", "off"]).default("on"),
   // Per person per UTC day, counted from the agent_run log. Search calls count.
   KOE_AI_DAILY_CALLS: z.coerce.number().int().positive().default(200),
+  // Guests get a smaller share, so new guests can't quickly use up the site cap.
+  KOE_GUEST_DAILY_CALLS: z.coerce.number().int().positive().default(100),
+  // Whole site per UTC day, all people together, so a spike can't drain credits.
+  KOE_SITE_DAILY_AI_CALLS: z.coerce.number().int().positive().default(2000),
+  KOE_SITE_DAILY_SEARCHES: z.coerce.number().int().positive().default(300),
   // Operator kill switch for web search; the key stays unused when "off".
   KOE_SEARCH: z.enum(["on", "off"]).default("on"),
   TAVILY_API_KEY: z.string().optional(),

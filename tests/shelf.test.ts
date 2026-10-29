@@ -48,6 +48,7 @@ vi.mock("@/server/search/cover", async (original) => ({
 }));
 vi.mock("@/server/llm/usage", () => ({
   aiBudgetLeft: async () => 200,
+  siteBudgetLeft: async () => 2000,
   recordRun: async (r: Record<string, unknown>) => {
     const { agentRun } = await import("@/server/db/schema");
     await (fake.db as Db).insert(agentRun).values({

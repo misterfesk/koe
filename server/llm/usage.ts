@@ -1,7 +1,7 @@
 import "server-only";
-import { and, count, eq, gte } from "drizzle-orm";
+import { and, count, eq, gte, ne } from "drizzle-orm";
 import { db } from "../db";
-import { agentRun } from "../db/schema";
+import { agentRun, user } from "../db/schema";
 import { env } from "../env";
 
 /** Why a call was made. One list, so the usage log groups the same way everywhere. */
@@ -95,22 +95,70 @@ export async function recordRun(run: RunRecord) {
   }
 }
 
+/** A guest's daily allowance is smaller than an account's. */
+async function dailyLimitFor(
+  d: Awaited<ReturnType<typeof db>>,
+  userId: string,
+) {
+  const e = env();
+  const [row] = await d
+    .select({ guest: user.isAnonymous })
+    .from(user)
+    .where(eq(user.id, userId));
+  return row?.guest ? e.KOE_GUEST_DAILY_CALLS : e.KOE_AI_DAILY_CALLS;
+}
+
 /**
  * Calls this person can still make today (UTC day). Every logged call counts,
  * including fallbacks and failures, because each one cost the provider a request.
  * If the count can't be read, the person is not blocked.
  */
-export async function aiBudgetLeft(userId: string) {
-  const limit = env().KOE_AI_DAILY_CALLS;
+export async function aiBudgetLeft(
+  userId: string,
+  database?: Awaited<ReturnType<typeof db>>,
+) {
+  let limit = env().KOE_AI_DAILY_CALLS;
   try {
+    const d = database ?? (await db());
+    limit = await dailyLimitFor(d, userId);
     const start = new Date();
     start.setUTCHours(0, 0, 0, 0);
-    const [row] = await (
-      await db()
-    )
+    const [row] = await d
       .select({ n: count() })
       .from(agentRun)
       .where(and(eq(agentRun.userId, userId), gte(agentRun.createdAt, start)));
+    return Math.max(0, limit - (row?.n ?? 0));
+  } catch {
+    return limit;
+  }
+}
+
+/**
+ * Calls the whole site can still make today (UTC day), across all people.
+ * "search" counts web searches; "ai" counts every other logged call.
+ * If the count can't be read, nobody is blocked.
+ */
+export async function siteBudgetLeft(
+  kind: "ai" | "search",
+  database?: Awaited<ReturnType<typeof db>>,
+) {
+  const e = env();
+  const limit =
+    kind === "search" ? e.KOE_SITE_DAILY_SEARCHES : e.KOE_SITE_DAILY_AI_CALLS;
+  try {
+    const start = new Date();
+    start.setUTCHours(0, 0, 0, 0);
+    const [row] = await (database ?? (await db()))
+      .select({ n: count() })
+      .from(agentRun)
+      .where(
+        and(
+          kind === "search"
+            ? eq(agentRun.purpose, "search")
+            : ne(agentRun.purpose, "search"),
+          gte(agentRun.createdAt, start),
+        ),
+      );
     return Math.max(0, limit - (row?.n ?? 0));
   } catch {
     return limit;

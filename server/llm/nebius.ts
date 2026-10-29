@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { env } from "../env";
-import { aiBudgetLeft, recordRun, type Purpose } from "./usage";
+import { aiBudgetLeft, recordRun, siteBudgetLeft, type Purpose } from "./usage";
 
 export type { Purpose } from "./usage";
 
@@ -111,6 +111,8 @@ async function guard(options: Options) {
     throw new AiUnavailable("switched off by operator");
   if (options.userId && (await aiBudgetLeft(options.userId)) <= 0)
     throw new AiUnavailable("daily limit");
+  if ((await siteBudgetLeft("ai")) <= 0)
+    throw new AiUnavailable("site daily limit");
 }
 
 async function post(

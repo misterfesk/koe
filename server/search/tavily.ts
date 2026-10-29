@@ -1,9 +1,9 @@
 import "server-only";
 import { tavily } from "@tavily/core";
 import { env } from "../env";
-import { aiBudgetLeft, recordRun } from "../llm/usage";
+import { aiBudgetLeft, recordRun, siteBudgetLeft } from "../llm/usage";
 import { searchStubbed, stubSearchHits } from "./stub";
-import { and, count, eq, gte } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Db } from "../db";
 import { agentRun } from "../db/schema";
 
@@ -45,24 +45,10 @@ export async function searchWeb(input: {
     throw new SearchUnavailable("switched off by operator");
   if (!e.TAVILY_API_KEY && !searchStubbed())
     throw new SearchUnavailable("no API key");
-  if (input.userId) {
-    if (input.database) {
-      const start = new Date();
-      start.setUTCHours(0, 0, 0, 0);
-      const [used] = await input.database
-        .select({ n: count() })
-        .from(agentRun)
-        .where(
-          and(
-            eq(agentRun.userId, input.userId),
-            gte(agentRun.createdAt, start),
-          ),
-        );
-      if ((used?.n ?? 0) >= e.KOE_AI_DAILY_CALLS)
-        throw new SearchUnavailable("daily limit");
-    } else if ((await aiBudgetLeft(input.userId)) <= 0)
-      throw new SearchUnavailable("daily limit");
-  }
+  if (input.userId && (await aiBudgetLeft(input.userId, input.database)) <= 0)
+    throw new SearchUnavailable("daily limit");
+  if ((await siteBudgetLeft("search", input.database)) <= 0)
+    throw new SearchUnavailable("site daily limit");
 
   const started = Date.now();
   // Reserve before the provider call: interruption and logging errors cannot

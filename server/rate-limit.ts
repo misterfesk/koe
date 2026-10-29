@@ -19,10 +19,16 @@ function hit(key: string, limit: number, windowMs: number) {
   return w.count <= limit;
 }
 
-/** Trusts proxy headers: when hosting, put Koe behind a proxy that sets them. */
+/**
+ * Trusts proxy headers: when hosting, put Koe behind a proxy that sets them.
+ * Render's edge (Cloudflare) sets the client address in its own headers; the
+ * first X-Forwarded-For entry can be written by the client, so it comes last.
+ */
 export async function clientIp() {
   const h = await headers();
   return (
+    h.get("true-client-ip")?.trim() ||
+    h.get("cf-connecting-ip")?.trim() ||
     h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     h.get("x-real-ip") ||
     "local"
@@ -31,7 +37,13 @@ export async function clientIp() {
 
 /** False when this caller has used up the allowance for `action`. */
 export async function allow(
-  action: "sign-in" | "sign-up" | "guest" | "reminder-test" | "week-review",
+  action:
+    | "sign-in"
+    | "sign-up"
+    | "guest"
+    | "reminder-test"
+    | "week-review"
+    | "appointment-lookup",
   extraKey?: string,
 ) {
   // The e2e suite starts dozens of guests from one machine.
@@ -40,13 +52,16 @@ export async function allow(
   const rules = {
     "sign-in": { limit: 10, windowMs: 10 * 60_000 },
     "sign-up": { limit: 5, windowMs: 60 * 60_000 },
-    guest: { limit: 20, windowMs: 60 * 60_000 },
+    guest: { limit: 5, windowMs: 60 * 60_000 },
     "reminder-test": { limit: 5, windowMs: 60_000 },
     "week-review": { limit: 10, windowMs: 60_000 },
+    "appointment-lookup": { limit: 5, windowMs: 24 * 60 * 60_000 },
   }[action];
-  // A test notification or a week review is limited per person, not per network address.
+  // These are limited per person, not per network address.
   const byIp =
-    action === "reminder-test" || action === "week-review"
+    action === "reminder-test" ||
+    action === "week-review" ||
+    action === "appointment-lookup"
       ? true
       : hit(`${action}:ip:${ip}`, rules.limit, rules.windowMs);
   const byKey = extraKey

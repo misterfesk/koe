@@ -56,6 +56,7 @@ vi.mock("@/server/search/cover", async (original) => ({
 }));
 vi.mock("@/server/llm/usage", () => ({
   aiBudgetLeft: async () => 200,
+  siteBudgetLeft: async () => 2000,
   recordRun: async () => {},
 }));
 

@@ -529,7 +529,11 @@ export const agentRun = pgTable(
     toolCallsDropped: integer("tool_calls_dropped").notNull().default(0),
     createdAt: created(),
   },
-  (t) => [index("agent_run_user_idx").on(t.userId, t.createdAt)],
+  (t) => [
+    index("agent_run_user_idx").on(t.userId, t.createdAt),
+    // Site-wide daily caps count by day across everyone.
+    index("agent_run_created_idx").on(t.createdAt),
+  ],
 );
 
 /**

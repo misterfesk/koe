@@ -11,6 +11,7 @@ import {
   setReachStatus,
 } from "../data/people";
 import { draftMessage } from "../llm/coach";
+import { allow } from "../rate-limit";
 import { screen } from "../safety";
 import {
   lookupAppointmentHelp,
@@ -125,6 +126,8 @@ export async function lookupAppointments(rawInstructions = ""): Promise<{
   if (v.profile.coachingPausedAt) {
     return { ok: false, results: [], unavailable: true, safety: "none" };
   }
+  if (!(await allow("appointment-lookup", v.user.id)))
+    return { ok: false, results: [], unavailable: true, safety: "none" };
   const res = await lookupAppointmentHelp({ v, instructions });
   return { ...res, safety: "none" };
 }
