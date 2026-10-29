@@ -21,6 +21,8 @@ export type SearchHit = {
   url: string;
   content: string;
   score: number;
+  /** Full page text, only when asked for; used for read time, never stored. */
+  rawContent?: string;
 };
 
 const TIMEOUT_MS = 10_000;
@@ -34,6 +36,7 @@ export async function searchWeb(input: {
   query: string;
   includeDomains?: string[];
   maxResults?: number;
+  rawContent?: boolean;
   userId?: string;
   database?: Db;
 }): Promise<SearchHit[]> {
@@ -79,7 +82,7 @@ export async function searchWeb(input: {
     : [];
   let hits: SearchHit[] | undefined;
   try {
-    if (searchStubbed()) hits = stubSearchHits();
+    if (searchStubbed()) hits = stubSearchHits(input.includeDomains);
     else {
       const res = await tavily({ apiKey: e.TAVILY_API_KEY! }).search(
         input.query,
@@ -87,6 +90,7 @@ export async function searchWeb(input: {
           searchDepth: "basic",
           maxResults: input.maxResults ?? 5,
           includeDomains: input.includeDomains,
+          includeRawContent: input.rawContent ? "text" : false,
           // Seconds. The SDK aborts the request itself after this long.
           timeout: TIMEOUT_MS / 1000,
         },
@@ -96,6 +100,7 @@ export async function searchWeb(input: {
         url: r.url,
         content: r.content,
         score: r.score,
+        rawContent: typeof r.rawContent === "string" ? r.rawContent : undefined,
       }));
     }
   } catch {

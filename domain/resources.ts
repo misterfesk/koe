@@ -37,9 +37,37 @@ const interestWords: Record<Exclude<Lift, "other">, string> = {
   shows: "watching shows",
 };
 
+/**
+ * This week topics (v3 A6). A Nano call classifies each This week thing into
+ * one of these once, at week save. Only the enum, never the title, reaches a
+ * query.
+ */
+export const weekTopics = [
+  "work",
+  "study",
+  "home",
+  "money",
+  "people",
+  "health_admin",
+  "creative",
+] as const;
+export type WeekTopic = (typeof weekTopics)[number];
+
+const weekTopicWords: Record<WeekTopic, string> = {
+  work: "coping with work",
+  study: "studying",
+  home: "keeping on top of housework",
+  money: "managing money worries",
+  people: "keeping in touch with people",
+  health_admin: "sorting out health appointments",
+  creative: "creative hobbies",
+};
+
 const formatWords: Record<ResourceFormat, string> = {
   article: "article",
-  video: "short video",
+  // Allowlisted channel names (domain/sources.ts) roughly triple the hits that
+  // pass the oEmbed channel check (live probe, 2026-10-28).
+  video: "short video TED-Ed NHS Psych Hub Mind",
 };
 
 /** Every word a query can contain. Tests check queries against this list. */
@@ -48,6 +76,8 @@ export const queryVocabulary = new Set(
     ...Object.values(goalWords),
     ...Object.values(interestWords),
     ...Object.values(formatWords),
+    ...Object.values(weekTopicWords),
+    "when feeling low",
     "practical",
     "self-help",
     "guide",
@@ -65,14 +95,16 @@ export const resourceTagsSchema = z.strictObject({
   interest: z.enum(resourceInterests).nullish(),
   format: z.enum(resourceFormats).nullish(),
   region: z.enum(["GB", "US", "AU", "global"]).nullish(),
+  weekTopic: z.enum(weekTopics).nullish(),
 });
 export type ResourceTags = z.infer<typeof resourceTagsSchema>;
 
 export function resourceTagsKey(input: ResourceTags): string {
   const t = resourceTagsSchema.parse(input);
-  return [t.goal, t.interest ?? "", t.format ?? "", t.region ?? "global"].join(
-    ":",
-  );
+  const key = [t.goal, t.interest ?? "", t.format ?? "", t.region ?? "global"];
+  // Older keys have four parts; a week topic adds a fifth.
+  if (t.weekTopic) key.push(t.weekTopic);
+  return key.join(":");
 }
 
 /**
@@ -82,12 +114,28 @@ export function resourceTagsKey(input: ResourceTags): string {
 export function buildResourceQuery(tags: ResourceTags): string {
   tags = resourceTagsSchema.parse(tags);
   const parts: string[] = [];
-  parts.push(has(goalWords, tags.goal) ? goalWords[tags.goal] : "low mood");
+  if (has(weekTopicWords, tags.weekTopic))
+    parts.push(weekTopicWords[tags.weekTopic], "when feeling low");
+  else
+    parts.push(has(goalWords, tags.goal) ? goalWords[tags.goal] : "low mood");
   if (has(interestWords, tags.interest))
     parts.push("with " + interestWords[tags.interest]);
   parts.push("practical self-help guide for adults");
   if (has(formatWords, tags.format)) parts.push(formatWords[tags.format]);
   return parts.join(" ");
+}
+
+/** Parses a stored tags key; null when it no longer matches the schema. */
+export function parseResourceTagsKey(key: string): ResourceTags | null {
+  const [goal, interest, format, region, weekTopic] = key.split(":");
+  const r = resourceTagsSchema.safeParse({
+    goal,
+    interest: interest || undefined,
+    format: format || undefined,
+    region: region || undefined,
+    weekTopic: weekTopic || undefined,
+  });
+  return r.success ? r.data : null;
 }
 
 export { goals as resourceGoals };

@@ -30,6 +30,7 @@ import {
 import { screen } from "../safety";
 import { synthesiseIntake, templateResult } from "../llm/intake";
 import { requireViewer } from "../viewer";
+import { startShelfAfterSave } from "../search/shelf";
 
 const refresh = () => revalidatePath("/", "layout");
 
@@ -254,6 +255,8 @@ export async function startMyDay(input: unknown): Promise<ActionResult> {
       );
     }
   }
+  // Day one: the Shelf search starts in the background (v3 A6).
+  startShelfAfterSave(v);
   refresh();
   return { ok: true };
 }

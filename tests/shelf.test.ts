@@ -41,6 +41,11 @@ vi.mock("@/server/viewer", () => ({
   getViewer: () => fake.current,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
+// No network in tests: covers are covered by shelf-cover.test.ts.
+vi.mock("@/server/search/cover", async (original) => ({
+  ...(await original<typeof import("@/server/search/cover")>()),
+  ensureCovers: async () => {},
+}));
 vi.mock("@/server/llm/usage", () => ({
   aiBudgetLeft: async () => 200,
   recordRun: async (r: Record<string, unknown>) => {
@@ -182,11 +187,11 @@ describe("Shelf pipeline", { timeout: 30000 }, () => {
     expect(fake.search).toHaveBeenCalledTimes(1);
     const a = await getShelf(v);
     expect(a.current).toHaveLength(3);
-    expect(a.current[0].why).toBe(
-      "You might find ideas for winding down here.",
-    );
+    // Model copy is never used: why lines are templates (D036), and sleep
+    // was not a chosen goal.
+    expect(a.current[0].why).toBe("");
     const rows = await db.select().from(s.shelfItem);
-    expect(rows[0].whyEnc).not.toContain("You might");
+    expect(rows[0].whyEnc).not.toContain("Because");
     const cache = JSON.stringify(await db.select().from(s.resourceCache));
     expect(cache).not.toContain("content");
     expect(cache).not.toContain("winding down");
@@ -196,14 +201,15 @@ describe("Shelf pipeline", { timeout: 30000 }, () => {
     const again = await refreshShelfFor(v, tags, "three");
     expect(again.count).toBe(0);
   });
-  it("records empty outcomes and never searches again on repeated weekly opens", async () => {
+  it("records empty outcomes and never searches again on repeated opens", async () => {
     fake.hits = [];
     const { refreshShelfFor } = await import("@/server/search/shelf");
     const { getShelf } = await import("@/server/data/shelf");
     const v = await viewer();
+    await refreshShelfFor(v); // day one: a read and a video query
+    await refreshShelfFor(v); // the one same-day top-up
     await refreshShelfFor(v);
-    await refreshShelfFor(v);
-    expect(fake.search).toHaveBeenCalledTimes(1);
+    expect(fake.search).toHaveBeenCalledTimes(3);
     expect((await getShelf(v)).refreshNeeded).toBe(false);
   });
   it("keeps completed request keys idempotent after the week changes", async () => {

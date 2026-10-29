@@ -18,7 +18,8 @@ try {
     maxResults: 6,
   });
   const { kept, rejected } = await screenResources(hits, tags);
-  for (const r of kept) console.log(`KEEP ${r.host} | ${r.title} | ${r.why}`);
+  for (const r of kept)
+    console.log(`KEEP ${r.host} | ${r.title} | ${r.readMinutes ?? "-"} min`);
   for (const r of rejected)
     console.log(`DROP ${r.host} | ${r.title} | ${r.reason}`);
   console.log(

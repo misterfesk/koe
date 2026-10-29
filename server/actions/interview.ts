@@ -29,6 +29,7 @@ import { detectEatingConcern } from "@/domain/plan-menu";
 import type { RiskLevel } from "@/domain/safety";
 import { getUserModel } from "../data/intake";
 import { getWeek, saveWeek } from "../data/week";
+import { startShelfAfterSave } from "../search/shelf";
 import { interviewTurn, type InterviewContext } from "../llm/interview";
 import {
   consumeInterviewApproval,
@@ -348,6 +349,7 @@ export async function saveInterviewWeek(
         turn: null,
       };
     const week = await saveWeek(v.db, v.user.id, result.approval);
+    startShelfAfterSave(v);
     revalidatePath("/", "layout");
     return { ok: true, safety: "none", turn: null, week };
   } catch (error) {

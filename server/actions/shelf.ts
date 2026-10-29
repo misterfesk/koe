@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireViewer } from "../viewer";
 import { getShelf, setShelfFeedback, undoShelfFeedback } from "../data/shelf";
 import { refreshShelfFor } from "../search/shelf";
+import { shelfLoading } from "../search/in-flight";
 import { requestedSearches, updateTool } from "../data/talk";
 import { resourceTagsSchema } from "@/domain/resources";
 import { resultLines } from "@/domain/talk-tools";
@@ -31,7 +32,11 @@ export async function refreshShelf() {
         startedAt: undefined,
       });
   }
-  const result = await refreshShelfFor(v);
+  // While day one runs in the background, this open does not start another
+  // refresh (or count as the same-day top-up); the UI polls readShelf.
+  const result = shelfLoading(v.user.id)
+    ? { ok: true, count: 0 }
+    : await refreshShelfFor(v);
   revalidatePath("/shelf");
   revalidatePath("/today");
   return { ...result, shelf: await getShelf(v) };

@@ -1,15 +1,18 @@
 import { z } from "zod";
 import { goalPhrases, type Goal } from "./intake";
-import {
-  breaksGuardrails,
-  guardrailHits,
-  mentionsExercise,
-  mentionsFood,
-} from "./plan-menu";
+import { guardrailHits, mentionsExercise, mentionsFood } from "./plan-menu";
 import { detectRisk, mentionsContact, normalise } from "./safety";
-import { sourceForUrl } from "./sources";
+import {
+  channelForAuthorUrl,
+  sourceForUrl,
+  videoUrl,
+  youtubeHost,
+  youtubeVideoId,
+} from "./sources";
 import type { ResourceTags } from "./resources";
 
+// Public result data only: safe for the shared weekly cache. Older cache rows
+// have no format and are articles.
 export const publicResourceSchema = z.strictObject({
   title: z.string().trim().min(3).max(240),
   url: z.string().max(2048),
@@ -17,14 +20,45 @@ export const publicResourceSchema = z.strictObject({
   foodOrExercise: z.boolean(),
   adult: z.literal(true),
   aiScreened: z.boolean(),
+  format: z.enum(["article", "video"]).optional(),
+  videoId: z.string().max(11).optional(),
+  /** oEmbed author_url of an allowlisted channel (videos only). */
+  channel: z.string().max(200).optional(),
+  readMinutes: z.number().int().min(1).max(120).optional(),
 });
 export type PublicResource = z.infer<typeof publicResourceSchema>;
 
+/**
+ * Where a result comes from: an allowlisted site, or for a video the
+ * allowlisted channel that oEmbed named. Null when it is neither.
+ */
+export function resourceSource(r: {
+  url: string;
+  channel?: string | null;
+}): { host: string; name: string; videoId?: string } | null {
+  const id = youtubeVideoId(r.url);
+  if (id) {
+    const channel = channelForAuthorUrl(r.channel);
+    return channel && r.url === videoUrl(id)
+      ? { host: youtubeHost, name: channel.name, videoId: id }
+      : null;
+  }
+  const site = sourceForUrl(r.url);
+  return site ? { host: site.host, name: site.name } : null;
+}
+
+/** Whole words ÷ 230, rounded; only from known full text. */
+export function readMinutes(text: string | undefined | null) {
+  if (!text?.trim()) return undefined;
+  const words = text.trim().split(/\s+/).length;
+  return Math.min(120, Math.max(1, Math.round(words / 230)));
+}
+
 export function resourceRuleReason(
-  hit: { title: string; url: string; content?: string },
+  hit: { title: string; url: string; content?: string; channel?: string },
   eatingConcern = false,
 ): string | null {
-  if (!sourceForUrl(hit.url)) return "host";
+  if (!resourceSource(hit)) return "host";
   const path = normalise(decodePath(hit.url));
   const title = normalise(hit.title);
   if (
@@ -97,47 +131,20 @@ function decodePath(url: string) {
   }
 }
 
-export function whyOk(text: string, eatingConcern = false) {
-  return (
-    text.length <= 120 &&
-    /\byou(r)?\b/i.test(text) &&
-    text.split(/\s+/).length <= 18 &&
-    !/\b(we|us|together|let's|i|me|my|mine|our|ours|step|steps)\b|!/i.test(
-      text,
-    ) &&
-    !mentionsContact(text) &&
-    !breaksGuardrails(text) &&
-    detectRisk(text) === "none" &&
-    !(eatingConcern && (mentionsFood(text) || mentionsExercise(text)))
-  );
-}
-
 /**
- * Names the goal only when the person chose it in the intake. A default or
- * inferred goal gives no why line at all ("").
+ * Why lines are fixed templates (D036), never model-written. A goal is named
+ * only when the person chose it; a This week title only with memory on.
  */
-export const templateWhy = (
-  tags: ResourceTags,
+export const goalWhy = (
+  tags: Pick<ResourceTags, "goal">,
   chosen: readonly Goal[] = [],
 ): string =>
   chosen.includes(tags.goal)
-    ? `You chose ${goalPhrases[tags.goal]}. You might find ideas here.`
+    ? `Because you chose "${goalPhrases[tags.goal]}"`
     : "";
 
-/** A pick's why line: never claims a choice the person did not make. */
-export function pickWhy(
-  proposed: string | undefined,
-  tags: ResourceTags,
-  chosen: readonly Goal[],
-  eatingConcern = false,
-): string {
-  const claims = /\byou (chose|picked|said)\b/i.test(proposed ?? "");
-  return proposed &&
-    whyOk(proposed, eatingConcern) &&
-    (!claims || chosen.includes(tags.goal))
-    ? proposed
-    : templateWhy(tags, chosen);
-}
+export const weekWhy = (title: string | null | undefined): string =>
+  title?.trim() ? `For "${title.trim()}"` : "";
 
 /** Cache data never bypasses today's allowlist, rules or local eating switch. */
 export function cachedResourceOk(
@@ -148,7 +155,8 @@ export function cachedResourceOk(
   const r = publicResourceSchema.safeParse(raw);
   return (
     r.success &&
-    sourceForUrl(r.data.url)?.host === r.data.host &&
+    resourceSource(r.data)?.host === r.data.host &&
+    (r.data.format === "video") === !!r.data.videoId &&
     !resourceRuleReason(r.data, eatingConcern) &&
     !(eatingConcern && r.data.foodOrExercise) &&
     (!aiOn || r.data.aiScreened)

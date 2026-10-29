@@ -16,7 +16,7 @@ import { getConversation, listConversations } from "@/server/data/talk";
 import { getViewer } from "@/server/viewer";
 import { listShelfExport } from "@/server/data/shelf";
 import { listWeeks } from "@/server/data/week";
-import { shelfRefresh } from "@/server/db/schema";
+import { shelfRefresh, weekItem } from "@/server/db/schema";
 
 /** One file with everything the person has in Koe, readable and decrypted. */
 export async function GET() {
@@ -81,6 +81,11 @@ export async function GET() {
     userModel: await getUserModel(v.db, id),
     planDays: await listPlanDays(v.db, id),
     weeks: await listWeeks(v.db, id),
+    // The Shelf topic of each This week thing (an enum, or "none").
+    weekThingTopics: await v.db
+      .select({ weekItemId: weekItem.id, topic: weekItem.topic })
+      .from(weekItem)
+      .where(eq(weekItem.userId, id)),
     // The one word that came with a check-in, when there was one.
     checkInWords: await listCheckInWords(v.db, id),
     conversations: await Promise.all(

@@ -49,3 +49,57 @@ export function sourceForUrl(raw: string) {
     return null;
   }
 }
+
+/**
+ * YouTube channels whose videos the Shelf may show. A video is kept only when
+ * YouTube's oEmbed `author_url` for it matches one of these exactly.
+ *
+ * Checked 2026-10-28: each handle's channel page was fetched (title, links to
+ * the organisation's own site) and the oEmbed of one of its videos returned
+ * this exact author_url. Dropped as unverifiable: MedlinePlus (no channel of
+ * its own; the NLM channel is a different publisher) and HelpGuide (the
+ * channels found had no tie to helpguide.org).
+ */
+export const videoChannels = [
+  { authorUrl: "https://www.youtube.com/@NHS", name: "NHS" },
+  {
+    authorUrl: "https://www.youtube.com/@MindMentalHealthCharity",
+    name: "Mind",
+  },
+  { authorUrl: "https://www.youtube.com/@TEDEd", name: "TED-Ed" },
+  { authorUrl: "https://www.youtube.com/@TED", name: "TED" },
+  { authorUrl: "https://www.youtube.com/@PsychHub", name: "Psych Hub" },
+  {
+    authorUrl: "https://www.youtube.com/@NIMHgov",
+    name: "National Institute of Mental Health",
+  },
+] as const;
+
+export const youtubeHost = "www.youtube.com";
+
+export function channelForAuthorUrl(raw: unknown) {
+  if (typeof raw !== "string") return null;
+  return videoChannels.find((c) => c.authorUrl === raw.trim()) ?? null;
+}
+
+/** The 11-character id from a youtube.com/watch?v= or youtu.be/ link, else null. */
+export function youtubeVideoId(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:" || u.username || u.password || u.port)
+      return null;
+    const id =
+      u.hostname === "youtu.be"
+        ? u.pathname.slice(1)
+        : ["www.youtube.com", "youtube.com", "m.youtube.com"].includes(
+              u.hostname,
+            ) && u.pathname === "/watch"
+          ? u.searchParams.get("v")
+          : null;
+    return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+export const videoUrl = (id: string) => `https://${youtubeHost}/watch?v=${id}`;

@@ -15,6 +15,7 @@ export const aiPurposes = [
   "interview_breakdown",
   "planner",
   "resource_screen",
+  "week_topic",
   "lookback",
   "eval",
   "search",

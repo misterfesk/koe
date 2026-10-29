@@ -556,9 +556,31 @@ export const shelfItem = pgTable(
     aiScreened: boolean("ai_screened").notNull(),
     feedbackAt: timestamp("feedback_at", { withTimezone: true }),
     createdAt: created(),
+    // v3 A6: public result facts (also in the shared cache) per pick.
+    format: text("format", { enum: ["article", "video"] })
+      .notNull()
+      .default("article"),
+    videoId: text("video_id"),
+    /** oEmbed author_url of the allowlisted channel (videos only). */
+    channel: text("channel"),
+    readMinutes: integer("read_minutes"),
   },
   (t) => [uniqueIndex("shelf_user_url_unique").on(t.userId, t.url)],
 );
+
+/**
+ * Article covers fetched once server-side and served from Koe's own route, so
+ * the browser never hot-links article hosts. Public data keyed by a hash of
+ * the article URL; "none" (null data) records a failed or missing image.
+ */
+export const shelfCoverCache = pgTable("shelf_cover_cache", {
+  key: text("key").primaryKey(),
+  contentType: text("content_type"),
+  dataBase64: text("data_base64"),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 // A completed empty cache is meaningful too. No snippets or personal why lines.
 export const resourceCache = pgTable("resource_cache", {
@@ -612,6 +634,8 @@ export const weekItem = pgTable("week_item", {
     .references(() => week.id, { onDelete: "cascade" }),
   capturedEnc: text("captured_enc").notNull(),
   order: integer("position").notNull(),
+  /** Shelf topic enum from one Nano call; "none" when nothing fits, null until classified. */
+  topic: text("topic"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

@@ -9,9 +9,8 @@ import { orderedSources, sourceForUrl } from "@/domain/sources";
 import {
   cachedResourceOk,
   resourceRuleReason,
-  pickWhy,
-  templateWhy,
-  whyOk,
+  goalWhy,
+  weekWhy,
 } from "@/domain/resource-screen";
 import { shelfWeek } from "@/server/data/shelf";
 
@@ -87,7 +86,6 @@ describe("Shelf pure safety rules", () => {
         title: "Our guide to sleep and clinical research",
       }),
     ).toBeNull();
-    expect(whyOk("You can use our clinical guide to sleep.")).toBe(false);
   });
   it.each([
     [
@@ -125,28 +123,19 @@ describe("Shelf pure safety rules", () => {
   ])("rejects actual unsafe snippet advice: %s", (content, reason) => {
     expect(resourceRuleReason({ ...hit, content })).toBe(reason);
   });
-  it.each([
-    "You can call 0412 345 678.",
-    "You can visit www.madeup.org.",
-    "You and I can try this.",
-    "You have my advice.",
-    "You can use our guide.",
-    "You will feel better.",
-    "You can try this together.",
-  ])("rejects unsafe why line %s", (line) => expect(whyOk(line)).toBe(false));
-  it("names a goal only when the person chose it", () => {
-    expect(templateWhy({ goal: "sleep" }, ["sleep"])).toMatch(/^You chose/);
-    expect(templateWhy({ goal: "through_day" })).toBe("");
-    expect(templateWhy({ goal: "sleep" }, ["energy"])).toBe("");
-    const claim = templateWhy({ goal: "sleep" }, ["sleep"]);
-    expect(pickWhy(claim, { goal: "sleep" }, [])).toBe("");
-    expect(pickWhy(claim, { goal: "sleep" }, ["sleep"])).toBe(claim);
-    const plain = "A short page about getting through your day.";
-    expect(pickWhy(plain, { goal: "through_day" }, [])).toBe(plain);
+  it("why lines are templates naming only a chosen goal or a week title", () => {
+    expect(goalWhy({ goal: "sleep" }, ["sleep"])).toBe(
+      'Because you chose "sleep"',
+    );
+    expect(goalWhy({ goal: "through_day" })).toBe("");
+    expect(goalWhy({ goal: "sleep" }, ["energy"])).toBe("");
+    expect(weekWhy("Update my CV")).toBe('For "Update my CV"');
+    expect(weekWhy(" ")).toBe("");
+    expect(weekWhy(undefined)).toBe("");
   });
   it("checks all fixed why lines and all enum query combinations", () => {
     for (const goal of goals) {
-      expect(whyOk(templateWhy({ goal }, [goal]))).toBe(true);
+      expect(goalWhy({ goal }, [goal])).toMatch(/^Because you chose "/);
       for (const interest of [...resourceInterests, undefined])
         for (const format of [...resourceFormats, undefined]) {
           const tags = { goal, interest, format };

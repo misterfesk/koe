@@ -17,12 +17,17 @@ const pick = {
   host: "www.nhs.uk",
   sourceName: "NHS",
   why: "You can read about small changes for your day.",
+  format: "article" as const,
+  cover: { kind: "none" as const },
+  forWeek: false,
 };
 const empty = {
   current: [],
   saved: [],
   searchEnabled: true,
   refreshNeeded: false,
+  loading: false,
+  weekTopics: [],
 };
 beforeEach(() => {
   vi.clearAllMocks();
