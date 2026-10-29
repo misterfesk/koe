@@ -19,6 +19,7 @@ const more = [
   ["/you/care", "Appointment"],
   ["/you/notes", "Notes"],
   ["/you/look-back", "Look back"],
+  ["/you/reflection", "Reflection"],
   ["/you/people", "People"],
 ] as const;
 

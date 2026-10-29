@@ -607,3 +607,25 @@ label.chip:has(input:disabled) {
   opacity: 0.5;
   cursor: not-allowed;
 }
+/* Print: show only the page content. */
+@media print {
+  [data-signed-in] > header,
+  [data-signed-in] > footer,
+  [data-signed-in] > .skip-link,
+  [data-signed-in] > [role="dialog"],
+  [data-signed-in] nav[aria-label="Main navigation"],
+  .no-print {
+    display: none !important;
+  }
+  [data-signed-in] main {
+    padding: 0 !important;
+  }
+  [data-signed-in] > div {
+    display: block !important;
+  }
+}
+@media print {
+  .notice-dismiss {
+    display: none;
+  }
+}
