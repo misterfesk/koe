@@ -2,7 +2,7 @@
 
 Koe is a private AI companion for adults living with depression. It learns about you in a short intake, plans a gentle day, adapts that day when your energy drops, reminds you at the right moments, finds a few trustworthy things to read, and is there to talk. It supports human care and never replaces it.
 
-This document describes the system through S7 and v3 A1. Verification and milestone reviews are tracked in `../HANDOFF.md`.
+This document describes how Koe is built and where its limits are.
 
 ## 1. Principles
 
@@ -10,7 +10,7 @@ This document describes the system through S7 and v3 A1. Verification and milest
 2. **Every model output is validated, and there is a fallback.** Replies are checked against a zod schema, then against the plan rules, the guardrails and the safety rules. Anything that fails is replaced by a deterministic version. With `KOE_AI=off` the whole app still works.
 3. **The person stays in control.** A model-made change to the plan, to memory or to reminders is a proposal until the person confirms it, or it comes with a one-tap undo when they asked for the change themselves (for example the daily check-in).
 4. **A context packet, not chat history.** Each AI call gets a compact, structured description of the person: the intake model, the approved summary, approved memory cards, outcome counts for the last 7 days and today's plan. The prefix is stable, so the provider can cache it.
-5. **Private by default.** Free text is encrypted at rest. Nothing a person writes is ever sent to web search. Memory can be turned off, and the person can export or delete everything.
+5. **Private by default.** Free text is encrypted at rest. The person's own words are never sent verbatim to web search; search queries are generic topics, scrubbed in code. Memory can be turned off, and the person can export or delete everything.
 
 ## 2. System overview
 
@@ -31,7 +31,7 @@ flowchart LR
   end
   DB[(Postgres / PGlite<br/>encrypted free text)]
   NEB[Nebius Token Factory<br/>NVIDIA Nemotron]
-  TAV[Tavily search<br/>allowlisted hosts]
+  TAV[Tavily search]
   PUSH[Browser push services]
 
   UI --> SA --> DOM
@@ -74,7 +74,7 @@ All user-owned tables reference `user` with `ON DELETE CASCADE`. Guest data move
 | `profile` | Region, timezone, 18+ attestation, coaching pause, memory and chat-history switches, reminder budget and quiet hours, tone, appearance. |
 | `user_model` | The sealed intake model (goals, routine, what used to help, people, support, tone, morning-plan time) and the summary the person approved. |
 | `plan_day` | One row per plan version per local day: energy, mode (normal/lighter) and a sealed snapshot of the items. Used for "what changed" and undo. |
-| `week`, `week_item`, `piece` | Rolling weeks and the person's approved things. Each thing's words, deadline and title are sealed in `week_item`. Approval IDs prevent duplicate saves; adding a thing preserves earlier IDs. The `piece` table is no longer written or read (D036) but stays for older rows; ownership transfer, export and cascade deletion still cover all three tables. Older rows load with retired fields ignored and a fallback title. New timestamps carry a timezone. |
+| `week`, `week_item`, `piece` | Rolling weeks and the person's approved things. Each thing's words, deadline and title are sealed in `week_item`. Approval IDs prevent duplicate saves; adding a thing preserves earlier IDs. The `piece` table is no longer written or read but stays for older rows; ownership transfer, export and cascade deletion still cover all three tables. Older rows load with retired fields ignored and a fallback title. New timestamps carry a timezone. |
 | `step` | An entry in the day (internal name). Kind from the menu, time of day, sealed title and why line, size (tiny/small/medium), origin (intro/planner/you/talk), status. |
 | `step_version`, `step_report` | Earlier wordings, and what happened (done/partly/not today, how it compared with expectations). |
 | `check_in` | The once-a-day energy answer. |
@@ -109,7 +109,7 @@ Model IDs are configuration (`KOE_CHAT_MODEL`, `KOE_FAST_MODEL`, `KOE_SAFETY_MOD
 | Agent | When | Output and checks |
 |---|---|---|
 | Intake synthesiser (`intake.ts`) | End of the four-turn chat intake | Summary, up to 4 memory proposals, 3 plan items. Checked against zod, the composition rules, the guardrails and the safety rules. Failing items are swapped for rules-based ones. AI off: `fallbackPlan`. |
-| Work interview (`interview.ts`) | After intake, or from the Today continuation | Gathers up to three weekly things: one question for what, at most one follow-up (usually the deadline), at most seven Koe turns. The model returns a short title each turn; `what` and `when` must be the person's exact words. Input rules and the fail-closed classifier run before replies. Output checks cover messages, choices and titles, including AI tells (`domain/interview-text.ts`); fixed fallback turns remain available. Approval alone writes the week. No breakdown into pieces (D036). |
+| Work interview (`interview.ts`) | After intake, or from the Today continuation | Gathers up to three weekly things: one question for what, at most one follow-up (usually the deadline), at most seven Koe turns. The model returns a short title each turn; `what` and `when` must be the person's exact words. Input rules and the fail-closed classifier run before replies. Output checks cover messages, choices and titles, including AI tells (`domain/interview-text.ts`); fixed fallback turns remain available. Approval alone writes the week. No breakdown into pieces. |
 | Planner (`planner.ts`) | First open of the day, check-in, "Not today" (smaller/swap), lighter day | A new plan version, plus a one-line note on what changed. Same checks. AI off: deterministic adaptation. |
 | Talk | Each message | Reply text plus tool proposals: add, move or shrink an entry, set a reminder, save a memory, find resources, draft a message, prepare for an appointment. Proposals are written only when the person confirms them. |
 | Resource screener | Weekly Shelf refresh, or a confirmed Talk request | Rules then Nano: exact HTTPS host, adult audience and excluded subjects. Fail-closed on model errors; validated why line or a fixed fallback. AI off uses rules and fixed copy. |
@@ -146,7 +146,7 @@ The risk patterns and the crisis-flow wording are engineering defaults and have 
 
 **Entry paths and drafts.** Legacy `/steps/[id]` links lead to the current entry on Today, including its scroll position, or read-only Look back history. Add and problem-solving forms live under `/today`; People uses the same versioned add action. Weekly choices save intentions only; Today handles plan changes and Undo. Tab-local form drafts are validated and scoped to their owner. A stale information draft needs an explicit choice before it replaces current answers in the editor. A confirmed anonymous-to-account link moves browser drafts using server-confirmed owner IDs; no credential values enter that handoff. A collision retains both drafts under the account's cleanup scope, without automatically loading the extra draft. Successful account deletion also clears the person's browser drafts; failed deletion keeps them. Search-budget reservations write an explicit UTC instant, independently of the database's local timezone.
 
-**Chat intake and interview (v3 A1–A2).** Four turns collect priorities, day/wake context, lifts and an optional weekly thing. That last answer seeds the work interview without asking it twice. People/support/busy-time questions are absent; tone defaults to calm. Main navigation stays hidden during onboarding, while Help remains available. Intake and interview drafts are validated and scoped to their owner; unscoped legacy drafts are ignored. Day and wake notes share the existing 200-character storage limit. Morning reminders remain off until explicitly enabled. Skipping the interview or turning memory off uses a local reveal.
+**Chat intake and interview.** Four turns collect priorities, day/wake context, lifts and an optional weekly thing. That last answer seeds the work interview without asking it twice. People/support/busy-time questions are absent; tone defaults to calm. Main navigation stays hidden during onboarding, while Help remains available. Intake and interview drafts are validated and scoped to their owner; unscoped legacy drafts are ignored. Day and wake notes share the existing 200-character storage limit. Morning reminders remain off until explicitly enabled. Skipping the interview or turning memory off uses a local reveal.
 
 The interview continuation is an authenticated encrypted browser token, expiring after seven days. No unconfirmed interview transcript is written to a database. In-process sequence checks reject stale turns during the current server lifetime; after a restart the signed token can resume. Durable approval IDs keep week saves idempotent across restarts. Edits are re-screened, owner-checked and checked against local eating protections at approval. Renaming preserves the original source phrase as encrypted provenance. The first intro and week share one database transaction. Returning people can add a thing through `/intake#interview` without rewriting their intro or day. Client navigation follows successful draft cleanup, including after server revalidation.
 
@@ -180,5 +180,5 @@ Web Push with VAPID. The person turns a reminder on for a timed entry, or for th
 
 - Not a medical device, and no clinical validation. The safety defaults need clinician review before real users.
 - One server instance. In-memory rate limits.
-- Shelf sources are an allowlist of a few public-health sites; YouTube is excluded because official channels can't be enforced through search.
+- Shelf results are screened by code rules and a small-model check, not reviewed by a person. YouTube videos are kept only from a short list of verified channels.
 - Calendar is one-way (`.ics`). Two-way calendar sync is on the roadmap.

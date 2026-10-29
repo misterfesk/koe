@@ -1,0 +1,33 @@
+# Render Blueprint: one web service. The database is external (any Postgres
+# URL, e.g. Neon); paste secrets in the Render dashboard. The free plan sleeps
+# after 15 idle minutes, which pauses reminders: ping the site every 10
+# minutes (e.g. cron-job.org) or use a paid plan to keep it awake.
+services:
+  - type: web
+    name: koe
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:host
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: APP_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: NEBIUS_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: DATA_ENCRYPTION_KEY
+        generateValue: true
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
