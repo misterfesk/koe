@@ -13,7 +13,8 @@ export type Tone =
   | "line"
   | "surface"
   | "secondary";
-export type Anim = "steam" | "leaf" | "twinkle" | "glow";
+export type Anim =
+  "steam" | "leaf" | "twinkle" | "glow" | "drift" | "sway" | "breathe";
 
 export type Shape = {
   id: string;
@@ -27,11 +28,15 @@ export type Shape = {
   opacity?: number;
   /** Which loop moves this shape (role "motion" only). */
   anim?: Anim;
+  /** Negative seconds, so loops start part-way and never move in unison. */
+  delay?: number;
   /** Drawn only by fill-based styles (backdrops and light). */
   fillOnly?: boolean;
 };
 
-type More = Partial<Pick<Shape, "stroke" | "opacity" | "anim" | "fillOnly">>;
+type More = Partial<
+  Pick<Shape, "stroke" | "opacity" | "anim" | "delay" | "fillOnly">
+>;
 const stroke = (tone: Tone, width: number) => ({ tone, width });
 
 const rect = (
@@ -103,28 +108,45 @@ const cup = (x: number): Shape[] => [
     stroke: stroke("wine", 3),
   }),
 ];
-const steam = (id: string, x: number): Shape =>
+const steam = (id: string, x: number, delay: number): Shape =>
   path(id, "motion", `M${x} 108q-5-7 0-13t0-12`, undefined, {
     stroke: stroke("secondary", 2),
     anim: "steam",
+    delay,
   });
 
 const W = 238; // the window's centre line
+
+/** A small cloud that drifts slowly across the glass. */
+const cloud = (delay: number): Shape =>
+  rect("cloud", "motion", W - 32, 98, 28, 7, "canvas", 3.5, {
+    anim: "drift",
+    delay,
+  });
 
 export const scenes: Record<SceneId, Shape[]> = {
   morning: [
     wall,
     ...archedWindow(W, "cream"),
+    cloud(-4),
+    circle("sun-halo", "motion", W, 76, 24, "rose", {
+      opacity: 0.3,
+      anim: "breathe",
+      delay: -6,
+      fillOnly: true,
+    }),
     circle("sun", "accent", W, 76, 16, "rose"),
     path("hills", "object", `M${W - 42} 144v-28q22-14 44-3t40-6v37Z`, "line"),
     shelf,
     ...cup(124),
-    steam("steam-a", 138),
-    steam("steam-b", 150),
+    steam("steam-a", 138, -2),
+    steam("steam-b", 150, -5),
   ],
   afternoon: [
     wall,
-    path("patch", "light", "M140 18h96l56 132H170Z", "cream", {
+    path("patch", "motion", "M140 18h96l56 132H170Z", "cream", {
+      anim: "drift",
+      delay: -7,
       fillOnly: true,
     }),
     rect("desk", "object", 104, 150, 204, 10, "secondary", 3),
@@ -141,20 +163,27 @@ export const scenes: Record<SceneId, Shape[]> = {
     }),
     path("leaf-l1", "object", "M242 102q-30-2-34-28q28 2 34 28Z", "wine"),
     path("leaf-r1", "object", "M242 90q30-2 34-28q-28 2-34 28Z", "wine"),
-    path("leaf-l2", "object", "M242 78q-22-8-22-30q22 8 22 30Z", "wine"),
+    path("leaf-l2", "motion", "M242 78q-22-8-22-30q22 8 22 30Z", "wine", {
+      anim: "sway",
+      delay: -4,
+    }),
     path("leaf-top", "motion", "M242 64q-10-18 0-34q10 16 0 34Z", "wine", {
       anim: "leaf",
+      delay: -1,
     }),
   ],
   evening: [
     wall,
-    circle("glow-a", "light", 248, 84, 66, "rose", {
+    circle("glow-a", "motion", 248, 84, 66, "rose", {
       opacity: 0.35,
+      anim: "breathe",
+      delay: -5,
       fillOnly: true,
     }),
     circle("glow-b", "motion", 248, 84, 40, "rose", {
       opacity: 0.45,
       anim: "glow",
+      delay: -3,
       fillOnly: true,
     }),
     path("shade", "accent", "M224 56h48l10 38h-68Z", "rose"),
@@ -180,11 +209,20 @@ export const scenes: Record<SceneId, Shape[]> = {
       `M${W + 6} 58a19 19 0 0 0 0 38a24 24 0 0 1 0-38Z`,
       "cream",
     ),
-    circle("star-a", "object", W - 30, 62, 1.8, "cream"),
+    circle("star-a", "motion", W - 30, 62, 1.8, "cream", {
+      anim: "twinkle",
+      delay: -2,
+    }),
     circle("star-b", "object", W + 26, 50, 1.8, "cream"),
     circle("star-c", "object", W + 30, 100, 1.8, "cream"),
-    circle("star-d", "motion", W - 22, 108, 2.2, "cream", { anim: "twinkle" }),
-    circle("star-e", "motion", W + 24, 80, 2.2, "cream", { anim: "twinkle" }),
+    circle("star-d", "motion", W - 22, 108, 2.2, "cream", {
+      anim: "twinkle",
+      delay: -5,
+    }),
+    circle("star-e", "motion", W + 24, 80, 2.2, "cream", {
+      anim: "twinkle",
+      delay: -9,
+    }),
     shelf,
   ],
   lighter: [
@@ -192,6 +230,7 @@ export const scenes: Record<SceneId, Shape[]> = {
     ...archedWindow(W, "cream"),
     shelf,
     ...cup(124),
-    steam("steam-a", 144),
+    steam("steam-a", 144, -3),
+    cloud(-5),
   ],
 };

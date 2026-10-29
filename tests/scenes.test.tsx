@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -28,15 +29,39 @@ describe("sceneFor", () => {
 });
 
 describe("geometry", () => {
-  it("has the five scenes, small, with at most two moving shapes", () => {
+  it("has the five scenes, small, with a few calm moving shapes", () => {
     expect(Object.keys(scenes).sort()).toEqual([...sceneIds].sort());
     for (const id of sceneIds) {
       expect(scenes[id].length).toBeLessThanOrEqual(25);
       expect(
         scenes[id].filter((s) => s.role === "motion").length,
-      ).toBeLessThanOrEqual(2);
+      ).toBeLessThanOrEqual(4);
       expect(scenes[id].every((s) => s.role !== "motion" || s.anim)).toBe(true);
     }
+  });
+  it("every scene moves a little, only motion shapes animate, and each loop has a style", () => {
+    const css = readFileSync("features/scenes/scenes.module.css", "utf8");
+    for (const id of sceneIds) {
+      expect(scenes[id].some((s) => s.anim)).toBe(true);
+      for (const s of scenes[id]) {
+        if (s.anim) expect(s.role).toBe("motion");
+        if (s.delay !== undefined) expect(s.delay).toBeLessThan(0);
+      }
+    }
+    for (const a of [
+      "steam",
+      "leaf",
+      "twinkle",
+      "glow",
+      "drift",
+      "sway",
+      "breathe",
+    ]) {
+      expect(css).toContain(`.${a} {`);
+      expect(css).toContain(`@keyframes ${a} {`);
+    }
+    for (const id of ["evening", "lighter"] as const)
+      expect(scenes[id].filter((s) => s.anim).length).toBeLessThanOrEqual(2);
   });
   it("lighter has fewer objects than any other scene", () => {
     const n = (id: (typeof sceneIds)[number]) =>

@@ -26,6 +26,44 @@
   animation-name: glow;
   animation-duration: 11s;
 }
+.drift {
+  animation-name: drift;
+  animation-duration: 16s;
+}
+.sway {
+  animation-name: sway;
+  animation-duration: 10s;
+  transform-origin: 50% 100%;
+}
+.breathe {
+  animation-name: breathe;
+  animation-duration: 13s;
+  transform-origin: 50% 50%;
+}
+@keyframes drift {
+  from {
+    transform: translateX(-3px);
+  }
+  to {
+    transform: translateX(3px);
+  }
+}
+@keyframes sway {
+  from {
+    transform: rotate(-1.5deg);
+  }
+  to {
+    transform: rotate(1.5deg);
+  }
+}
+@keyframes breathe {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.03);
+  }
+}
 @keyframes steam {
   from {
     transform: translateY(0);
