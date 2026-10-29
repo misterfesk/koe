@@ -52,7 +52,7 @@ export async function allow(
   const rules = {
     "sign-in": { limit: 10, windowMs: 10 * 60_000 },
     "sign-up": { limit: 5, windowMs: 60 * 60_000 },
-    guest: { limit: 5, windowMs: 60 * 60_000 },
+    guest: { limit: 100, windowMs: 60 * 60_000 },
     "reminder-test": { limit: 5, windowMs: 60_000 },
     "week-review": { limit: 10, windowMs: 60_000 },
     "appointment-lookup": { limit: 5, windowMs: 24 * 60 * 60_000 },
