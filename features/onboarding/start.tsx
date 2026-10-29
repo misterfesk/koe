@@ -28,7 +28,7 @@ export function StartForm() {
   return (
     <form action={action} className="prose" noValidate>
       <p>
-        Koe is an AI companion that helps you plan gentle days. It&apos;s not a
+        Koe is an AI companion that helps you plan your days. It&apos;s not a
         therapist, and it can&apos;t respond to emergencies.{" "}
         <Link href="/help">Help</Link> lists people who can.
       </p>

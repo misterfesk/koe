@@ -93,7 +93,7 @@ test("a reminder on an item: asked once, with a reason, then a test arrives", as
   await card.getByRole("button", { name: "Not today" }).click();
   await card.getByRole("button", { name: "Swap for something else" }).click();
   const banner = page.getByRole("region", { name: "What changed" });
-  await expect(banner).toContainText("Reminder removed with the old item.");
+  await expect(banner).toContainText("Its reminder went too.");
   await expect(page.getByText(/^Next reminder/)).toHaveCount(0);
   await expect(page.getByText(/^Reminder at/)).toHaveCount(0);
 

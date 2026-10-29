@@ -114,7 +114,7 @@ export function CarePreparation({
           onClick={() =>
             startTransition(async () => {
               const r = await saveCarePrep(text);
-              setStatus("Saved to your Journey as a note.");
+              setStatus("Saved as a note in Look back.");
               setSafety(r.safety ?? "none");
             })
           }

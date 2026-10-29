@@ -81,7 +81,7 @@ export function NoteComposer({ region }: { region: string | null }) {
         <button disabled={pending}>Save note</button>
         {saved && (
           <p className="meta" role="status">
-            Saved to your Journey.
+            Saved to Look back.
           </p>
         )}
       </div>

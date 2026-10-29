@@ -63,9 +63,7 @@ describe("the menu", () => {
   it("uses the labels the product spec gives people", () => {
     expect(kindLabel("enjoy")).toBe("Something you used to enjoy");
     expect(kindLabel("reach_out")).toBe("Reach out to someone");
-    expect(kindLabel("work_chunk")).toBe(
-      "A small piece of work or study, then a break",
-    );
+    expect(kindLabel("work_chunk")).toBe("Work or study, then a break");
   });
 
   it("never ships an example that breaks its own guardrails", () => {

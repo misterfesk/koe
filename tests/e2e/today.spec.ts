@@ -256,7 +256,7 @@ test("a This week thing on Today is never made smaller or swapped", async ({
   await thing.getByRole("button", { name: "Not today" }).click();
   // The sheet replaces the Not today button, so find it on the page (only one is open).
   const sheet = page.getByRole("group", { name: "Not today" });
-  await expect(sheet.getByText("That is fine. What would help?")).toBeVisible();
+  await expect(sheet.getByText("What would help?")).toBeVisible();
   await expect(
     sheet.getByRole("button", { name: "Move to later" }),
   ).toBeVisible();

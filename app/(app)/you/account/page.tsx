@@ -30,7 +30,6 @@ export default async function Page({
         <GuestAccount />
         <p className="meta">
           Already have an account? <Link href="/sign-in">Sign in</Link>.
-          Anything from this guest session moves into it.
         </p>
       </>
     );

@@ -26,7 +26,7 @@ export default function Page() {
         <p>
           Koe is built around that. It plans a short day from what you tell it.
           You tap to say how each thing went. The plan follows your energy, and
-          the look-back shows you what tends to help.
+          Look back shows what you did.
         </p>
         <h2>What Koe isn&apos;t</h2>
         <p>

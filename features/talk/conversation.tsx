@@ -23,7 +23,7 @@ import { ToolCard } from "./proposals";
 import styles from "./talk.module.css";
 
 const openers: Record<TalkMode, string> = {
-  talk: "What's on your mind? Say as much or as little as you like.",
+  talk: "What's on your mind?",
   plan: "What would you like to do a bit more of, or used to enjoy?",
   problem: "What's the practical problem? One thing, as specific as you can.",
   thought:

@@ -64,7 +64,14 @@ export default function Page() {
             <strong>Talk.</strong> The conversation goes to Nebius. With memory
             on, your memory cards, recent entries from your day and today&apos;s
             energy check-in go too. With memory off, recent counts, kinds, sizes
-            and times still go. Plan titles and why lines stay out.
+            and times still go. Plan titles and why lines stay out. When you
+            close a conversation, it goes once more to write a short takeaway.
+          </li>
+          <li>
+            <strong>This week.</strong> What you say in the short interview goes
+            to Nebius to write titles for your things. With memory on, each
+            title goes once more to sort it into a topic for Shelf. The week
+            review sends only your choices.
           </li>
           <li>
             <strong>Drafts and ideas.</strong> When you ask Koe for ideas or a

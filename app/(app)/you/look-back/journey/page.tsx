@@ -13,7 +13,7 @@ import { listSteps } from "@/server/data/steps";
 import { listConversations } from "@/server/data/talk";
 import { requireViewer } from "@/server/viewer";
 
-export const metadata: Metadata = { title: "Journey" };
+export const metadata: Metadata = { title: "Everything so far" };
 
 type Entry = { day: string; at: string; key: string; node: React.ReactNode };
 
@@ -126,7 +126,7 @@ export default async function Page({
         eyebrow="You · Look back"
         description="What you did, what you said helped, and your notes. Only you can see this."
       >
-        Your journey
+        Everything so far
       </PageHeading>
 
       <section aria-labelledby="noticed" className={styles.noticed}>
@@ -151,7 +151,7 @@ export default async function Page({
           <p className="meta">
             {ratings < MIN_RATINGS
               ? `After ${MIN_RATINGS} answers about what helped, simple counts appear here. So far: ${ratings}.`
-              : "Nothing stands out yet. That's normal."}
+              : "Nothing stands out yet."}
           </p>
         )}
       </section>

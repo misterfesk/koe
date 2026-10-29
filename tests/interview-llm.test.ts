@@ -260,10 +260,10 @@ describe("interview model contract", () => {
       model.calls[0].messages.reduce((n, m) => n + m.content.length, 0),
     ).toBeLessThanOrEqual(12000);
   });
-  it("uses the compact interview-9 prompt with no worked example or pieces", async () => {
+  it("uses the compact interview-10 prompt with no worked example or pieces", async () => {
     const prompt = await import("@/server/llm/prompts/interview");
     const text = prompt.system({});
-    expect(prompt.version).toBe("interview-9");
+    expect(prompt.version).toBe("interview-10");
     expect(text).toContain("leaves out the deadline");
     expect(text).toContain("alone asks whether there is anything else");
     expect(text).not.toMatch(/\bCV\b|pieces?|break (it )?down|stuck/i);

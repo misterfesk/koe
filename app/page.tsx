@@ -25,8 +25,8 @@ export default async function Page({
           </h1>
           <p className="lede">
             When your mood is low, doing a little of what matters can help. Koe
-            plans a gentle day around you, makes it lighter when your energy
-            drops, and shows what actually helps over time.
+            plans your day around you and makes it lighter when your energy
+            drops.
           </p>
           <div className="actions">
             <Welcome autoOpen={!deleted}>
@@ -36,10 +36,7 @@ export default async function Page({
               I have an account
             </ActionLink>
           </div>
-          <p className="meta">
-            No sign-up needed to start. You can make an account later to keep
-            your data on other devices.
-          </p>
+          <p className="meta">No sign-up needed to start.</p>
         </div>
         <div className={styles.art} aria-hidden="true">
           <span className={styles.circle} />
@@ -51,7 +48,7 @@ export default async function Page({
       <section className={styles.principles} aria-label="How Koe works">
         <div>
           <p className="eyebrow">01 / Choose</p>
-          <h2>One gentle day.</h2>
+          <h2>A day that fits.</h2>
           <p>
             Answer four questions. Koe plans a few ordinary things you used to
             enjoy or need to do, small enough to start. You can change any of
@@ -60,10 +57,10 @@ export default async function Page({
         </div>
         <div>
           <p className="eyebrow">02 / Notice</p>
-          <h2>See what helps.</h2>
+          <h2>See what moved.</h2>
           <p>
-            Tap how it went and whether it helped. Over the weeks, your own
-            record shows what tends to work for you.
+            Tap how it went. Over the weeks, your own record shows what you did
+            and what moved forward.
           </p>
         </div>
         <div>

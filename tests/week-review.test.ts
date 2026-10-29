@@ -12,6 +12,8 @@ beforeAll(async () => {
   process.env.NEBIUS_API_KEY = "test-key-never-used-in-this-suite";
   process.env.AUTH_SECRET = randomBytes(32).toString("base64url");
   process.env.DATA_ENCRYPTION_KEY = randomBytes(32).toString("base64");
+  // The model is off: today's draft is rebuilt by rules only.
+  process.env.KOE_AI = "off";
   db = await (await import("@/server/db")).openDb("memory:");
   schema = await import("@/server/db/schema");
   data = await import("@/server/data/week");
@@ -266,5 +268,104 @@ describe("week review", () => {
     expect(next?.items[0].captured.title).toBe(
       "Ring the landlord about the boiler",
     );
+  });
+
+  describe("today's draft after the review", () => {
+    /** A due week, and today's plan still the draft made from it. */
+    async function draftDay() {
+      const a = await person();
+      const week = await dueWeek(a);
+      const { openToday } = await import("@/server/llm/planner");
+      await openToday(a, { db, today: STARTED });
+      const draft = await openToday(a, { db, today: DUE });
+      expect(draft.version).toBe(1);
+      expect(draft.reason).toBe("draft");
+      return { a, week, draft };
+    }
+    const review = (
+      a: string,
+      week: Awaited<ReturnType<typeof dueWeek>>,
+      plants: "keep" | "let_go",
+    ) =>
+      data.reviewWeek(db, a, {
+        weekId: week.id,
+        expectedVersion: week.version,
+        today: DUE,
+        createId: crypto.randomUUID(),
+        decisions: [
+          { itemId: week.items[1].id, choice: "keep" },
+          { itemId: week.items[2].id, choice: plants },
+        ],
+      });
+    const titles = async (a: string) => {
+      const { getPlanDay } = await import("@/server/data/intake");
+      const plan = (await getPlanDay(db, a, DUE))!;
+      return { plan, titles: plan.items.map((i) => i.title) };
+    };
+
+    it("rebuilds an unanswered draft from the new week", async () => {
+      const { a, week, draft } = await draftDay();
+      expect(draft.items.map((i) => i.title)).toContain("Repot the plants");
+      const next = await review(a, week, "let_go");
+      const { redraftToday } = await import("@/server/llm/planner");
+      expect(await redraftToday(a, { db, today: DUE })).toBe(true);
+      const { plan, titles: now } = await titles(a);
+      expect(now).toContain("Email the landlord");
+      expect(now).not.toContain("Repot the plants");
+      // Still the one draft to keep or simplify, now linked to the new week.
+      expect(plan.version).toBe(1);
+      expect(plan.reason).toBe("draft");
+      const thingIds = plan.items.flatMap((i) =>
+        i.weekItemId ? [i.weekItemId] : [],
+      );
+      expect(thingIds).toEqual([next!.items[0].id]);
+    });
+
+    it("drops the old week's entries when everything is let go", async () => {
+      const { a, week } = await draftDay();
+      await data.reviewWeek(db, a, {
+        weekId: week.id,
+        expectedVersion: week.version,
+        today: DUE,
+        createId: crypto.randomUUID(),
+        decisions: [
+          { itemId: week.items[1].id, choice: "let_go" },
+          { itemId: week.items[2].id, choice: "let_go" },
+        ],
+      });
+      const { redraftToday } = await import("@/server/llm/planner");
+      expect(await redraftToday(a, { db, today: DUE })).toBe(true);
+      const { plan } = await titles(a);
+      expect(plan.items.length).toBeGreaterThan(0);
+      expect(plan.items.some((i) => i.weekItemId)).toBe(false);
+    });
+
+    it("leaves a kept plan as it is", async () => {
+      const { a, week } = await draftDay();
+      const { keepDraft } = await import("@/server/data/plan");
+      expect((await keepDraft(db, a, DUE)).ok).toBe(true);
+      const before = await titles(a);
+      await review(a, week, "let_go");
+      const { redraftToday } = await import("@/server/llm/planner");
+      expect(await redraftToday(a, { db, today: DUE })).toBe(false);
+      const after = await titles(a);
+      expect(after.titles).toEqual(before.titles);
+      expect(after.titles).toContain("Repot the plants");
+      expect(after.plan.reason).toBe("draft_kept");
+    });
+
+    it("leaves a draft with an answered entry as it is", async () => {
+      const { a, week, draft } = await draftDay();
+      const landlord = draft.items.find(
+        (i) => i.title === "Email the landlord",
+      )!;
+      await steps.reportStep(db, a, landlord.stepId!, "partly", DUE);
+      await review(a, week, "let_go");
+      const { redraftToday } = await import("@/server/llm/planner");
+      expect(await redraftToday(a, { db, today: DUE })).toBe(false);
+      const after = await titles(a);
+      expect(after.titles).toEqual(draft.items.map((i) => i.title));
+      expect(after.plan.version).toBe(1);
+    });
   });
 });

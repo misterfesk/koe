@@ -112,7 +112,9 @@ test("welcome, four chat turns, reveal and Start my day land on Today", async ({
       return !!title && !!header && title.y >= header.y + header.height;
     })
     .toBe(true);
-  await expect(page.getByText("Here's a simple start")).toBeVisible();
+  await expect(
+    page.getByText("A simple start from your answers."),
+  ).toBeVisible();
   const morningChoices = page.getByRole("group", {
     name: "A morning plan time",
   });

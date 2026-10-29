@@ -137,7 +137,7 @@ export async function notToday(
   const plan = await getPlanDay(v.db, v.user.id, v.today);
   const item = plan?.items.find((i) => i.stepId === stepId);
   if (!plan || !item)
-    return { ok: true, changed: false, note: "That item is already gone." };
+    return { ok: true, changed: false, note: "That is already off today." };
   const items: DayItem[] = plan.items.filter((i) => i !== item);
   await reportStep(v.db, v.user.id, stepId, "not", v.today);
   const diff = diffPlans(plan.items, items);

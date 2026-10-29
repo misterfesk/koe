@@ -86,7 +86,7 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     },
   },
   task: {
-    label: "A small task, broken down",
+    label: "A small job",
     area: "do",
     band: "morning",
     pick: "When the person named a job they keep putting off or are stuck on. Morning.",
@@ -198,7 +198,7 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     },
   },
   wind_down: {
-    label: "Wind down / steady wake time",
+    label: "Sleep and waking",
     area: "care",
     band: "evening",
     pick: "When the person asked about sleep. Evening, or one morning anchor.",
@@ -219,17 +219,15 @@ export const planMenu: Record<PlanKind, KindMeta> = {
     band: "evening",
     pick: "Optional on hard days or after something did not go to plan.",
     preferred: "tiny",
-    ideas: "one line a friend would say, a short gentle break",
+    ideas: "one line a friend would say, a short break",
     examples: {
       tiny: [{ title: "Say one line to yourself that a friend would say" }],
-      small: [
-        { title: "Take a three-minute break to be gentle with yourself" },
-      ],
-      medium: [{ title: "Do something gentle for yourself for 20 minutes" }],
+      small: [{ title: "Take a three-minute break to be kind to yourself" }],
+      medium: [{ title: "Do something kind for yourself for 20 minutes" }],
     },
   },
   work_chunk: {
-    label: "A small piece of work or study, then a break",
+    label: "Work or study, then a break",
     area: "do",
     band: "midday",
     pick: "When the person mentioned work or study. Midday.",
@@ -689,7 +687,7 @@ export function whyFor(kind: PlanKind, model: IntakeModel): string {
         ? said("basics")
         : goal
           ? said(goal)
-          : "Because a small basic is a gentle place to start";
+          : "Because a small basic is an easy place to start";
     case "work_chunk":
       return model.goals.includes("work_study")
         ? said("work_study")
@@ -699,7 +697,7 @@ export function whyFor(kind: PlanKind, model: IntakeModel): string {
     case "wind_down":
       return model.goals.includes("sleep")
         ? said("sleep")
-        : "Because a quiet end to the day is a gentle place to stop";
+        : "Because a quiet end to the day is an easy place to stop";
     case "move":
       return model.goals.includes("energy")
         ? said("energy")
@@ -709,7 +707,7 @@ export function whyFor(kind: PlanKind, model: IntakeModel): string {
         ? said(goal)
         : "Because a minute of outside air is a small, easy start";
     case "kind":
-      return "Because a gentle word to yourself costs nothing";
+      return "Because a kind word to yourself costs nothing";
     case "problem":
       return "Because one clear thing to do next can make a problem smaller";
     case "care":

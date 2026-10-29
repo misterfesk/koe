@@ -38,6 +38,11 @@ export type PlanWrite = {
   origin: PlanOrigin;
   /** Refuse unless this would be exactly this version (guards a race). */
   expectVersion?: number;
+  /**
+   * Rewrite today's draft as version 1 instead of adding a version. Refused
+   * unless the latest version is still an unkept draft with no entry answered.
+   */
+  replaceDraft?: boolean;
 };
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -71,7 +76,26 @@ export async function writePlanVersion(
 ): Promise<{ ok: true; version: number; items: DayItem[] } | { ok: false }> {
   return db.transaction(async (tx) => {
     const prev = await latestRow(tx, userId, w.day);
-    const version = (prev?.version ?? 0) + 1;
+    if (w.replaceDraft) {
+      if (!prev || prev.version !== 1 || prev.reason !== "draft")
+        return { ok: false as const };
+      const ids = snapshotIds(prev.snapshotEnc);
+      const answered = ids.length
+        ? await tx
+            .select({ id: stepReport.id })
+            .from(stepReport)
+            .where(
+              and(
+                eq(stepReport.userId, userId),
+                inArray(stepReport.stepId, ids),
+              ),
+            )
+            .limit(1)
+        : [];
+      if (answered.length) return { ok: false as const };
+      await tx.delete(planDay).where(eq(planDay.id, prev.id));
+    }
+    const version = w.replaceDraft ? 1 : (prev?.version ?? 0) + 1;
     if (w.expectVersion !== undefined && version !== w.expectVersion)
       return { ok: false as const };
 

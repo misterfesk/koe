@@ -18,7 +18,7 @@ export default async function Page() {
     <>
       <PageHeading
         eyebrow="You · What Koe knows"
-        description="Review your saved answers, summary and memory cards. You choose what Koe can use."
+        description="You choose what Koe can use."
       >
         What Koe knows
       </PageHeading>

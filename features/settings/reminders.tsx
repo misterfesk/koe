@@ -129,10 +129,7 @@ export function MorningPlanReminder({
   return (
     <section aria-labelledby="morning-plan" style={{ marginTop: 32 }}>
       <h2 id="morning-plan">Morning plan reminder</h2>
-      <p className="hint">
-        One reminder a day, when your day is ready. It stays off until you turn
-        it on.
-      </p>
+      <p className="hint">One reminder a day, when your day is ready.</p>
       <label className="toggle">
         <input
           type="checkbox"

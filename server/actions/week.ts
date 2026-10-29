@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { WeekView } from "@/domain/week";
 import { reviewWeek } from "../data/week";
+import { redraftToday } from "../llm/planner";
 import { allow } from "../rate-limit";
 import { startShelfAfterSave } from "../search/shelf";
 import { requireViewer } from "../viewer";
@@ -47,6 +48,10 @@ export async function submitWeekReview(
       ...parsed.data,
       today: v.today,
     });
+    // An unkept draft built from the old week is rebuilt from the new one.
+    await redraftToday(v.user.id, { db: v.db, today: v.today }).catch(
+      () => false,
+    );
     if (week) startShelfAfterSave(v);
     revalidatePath("/today");
     return { ok: true, week };

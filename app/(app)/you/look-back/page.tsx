@@ -36,8 +36,7 @@ export default async function Page() {
           <p>
             You said how it went {s.answered}{" "}
             {s.answered === 1 ? "time" : "times"}: {s.done} done, {s.partly}{" "}
-            partly, {s.not} not this time. Every answer counts, including
-            &ldquo;not this time&rdquo;.
+            partly, {s.not} not this time.
           </p>
         )}
         {s.helped.length > 0 && (

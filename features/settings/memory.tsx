@@ -145,7 +145,7 @@ function Card({ card, region }: { card: MemoryView; region: string | null }) {
             {card.source === "talk"
               ? "Kept from a conversation"
               : card.source === "report"
-                ? "Kept from your Journey"
+                ? "Kept from Look back"
                 : card.source === "intro"
                   ? "From your intro"
                   : "Added by you"}

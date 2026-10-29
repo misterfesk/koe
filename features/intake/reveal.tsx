@@ -195,7 +195,7 @@ export function RevealScreen({
           Here&apos;s what I understood
         </h1>
         {reveal.source === "fallback" && (
-          <p className="lede">Here&apos;s a simple start from your answers.</p>
+          <p className="lede">A simple start from your answers.</p>
         )}
       </header>
 
@@ -354,9 +354,7 @@ export function RevealScreen({
             Want a reminder?
           </h2>
           <p className="meta">
-            Reminders stay off until you turn them on. Your choices save when
-            you start your day. A reminder shows only the time, never what it
-            is.
+            A reminder shows only the time, never what it is.
           </p>
           <AskCard
             label="A morning plan time"

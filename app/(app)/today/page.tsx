@@ -180,7 +180,7 @@ export default async function Page({
       lines: [
         ...diffLines(diff, clock),
         ...(lostReminder
-          ? ["Reminder removed with the old item. Undo brings it back."]
+          ? ["Its reminder went too. Undo brings it back."]
           : []),
       ],
       canUndo: true,

@@ -142,7 +142,7 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
 
       {!report && open && (
         <div className={styles.sheet} role="group" aria-label="Not today">
-          <p className={styles.sheetTitle}>That is fine. What would help?</p>
+          <p className={styles.sheetTitle}>What would help?</p>
           <div className="actions">
             {/* A tiny entry can rarely get smaller, so that option comes last.
                 A This week thing is never made smaller or swapped. */}
