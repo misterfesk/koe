@@ -16,7 +16,7 @@ const config: NextConfig = {
       to("/reflect/talk", "/talk"),
       to("/reflect/talk/:id", "/talk/:id"),
       to("/reflect/week", "/you/look-back"),
-      to("/reflect/journey", "/you/look-back/journey"),
+      to("/reflect/journey", "/you/look-back"),
       to("/connect", "/you/people"),
       to("/connect/care", "/you/care"),
       to("/settings", "/you"),

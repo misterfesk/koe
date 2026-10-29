@@ -71,7 +71,6 @@ export function RevealScreen({
   const [morning, setMorning] = useState<MorningPlan>(
     reveal.model.morningPlan ?? "none",
   );
-  const [itemsOn, setItemsOn] = useState(false);
   const [remindError, setRemindError] = useState("");
   const [announce, setAnnounce] = useState("");
   const [error, setError] = useState("");
@@ -89,7 +88,7 @@ export function RevealScreen({
     morning && morning !== "none" ? Number(morning.slice(0, 2)) * 60 : null;
   // A reminder inside quiet hours, or for a time that has passed today, would
   // never arrive. The reveal says so instead of offering it.
-  const { quietStart, quietEnd, nowMinute } = reveal.reminderRules;
+  const { quietStart, quietEnd } = reveal.reminderRules;
   const morningQuiet =
     morningMinute !== null && inQuietHours(morningMinute, quietStart, quietEnd);
   // With a week, day 1 is its things plus one anchor: the same rule Start my
@@ -106,13 +105,7 @@ export function RevealScreen({
       : anchor && it.kind === anchor.kind && it.title === anchor.title
         ? items.indexOf(anchor)
         : -1;
-  const noReminder = shown.flatMap((it) =>
-    inQuietHours(it.minuteOfDay, quietStart, quietEnd)
-      ? [{ title: it.title, why: "it is inside your quiet hours" }]
-      : it.minuteOfDay <= nowMinute
-        ? [{ title: it.title, why: "its time has passed today" }]
-        : [],
-  );
+
   const toggleMorning = (on: boolean) =>
     startTransition(async () => {
       setRemindError("");
@@ -121,15 +114,6 @@ export function RevealScreen({
         if (!asked.ok) return setRemindError(asked.message);
       }
       setMorningOn(on);
-    });
-  const toggleItems = (on: boolean) =>
-    startTransition(async () => {
-      setRemindError("");
-      if (on) {
-        const asked = await enableNotifications(publicKey!);
-        if (!asked.ok) return setRemindError(asked.message);
-      }
-      setItemsOn(on);
     });
 
   const swap = (index: number) => {
@@ -155,7 +139,7 @@ export function RevealScreen({
             .map(({ kind, text }) => ({ kind, text })),
           savePeople: save.filter((n) => n.save).map((n) => n.name),
           items,
-          remindItems: itemsOn,
+          remindItems: false,
           morningPlanMinute: morningOn ? morningMinute : null,
           ...(weekToken && weekDraft
             ? { interview: { token: weekToken, draft: weekDraft } }
@@ -314,10 +298,7 @@ export function RevealScreen({
             const i = source(it);
             return (
               <li key={`${it.kind}-${it.title}`} className={styles.item}>
-                <p className="eyebrow">
-                  <span className="clock">{clock(it.minuteOfDay)}</span> ·{" "}
-                  {sizeLabels[it.size]}
-                </p>
+                <p className="eyebrow">{sizeLabels[it.size]}</p>
                 <h3>{it.title}</h3>
                 <p className="meta">{it.why}</p>
                 {i >= 0 && (
@@ -400,21 +381,6 @@ export function RevealScreen({
                 </span>
               </label>
             ))}
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={itemsOn}
-              disabled={pending}
-              onChange={(e) => toggleItems(e.target.checked)}
-            />
-            <span>Remind me at the time of each thing in my plan</span>
-          </label>
-          {itemsOn && noReminder.length > 0 && (
-            <p className="meta" role="status">
-              No reminder for{" "}
-              {noReminder.map((r) => `${r.title} (${r.why})`).join(", ")}.
-            </p>
-          )}
           {remindError && (
             <p className="error" role="alert">
               {remindError}

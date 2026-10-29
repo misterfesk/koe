@@ -7,7 +7,11 @@ import {
   type PlanKind,
   type PlanSize,
 } from "@/domain/plan-menu";
-import { resultLines, type ToolProposal } from "@/domain/talk-tools";
+import {
+  resultLines,
+  type Subarea,
+  type ToolProposal,
+} from "@/domain/talk-tools";
 import { formatClock } from "@/domain/time";
 import { confirmProposal, dismissProposal } from "@/server/actions/talk";
 import { copyText } from "@/services/clipboard";
@@ -51,6 +55,47 @@ function describe(t: ToolProposal, clock: (m: number) => string): Card {
           typeof a.minuteOfDay === "number" ? " · " + clock(a.minuteOfDay) : ""
         }`,
         confirm: "Add to today",
+      };
+    case "break_down_topic":
+      return {
+        eyebrow: "Break this down",
+        headline: String(a.topic ?? "this"),
+        detail:
+          "Keep the parts you want, change the words, or uncheck any to skip.",
+        confirm: "Add selected to today",
+      };
+    case "edit_item":
+      return {
+        eyebrow: "Change on today",
+        headline: `${title} → ${String(a.newTitle ?? "")}`,
+        detail:
+          typeof a.size === "string"
+            ? sizeLabels[a.size as PlanSize]
+            : undefined,
+        confirm: "Change",
+      };
+    case "split_item": {
+      const parts = Array.isArray(a.parts)
+        ? (a.parts as { title?: string }[])
+            .map((p) => p?.title)
+            .filter(Boolean)
+            .join(" · ")
+        : "";
+      return {
+        eyebrow: "Split into smaller parts",
+        headline: title,
+        detail: parts || undefined,
+        confirm: "Split on today",
+      };
+    }
+    case "merge_items":
+      return {
+        eyebrow: "Combine on today",
+        headline: String(a.mergedTitle ?? ""),
+        detail: t.meta?.titles?.length
+          ? `From: ${t.meta.titles.join(" · ")}`
+          : undefined,
+        confirm: "Combine",
       };
     case "move_item": {
       const to = clock(Number(a.minuteOfDay));
@@ -118,12 +163,26 @@ function describe(t: ToolProposal, clock: (m: number) => string): Card {
     case "prepare_appointment":
       return {
         eyebrow: "Appointment",
-        headline: "Put together notes for your appointment",
+        headline: "Find a service or professional to book",
         detail:
-          "They come from your own records and stay here unless you copy them.",
-        confirm: "Open appointment notes",
+          "Look up professionals or support services that fit your needs and region.",
+        confirm: "Open Appointment",
       };
   }
+}
+
+type EditableSubarea = Subarea & { checked: boolean };
+
+function initialSubareas(tool: ToolProposal): EditableSubarea[] {
+  if (tool.name !== "break_down_topic" || !Array.isArray(tool.args.subareas))
+    return [];
+  return (tool.args.subareas as Subarea[]).map((s) => ({
+    kind: s.kind ?? "work_chunk",
+    title: String(s.title ?? ""),
+    size: s.size ?? "small",
+    why: s.why ?? null,
+    checked: true,
+  }));
 }
 
 /** One of Koe's offers. Nothing happens until the person confirms; "No thanks" writes nothing. */
@@ -150,9 +209,14 @@ export function ToolCard({
   const [memory, setMemory] = useState(String(tool.args.text ?? ""));
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(tool.args.draft ?? ""));
+  const [subareas, setSubareas] = useState<EditableSubarea[]>(() =>
+    initialSubareas(tool),
+  );
   const allowed = useAllowed();
   const fieldId = useId();
   const isDraft = tool.name === "draft_message";
+  const isAutoSavedMemory =
+    tool.name === "save_memory" && Boolean(tool.meta?.autoSaved);
   // A draft stays usable (copy again, open in another app) until it is dismissed.
   const decided = !!result && !isDraft;
   const searchDone =
@@ -160,12 +224,18 @@ export function ToolCard({
     (/^Added \d+ picks? to your Shelf\.$/.test(result) ||
       result === resultLines.find_resources(0));
 
-  const confirm = (extra?: { text?: string; via?: "copy" | "sms" | "email" }) =>
+  const confirm = (extra?: {
+    text?: string;
+    via?: "copy" | "sms" | "email";
+    subareas?: Subarea[];
+  }) =>
     startTransition(async () => {
       setError("");
       const r = await confirmProposal(messageId, tool.id, extra);
-      if (r.ok) setResult(r.result);
-      else setError(r.error);
+      if (r.ok) {
+        setResult(r.result);
+        setEditing(false);
+      } else setError(r.error);
     });
 
   const turnOnReminder = () => {
@@ -187,9 +257,47 @@ export function ToolCard({
   if (gone)
     return (
       <div className={styles.proposal}>
-        <p className="meta">{resultLines.dismissed()}</p>
+        <p className="meta">
+          {isAutoSavedMemory ? "Undone." : resultLines.dismissed()}
+        </p>
       </div>
     );
+
+  if (isAutoSavedMemory && !editing && !decided) {
+    return (
+      <div
+        className={styles.proposal}
+        role="group"
+        aria-label="Noted in what Koe knows"
+      >
+        <p className="meta">
+          Noted: {memory} ·{" "}
+          <button
+            type="button"
+            className="text"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const r = await dismissProposal(messageId, tool.id);
+                if (r.ok) setGone(true);
+              })
+            }
+          >
+            Undo
+          </button>{" "}
+          ·{" "}
+          <button
+            type="button"
+            className="text"
+            disabled={pending}
+            onClick={() => setEditing(true)}
+          >
+            Edit
+          </button>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -218,6 +326,43 @@ export function ToolCard({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
           />
+        </div>
+      ) : tool.name === "break_down_topic" && !decided ? (
+        <div>
+          <p className={styles.proposalTitle}>{card.headline}</p>
+          <div className="stack">
+            {subareas.map((s, idx) => (
+              <div key={idx} className="row">
+                <input
+                  type="checkbox"
+                  aria-label={`Include ${s.title}`}
+                  checked={s.checked}
+                  onChange={(e) =>
+                    setSubareas((prev) =>
+                      prev.map((item, i) =>
+                        i === idx
+                          ? { ...item, checked: e.target.checked }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+                <input
+                  type="text"
+                  aria-label={`Sub-area ${idx + 1}`}
+                  value={s.title}
+                  maxLength={80}
+                  onChange={(e) =>
+                    setSubareas((prev) =>
+                      prev.map((item, i) =>
+                        i === idx ? { ...item, title: e.target.value } : item,
+                      ),
+                    )
+                  }
+                />
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
         <p className={styles.proposalTitle}>
@@ -301,15 +446,26 @@ export function ToolCard({
             <button
               type="button"
               disabled={pending}
-              onClick={() =>
-                tool.name === "set_reminder"
-                  ? turnOnReminder()
-                  : confirm(
-                      tool.name === "save_memory"
-                        ? { text: memory }
-                        : undefined,
-                    )
-              }
+              onClick={() => {
+                if (tool.name === "set_reminder") return turnOnReminder();
+                if (tool.name === "save_memory")
+                  return confirm({ text: memory });
+                if (tool.name === "break_down_topic") {
+                  const chosen = subareas
+                    .filter((s) => s.checked && s.title.trim().length >= 3)
+                    .map((s) => ({
+                      title: s.title.trim(),
+                      kind: s.kind,
+                      size: s.size,
+                    }));
+                  if (!chosen.length) {
+                    setError("Keep at least one part, or choose No thanks.");
+                    return;
+                  }
+                  return confirm({ subareas: chosen });
+                }
+                return confirm();
+              }}
             >
               {card.confirm}
             </button>
@@ -334,7 +490,7 @@ export function ToolCard({
               })
             }
           >
-            No thanks
+            {isAutoSavedMemory ? "Undo" : "No thanks"}
           </button>
         </div>
       )}

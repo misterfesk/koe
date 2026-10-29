@@ -3,6 +3,7 @@ import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import {
   cachedResourceOk,
   goalWhy,
+  noteWhy,
   resourceSource,
   type PublicResource,
 } from "@/domain/resource-screen";
@@ -204,12 +205,16 @@ export async function getShelf(v: Viewer): Promise<ShelfView> {
     const tags = parseResourceTagsKey(r.tagsKey);
     const source = resourceSource(resource);
     if (!tags || !source) return [];
-    // Week titles are stored sealed per person and shown only with memory on.
-    const why = tags.weekTopic
-      ? memoryOn && r.why.startsWith('For "')
+    // Week titles and personal notes are stored sealed per person and shown only with memory on.
+    const why = !memoryOn
+      ? ""
+      : r.why.startsWith('For "') ||
+          r.why.startsWith('Because you noted "') ||
+          r.why.startsWith("Because you mentioned ")
         ? r.why
-        : ""
-      : goalWhy(tags, chosen);
+        : tags.weekTopic
+          ? ""
+          : goalWhy(tags, chosen);
     return [{ ...r, tags, why, sourceName: source.name }];
   });
   const covers = await readyCovers(
@@ -336,7 +341,7 @@ export async function setShelfFeedback(
       status,
       at: token.toISOString(),
       previous: previous.status,
-      previousAt: previous.feedbackAt?.toISOString() ?? null,
+      previousAt: previous.feedbackAt?.toISOString(),
     }),
   );
 }
@@ -349,13 +354,13 @@ export async function undoShelfFeedback(db: Db, userId: string, token: string) {
         userId: z.string(),
         id: z.string(),
         status: z.enum(["saved", "not_for_me"]),
-        at: z.iso.datetime(),
+        at: z.string(),
         previous: z.enum(["current", "saved", "not_for_me"]),
-        previousAt: z.iso.datetime().nullable(),
+        previousAt: z.string().optional(),
       })
       .parse(JSON.parse(open(token)));
     if (r.userId !== userId) return false;
-    const rows = await db
+    const [restored] = await db
       .update(shelfItem)
       .set({
         status: r.previous,
@@ -370,8 +375,64 @@ export async function undoShelfFeedback(db: Db, userId: string, token: string) {
         ),
       )
       .returning({ id: shelfItem.id });
-    return rows.length === 1;
+    return !!restored;
   } catch {
     return false;
+  }
+}
+
+export async function updateShelfNoteWhy(
+  db: Db,
+  userId: string,
+  oldText: string,
+  newText: string,
+) {
+  const oldWhy = noteWhy(oldText);
+  const newWhy = noteWhy(newText);
+  if (!oldWhy || oldWhy === newWhy) return;
+  const items = await db
+    .select({ id: shelfItem.id, whyEnc: shelfItem.whyEnc })
+    .from(shelfItem)
+    .where(eq(shelfItem.userId, userId));
+  for (const item of items) {
+    const why = open(item.whyEnc);
+    if (why === oldWhy) {
+      await db
+        .update(shelfItem)
+        .set({ whyEnc: seal(newWhy) })
+        .where(and(eq(shelfItem.userId, userId), eq(shelfItem.id, item.id)));
+    }
+  }
+}
+
+export async function removeShelfNoteWhy(
+  db: Db,
+  userId: string,
+  noteText: string,
+) {
+  const targetWhy = noteWhy(noteText);
+  if (!targetWhy) return;
+  const items = await db
+    .select({
+      id: shelfItem.id,
+      status: shelfItem.status,
+      whyEnc: shelfItem.whyEnc,
+    })
+    .from(shelfItem)
+    .where(eq(shelfItem.userId, userId));
+  for (const item of items) {
+    const why = open(item.whyEnc);
+    if (why === targetWhy) {
+      if (item.status === "current") {
+        await db
+          .delete(shelfItem)
+          .where(and(eq(shelfItem.userId, userId), eq(shelfItem.id, item.id)));
+      } else {
+        await db
+          .update(shelfItem)
+          .set({ whyEnc: seal("") })
+          .where(and(eq(shelfItem.userId, userId), eq(shelfItem.id, item.id)));
+      }
+    }
   }
 }

@@ -18,7 +18,7 @@ import {
 } from "@/domain/steps";
 import { notToday, rateVsExpected, tooMuchToday } from "@/server/actions/plan";
 import { reportHowItWent, takeBackReport } from "@/server/actions/steps";
-import { RemindControl, type PushState } from "../reminders/remind-control";
+import type { PushState } from "../reminders/remind-control";
 import { SafetyCheck } from "../safety/safety-check";
 import { openTalk } from "@/components/talk-panel";
 import { AddSomething } from "./add-something";
@@ -30,7 +30,13 @@ const answers = [
   ["partly", "Partly"],
 ] as const;
 
-function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
+function EntryCard({
+  entry,
+  onDismiss,
+}: {
+  entry: Entry;
+  onDismiss?: (id: string) => void;
+}) {
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -66,12 +72,6 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
       data-reported={!!report}
     >
       <p className="eyebrow">
-        {entry.time && (
-          <>
-            <span className="clock">{entry.time}</span>
-            {" · "}
-          </>
-        )}
         {entry.kindLabel}
         {entry.repeats ? " · " + entry.repeats : ""}
       </p>
@@ -79,27 +79,11 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
         <Link href={"#entry-" + entry.id}>{entry.title}</Link>
       </h3>
       {entry.why && <p className={styles.cue}>{entry.why}</p>}
-      <div className={styles.metaRow}>
-        {entry.size && <span className="pill">{sizeLabels[entry.size]}</span>}
-        {!report && entry.minute !== null && (
-          <RemindControl
-            stepId={entry.id}
-            title={entry.title}
-            minute={entry.minute}
-            reminder={entry.reminder}
-            push={push}
-          />
-        )}
-        {entry.minute !== null && (
-          <a
-            className={styles.calendarLink}
-            href={"/api/calendar/item/" + entry.id}
-            download
-          >
-            Add to calendar
-          </a>
-        )}
-      </div>
+      {entry.size && (
+        <div className={styles.metaRow}>
+          <span className="pill">{sizeLabels[entry.size]}</span>
+        </div>
+      )}
 
       {!report && !open && (
         <div className={styles.taps} role="group" aria-label="How did it go?">
@@ -130,11 +114,17 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
           </button>
         </div>
       )}
-      {entry.weekItemId && !open && report?.outcome !== "done" && (
+      {!open && report?.outcome !== "done" && (
         <button
           type="button"
-          className="text"
-          onClick={() => openTalk({ kind: "thing", id: entry.weekItemId! })}
+          className={`text ${styles.askLink}`}
+          onClick={() =>
+            openTalk(
+              entry.weekItemId
+                ? { kind: "thing", id: entry.weekItemId }
+                : { kind: "step", id: entry.id },
+            )
+          }
         >
           Stuck? Ask Koe →
         </button>
@@ -261,6 +251,18 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
             >
               Undo
             </button>
+            {report.outcome === "done" && onDismiss && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  className="text"
+                  onClick={() => onDismiss(entry.id)}
+                >
+                  Dismiss
+                </button>
+              </>
+            )}
           </p>
           {report.outcome !== "not" && !report.vsExpected && (
             <fieldset className="chips" disabled={pending}>
@@ -294,7 +296,13 @@ function EntryCard({ entry, push }: { entry: Entry; push: PushState }) {
  * The day's cards in one row. Phones swipe (snap, dots, a live "Card 1 of 3");
  * desktops show them side by side and get Previous / Next only when they overflow.
  */
-function CardRow({ entries, push }: { entries: Entry[]; push: PushState }) {
+function CardRow({
+  entries,
+  onDismiss,
+}: {
+  entries: Entry[];
+  onDismiss?: (id: string) => void;
+}) {
   const list = useRef<HTMLUListElement>(null);
   const [index, setIndex] = useState(0);
   const [overflow, setOverflow] = useState(false);
@@ -375,7 +383,7 @@ function CardRow({ entries, push }: { entries: Entry[]; push: PushState }) {
         onFocus={revealCard}
       >
         {entries.map((e) => (
-          <EntryCard key={e.id} entry={e} push={push} />
+          <EntryCard key={e.id} entry={e} onDismiss={onDismiss} />
         ))}
       </ul>
       {count > 1 && (
@@ -418,17 +426,44 @@ export function Timeline({
   entries,
   canAdd,
   region,
-  push,
   after,
 }: {
   entries: Entry[];
   canAdd: boolean;
   region: string | null;
-  push: PushState;
+  push?: PushState;
   /** This week and Shelf: shown between the plan and the closing row. */
   after?: ReactNode;
 }) {
   const [pending, startTransition] = useTransition();
+  const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = sessionStorage.getItem("koe_dismissed_today");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleDismiss = useCallback((id: string) => {
+    setDismissedIds((prev) => {
+      const next = prev.includes(id) ? prev : [...prev, id];
+      try {
+        sessionStorage.setItem("koe_dismissed_today", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const handleShowDismissed = useCallback(() => {
+    setDismissedIds([]);
+    try {
+      sessionStorage.removeItem("koe_dismissed_today");
+    } catch {}
+  }, []);
+
+  const visibleEntries = entries.filter((e) => !dismissedIds.includes(e.id));
   const [message, setMessage] = useState("");
   const [safety, setSafety] = useState<RiskLevel>("none");
   const entryIds = entries.map((entry) => entry.id).join(",");
@@ -468,10 +503,22 @@ export function Timeline({
       <h2 id="today-plan" className={styles.sectionTitle}>
         Your day
       </h2>
-      {entries.length === 0 ? (
-        <p className="meta">Nothing is planned. Add something if you like.</p>
+      {visibleEntries.length === 0 ? (
+        <p className="meta">
+          {entries.length > 0 && dismissedIds.length > 0
+            ? "All done for today."
+            : "Nothing is planned. Add something if you like."}
+        </p>
       ) : (
-        <CardRow entries={entries} push={push} />
+        <CardRow entries={visibleEntries} onDismiss={handleDismiss} />
+      )}
+      {dismissedIds.length > 0 && (
+        <p className="meta" style={{ marginTop: 8 }}>
+          <button type="button" className="text" onClick={handleShowDismissed}>
+            Show {dismissedIds.length} dismissed{" "}
+            {dismissedIds.length === 1 ? "task" : "tasks"}
+          </button>
+        </p>
       )}
     </section>
   );
@@ -493,11 +540,6 @@ export function Timeline({
           >
             This is too much today
           </button>
-        )}
-        {entries.some((e) => e.minute !== null) && (
-          <a className="button secondary" href="/api/calendar/today" download>
-            Add today to your calendar
-          </a>
         )}
       </div>
       {message && (

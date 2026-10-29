@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getPlanDay } from "@/server/data/intake";
 import { requireViewer } from "@/server/viewer";
+
 export default async function Page({
   params,
 }: {
@@ -11,5 +12,5 @@ export default async function Page({
   const plan = await getPlanDay(v.db, v.user.id, v.today);
   if (plan?.items.some((i) => i.stepId === id))
     redirect("/today#entry-" + encodeURIComponent(id));
-  redirect("/you/look-back/entry/" + encodeURIComponent(id));
+  redirect("/today");
 }

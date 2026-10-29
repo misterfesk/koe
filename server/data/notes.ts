@@ -13,6 +13,25 @@ export type NoteView = {
   createdAt: string;
 };
 
+export async function getNote(
+  db: Db,
+  userId: string,
+  id: string,
+): Promise<NoteView | null> {
+  const [row] = await db
+    .select()
+    .from(note)
+    .where(and(eq(note.userId, userId), eq(note.id, id)));
+  if (!row) return null;
+  return {
+    id: row.id,
+    kind: row.kind,
+    text: open(row.textEnc),
+    energy: row.energy,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
 export async function listNotes(db: Db, userId: string, since?: Date) {
   const rows = await db
     .select()

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
-import { openTalk } from "./talk-panel";
+import { closeTalk, openTalk, useTalkOpen } from "./talk-panel";
 import { useDialog } from "./use-dialog";
 import styles from "./shell.module.css";
 
@@ -16,6 +16,7 @@ const icons = {
 };
 
 const more = [
+  ["/you/care", "Appointment"],
   ["/you/notes", "Notes"],
   ["/you/look-back", "Look back"],
   ["/you/people", "People"],
@@ -49,18 +50,24 @@ function Tab({
   icon,
   path,
   also = [],
+  onSelect,
 }: {
   href: string;
   label: string;
   icon: keyof typeof icons;
   path: string;
   also?: string[];
+  onSelect?: () => void;
 }) {
   const current =
     [href, ...also].some((h) => on(path, h)) &&
     !(href === "/you" && inMore(path));
   return (
-    <Link aria-current={current ? "page" : undefined} href={href}>
+    <Link
+      aria-current={current ? "page" : undefined}
+      href={href}
+      onClick={onSelect}
+    >
       <Icon name={icon} />
       <span>{label}</span>
     </Link>
@@ -117,6 +124,7 @@ function Sidebar({ path }: { path: string }) {
 /** Phone: Today, Shelf, Talk (centre), You, More (opens a bottom sheet). */
 function TabBar({ path }: { path: string }) {
   const [sheet, setSheet] = useState(false);
+  const talkOpen = useTalkOpen();
   return (
     <>
       <nav
@@ -129,18 +137,33 @@ function TabBar({ path }: { path: string }) {
           icon="today"
           path={path}
           also={["/steps"]}
+          onSelect={closeTalk}
         />
-        <Tab href="/shelf" label="Shelf" icon="shelf" path={path} />
+        <Tab
+          href="/shelf"
+          label="Shelf"
+          icon="shelf"
+          path={path}
+          onSelect={closeTalk}
+        />
         <button
           type="button"
           className={styles.navButton}
           aria-haspopup="dialog"
+          aria-expanded={talkOpen}
+          data-active={talkOpen || on(path, "/talk") || undefined}
           onClick={() => openTalk()}
         >
           <Icon name="talk" />
           <span>Talk</span>
         </button>
-        <Tab href="/you" label="You" icon="you" path={path} />
+        <Tab
+          href="/you"
+          label="You"
+          icon="you"
+          path={path}
+          onSelect={closeTalk}
+        />
         <button
           type="button"
           className={styles.navButton}
@@ -177,7 +200,10 @@ function MoreSheet({ onClose }: { onClose: () => void }) {
             key={href}
             href={href}
             aria-current={on(path, href) ? "page" : undefined}
-            onClick={onClose}
+            onClick={() => {
+              closeTalk();
+              onClose();
+            }}
           >
             {label}
           </Link>

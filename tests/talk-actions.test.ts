@@ -889,6 +889,83 @@ describe("Stuck? Ask Koe and This week", { timeout: 40_000 }, () => {
       if (!memoryOn)
         expect(JSON.stringify(focused.packet)).not.toContain("landlord");
     }
+
+    for (const memoryOn of [true, false]) {
+      const s = await setup({ memoryOn });
+      const { taskFocus } = await import("@/server/data/week");
+      const { loadConversation, sendMessage } =
+        await import("@/server/actions/talk");
+      const mine = await steps.createStep(
+        s.db,
+        "a",
+        {
+          area: "move",
+          title: "Step outside for some air",
+          why: 'Because you said "fresh air helps"',
+          minuteOfDay: 600,
+          when: "today",
+        },
+        TODAY,
+      );
+      const theirs = await steps.createStep(
+        s.db,
+        "b",
+        {
+          area: "move",
+          title: "Their secret walk",
+          when: "today",
+        },
+        TODAY,
+      );
+
+      expect(
+        await loadConversation(null, { kind: "step", id: theirs }),
+      ).toEqual(GONE);
+      expect(
+        await loadConversation(null, { kind: "step", id: "nope" }),
+      ).toEqual(GONE);
+      expect(
+        await sendMessage({
+          text: "Help me with this task: Their secret walk",
+          context: { kind: "step", id: theirs },
+        }),
+      ).toEqual(GONE);
+
+      const open = await loadConversation(null, { kind: "step", id: mine });
+      expect(open.ok && open.focus).toEqual({
+        title: "Step outside for some air",
+      });
+      const r = await sendMessage({
+        text: "Help me with this task: Step outside for some air",
+        context: { kind: "step", id: mine },
+      });
+      if (!r.ok) throw new Error(r.error);
+
+      const focused = await buildTalkContext(
+        await requireViewer(),
+        1,
+        await taskFocus(s.db, "a", { kind: "step", id: mine }, TODAY),
+      );
+      expect(focused.packet.focus).toEqual(
+        memoryOn
+          ? {
+              title: "Step outside for some air",
+              what: 'Because you said "fresh air helps"',
+              when: "10:00",
+              state: "not started",
+            }
+          : { state: "not started" },
+      );
+      if (!memoryOn) {
+        expect(JSON.stringify(focused.packet)).not.toContain("fresh air helps");
+      }
+      const again = await loadConversation(r.conversationId);
+      expect(again.ok && again.focus).toEqual({
+        title: "Step outside for some air",
+      });
+    }
+    {
+    }
   });
 });
 
@@ -1092,3 +1169,222 @@ describe("Takeaways", { timeout: 40_000 }, () => {
     ]);
   });
 });
+
+describe(
+  "D037 topic breakdown, task editing and progressive profiling",
+  { timeout: 40_000 },
+  () => {
+    it("break_down_topic adds accepted and edited sub-areas to today", async () => {
+      const s = await setup();
+      fake.reply = async () => ({
+        content:
+          "SAT math is easier when it is split into a few clear areas. Want to add the ones that fit today?",
+        toolCalls: [
+          {
+            id: "bd1",
+            name: "break_down_topic",
+            args: {
+              topic: "SAT math prep",
+              subareas: [
+                {
+                  kind: "work_chunk",
+                  title: "Review linear equations and algebra",
+                  size: "small",
+                },
+                {
+                  kind: "work_chunk",
+                  title: "Practice geometry and right triangles",
+                  size: "small",
+                },
+                {
+                  kind: "work_chunk",
+                  title: "Do a 15-minute timed problem set",
+                  size: "small",
+                },
+              ],
+            },
+          },
+        ],
+      });
+      const r = await say("I need to start SAT math prep and it feels huge");
+      const { messageId, tools } = await cards(s, r.conversationId!);
+      expect(tools[0].name).toBe("break_down_topic");
+      const { confirmProposal } = await import("@/server/actions/talk");
+      const done = await confirmProposal(messageId, tools[0].id, {
+        subareas: [
+          {
+            kind: "work_chunk",
+            title: "Review linear equations and systems",
+            size: "small",
+          },
+          {
+            kind: "work_chunk",
+            title: "Practice geometry and right triangles",
+            size: "small",
+          },
+        ],
+      });
+      expect(done).toEqual({
+        ok: true,
+        result: "Added 2 to today. You can undo it on Today.",
+      });
+      const plan = await s.plan();
+      expect(plan.items.map((i) => i.title)).toContain(
+        "Review linear equations and systems",
+      );
+      expect(plan.items.map((i) => i.title)).toContain(
+        "Practice geometry and right triangles",
+      );
+    });
+
+    it("edit_item, split_item and merge_items reliably update today's plan", async () => {
+      const s = await setup();
+      const initial = await s.plan();
+      const first = initial.items[0];
+      const { confirmProposal } = await import("@/server/actions/talk");
+
+      fake.reply = async () => ({
+        content: "Want me to rename that for today?",
+        toolCalls: [
+          {
+            id: "ed1",
+            name: "edit_item",
+            args: {
+              itemId: first.stepId,
+              newTitle: "Review algebra linear equations",
+            },
+          },
+        ],
+      });
+      const r1 = await say(
+        "rename the first one to Review algebra linear equations",
+      );
+      const c1 = await cards(s, r1.conversationId!);
+      const edited = await confirmProposal(c1.messageId, c1.tools[0].id);
+      expect(edited).toEqual({
+        ok: true,
+        result:
+          'Renamed to "Review algebra linear equations". You can undo it on Today.',
+      });
+      const afterEdit = await s.plan();
+      const renamed = afterEdit.items.find(
+        (i) => i.title === "Review algebra linear equations",
+      )!;
+      expect(renamed).toBeDefined();
+
+      fake.reply = async () => ({
+        content: "Want me to split that into two smaller parts?",
+        toolCalls: [
+          {
+            id: "sp1",
+            name: "split_item",
+            args: {
+              itemId: renamed.stepId,
+              parts: [
+                { title: "Solve five single-variable equations", size: "tiny" },
+                { title: "Check two word problems with systems", size: "tiny" },
+              ],
+            },
+          },
+        ],
+      });
+      const r2 = await say(
+        "split that into two smaller parts",
+        r1.conversationId,
+      );
+      const c2 = await cards(s, r2.conversationId!);
+      const split = await confirmProposal(c2.messageId, c2.tools[0].id);
+      expect(split).toEqual({
+        ok: true,
+        result: "Split into 2 parts on today. You can undo it on Today.",
+      });
+      const afterSplit = await s.plan();
+      const p1 = afterSplit.items.find(
+        (i) => i.title === "Solve five single-variable equations",
+      )!;
+      const p2 = afterSplit.items.find(
+        (i) => i.title === "Check two word problems with systems",
+      )!;
+      expect(p1).toBeDefined();
+      expect(p2).toBeDefined();
+
+      fake.reply = async () => ({
+        content: "Want me to combine those two back into one?",
+        toolCalls: [
+          {
+            id: "mg1",
+            name: "merge_items",
+            args: {
+              itemIds: [p1.stepId, p2.stepId],
+              mergedTitle: "Practice linear equations and word problems",
+              size: "small",
+            },
+          },
+        ],
+      });
+      const r3 = await say("merge those two algebra ones", r1.conversationId);
+      const c3 = await cards(s, r3.conversationId!);
+      const merged = await confirmProposal(c3.messageId, c3.tools[0].id);
+      expect(merged).toEqual({
+        ok: true,
+        result:
+          'Combined into "Practice linear equations and word problems". You can undo it on Today.',
+      });
+      const afterMerge = await s.plan();
+      expect(afterMerge.items.map((i) => i.title)).toContain(
+        "Practice linear equations and word problems",
+      );
+    });
+
+    it("auto-saves everyday facts with Undo, while sensitive details wait for confirmation", async () => {
+      const s = await setup();
+      const { listMemory } = await import("@/server/data/memory");
+      const { dismissProposal, confirmProposal } =
+        await import("@/server/actions/talk");
+
+      fake.reply = async () => ({
+        content: "Lo-fi playlists can make starting easier.",
+        toolCalls: [
+          {
+            id: "m1",
+            name: "save_memory",
+            args: {
+              kind: "helps",
+              text: "Lo-fi playlists in the afternoon help you focus",
+            },
+          },
+          {
+            id: "m2",
+            name: "save_memory",
+            args: {
+              kind: "hard",
+              text: "Crowded trains make mornings harder for you",
+            },
+          },
+        ],
+      });
+      const r = await say(
+        "Lo-fi playlists in the afternoon help me focus, though crowded trains make mornings hard",
+      );
+      const { messageId, tools } = await cards(s, r.conversationId!);
+      expect(tools[0].meta?.autoSaved).toBe(true);
+      expect(tools[1].meta?.autoSaved).toBeUndefined();
+
+      // Only the everyday fact is saved immediately before any confirmation.
+      const initialCards = await listMemory(s.db, "a");
+      expect(initialCards.map((c) => c.text)).toEqual([
+        "Lo-fi playlists in the afternoon help you focus",
+      ]);
+
+      // Tapping Undo on the auto-saved everyday fact deletes it.
+      await dismissProposal(messageId, tools[0].id);
+      expect(await listMemory(s.db, "a")).toEqual([]);
+
+      // Confirming the sensitive detail saves it.
+      await confirmProposal(messageId, tools[1].id);
+      expect((await listMemory(s.db, "a")).map((c) => c.text)).toEqual([
+        "Crowded trains make mornings harder for you",
+      ]);
+    });
+  },
+);

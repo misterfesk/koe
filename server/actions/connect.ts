@@ -3,7 +3,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { templateMessage, type Purpose } from "@/domain/connect";
 import type { RiskLevel } from "@/domain/safety";
-import { addNote } from "../data/notes";
 import {
   addPerson,
   deletePerson,
@@ -13,6 +12,10 @@ import {
 } from "../data/people";
 import { draftMessage } from "../llm/coach";
 import { screen } from "../safety";
+import {
+  lookupAppointmentHelp,
+  type AppointmentResult,
+} from "../search/intents";
 import { requireViewer } from "../viewer";
 
 const refresh = () => revalidatePath("/", "layout");
@@ -100,13 +103,28 @@ export async function followUp(reachOutId: string, status: string) {
   refresh();
 }
 
-export async function saveCarePrep(
-  text: string,
-): Promise<{ ok: boolean; safety?: RiskLevel }> {
+export async function lookupAppointments(rawInstructions = ""): Promise<{
+  ok: boolean;
+  results: AppointmentResult[];
+  unavailable?: boolean;
+  safety: RiskLevel;
+}> {
   const v = await requireViewer();
-  const body = z.string().trim().min(1).max(3000).parse(text);
-  await addNote(v.db, v.user.id, { text: body });
-  const safety = await screen(v.db, v.user.id, "care", [body]);
-  refresh();
-  return { ok: true, safety };
+  const instructions = z
+    .string()
+    .trim()
+    .max(300)
+    .parse(rawInstructions ?? "");
+  if (instructions) {
+    const safety = await screen(v.db, v.user.id, "care", [instructions]);
+    if (safety !== "none") {
+      refresh();
+      return { ok: true, results: [], safety };
+    }
+  }
+  if (v.profile.coachingPausedAt) {
+    return { ok: false, results: [], unavailable: true, safety: "none" };
+  }
+  const res = await lookupAppointmentHelp({ v, instructions });
+  return { ...res, safety: "none" };
 }

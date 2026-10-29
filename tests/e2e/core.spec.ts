@@ -105,7 +105,8 @@ test("an answer on Today is still there after a reload", async ({ page }) => {
   await expect(page.getByRole("status").first()).toContainText("Done");
 
   await page.goto("/you/look-back/journey");
-  await expect(page.getByRole("link", { name: title })).toBeVisible();
+  await expect(page).toHaveURL(/\/you\/look-back$/);
+  await expect(page.locator("[data-look-back-parked]")).toBeVisible();
 });
 
 test("an answer can be undone, and Partly is its own answer", async ({
@@ -159,10 +160,8 @@ test("problem solving ends in today's plan and keeps the person's words", async 
   await expect(card).toBeVisible();
   const id = (await card.getAttribute("id"))!.slice("entry-".length);
   await page.goto("/you/look-back/entry/" + id);
-  await expect(page.getByText(/I keep missing my bus/)).toBeVisible();
-  await expect(
-    page.getByText(/Option: Set an alarm 10 minutes earlier/),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/\/you\/look-back$/);
+  await expect(page.locator("[data-look-back-parked]")).toBeVisible();
 });
 
 test("a worrying note gets the safety check and pauses coaching until resumed", async ({

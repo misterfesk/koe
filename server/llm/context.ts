@@ -6,6 +6,7 @@ import { addDays, localDay } from "@/domain/time";
 import { db as openDefaultDb, type Db } from "../db";
 import { profile, step, stepReport } from "../db/schema";
 import { listMemory } from "../data/memory";
+import { listNotes } from "../data/notes";
 import { getPlanDay, getUserModel } from "../data/intake";
 
 // The context packet: a small, structured picture of one person for the
@@ -27,6 +28,7 @@ export type ContextPacket = {
   intake?: Record<string, unknown>;
   summary?: string;
   memories?: { kind: string; text: string }[];
+  notes?: { kind: string; text: string }[];
   outcomes7d: Record<string, OutcomeCounts>;
   today: {
     day: string;
@@ -129,14 +131,22 @@ export async function buildContext(
       outcomes7d: counts,
       today: todayPlan,
     };
-  const [model, cards] = await Promise.all([
+  const [model, cards, rawNotes] = await Promise.all([
     getUserModel(db, userId),
     listMemory(db, userId),
+    listNotes(db, userId),
   ]);
   const used = cards
     .filter((c) => c.useForSuggestions)
     .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
     .slice(-12);
+  const recentNotes = rawNotes
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+    .slice(-5)
+    .map((n) => ({
+      kind: n.kind,
+      text: n.text.length > 200 ? n.text.slice(0, 197).trimEnd() + "…" : n.text,
+    }));
   const packet: ContextPacket = {
     v: 1,
     tone: p?.tone ?? "expressive",
@@ -152,6 +162,7 @@ export async function buildContext(
     ...(model ? { intake: compactModel(model.model) } : {}),
     ...(model?.summary ? { summary: model.summary } : {}),
     memories: used.map((c) => ({ kind: c.kind, text: c.text })),
+    ...(recentNotes.length ? { notes: recentNotes } : {}),
     outcomes7d: packet.outcomes7d,
     today: packet.today,
   };

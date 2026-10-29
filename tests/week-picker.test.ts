@@ -234,6 +234,44 @@ describe("weekDay", () => {
       doneThing.stepId,
     );
   });
+  it("visibly shapes the daily anchor from saved memories and notes (D037)", () => {
+    const m = model({ lifts: ["music"] });
+    const day = weekDay({
+      things: three,
+      energy: null,
+      lighter: false,
+      model: m,
+      memories: [
+        {
+          kind: "helps",
+          text: "Listening to lo-fi jazz in the afternoon helps you focus",
+        },
+      ],
+    });
+    const anchor = day.find((x) => !x.weekItemId)!;
+    expect(anchor.title).toBe("Listen to lo-fi jazz in the afternoon");
+    expect(anchor.why).toBe(
+      'Because you said "Listening to lo-fi jazz in the afternoon helps…"',
+    );
+
+    const fromNote = weekDay({
+      things: three,
+      energy: null,
+      lighter: false,
+      model: m,
+      notes: [
+        {
+          kind: "note",
+          text: "Sitting on the balcony for ten minutes cleared my head",
+        },
+      ],
+    });
+    const noteAnchor = fromNote.find((x) => !x.weekItemId)!;
+    expect(noteAnchor.title).toBe("Sit on the balcony for ten minutes");
+    expect(noteAnchor.why).toBe(
+      'Because you said "Sitting on the balcony for ten minutes cleared…"',
+    );
+  });
 });
 
 describe("introDay", () => {

@@ -8,13 +8,25 @@ import styles from "./today.module.css";
 export function ChangeBanner({ banner }: { banner: Banner }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
   return (
     <section
       className={styles.banner}
       aria-label="What changed"
       aria-live="polite"
     >
-      <p className={styles.bannerNote}>{banner.note}</p>
+      <div className={styles.bannerTop}>
+        <p className={styles.bannerNote}>{banner.note}</p>
+        <button
+          type="button"
+          className={styles.bannerDismiss}
+          aria-label="Dismiss"
+          onClick={() => setDismissed(true)}
+        >
+          ×
+        </button>
+      </div>
       {banner.lines.length > 0 && (
         <ul className={styles.bannerLines}>
           {banner.lines.map((l) => (

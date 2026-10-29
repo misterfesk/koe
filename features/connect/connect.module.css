@@ -1,0 +1,286 @@
+/* Shared styles for People placeholder and Appointment lookup */
+
+.comingSoonCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 56px 28px;
+  max-width: 560px;
+  margin: 12px 0 32px;
+  gap: 20px;
+}
+
+.catAvatarWrap {
+  position: relative;
+  width: 168px;
+  height: 148px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.catSvg {
+  width: 168px;
+  height: 148px;
+  overflow: visible;
+}
+
+@keyframes catFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes tailSway {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes earTwitch {
+  0%,
+  84%,
+  100% {
+    transform: rotate(0deg);
+  }
+  90% {
+    transform: rotate(-6deg);
+  }
+}
+
+@keyframes pawWave {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(-5deg);
+  }
+}
+
+@keyframes sparklePulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+.catBodyGroup {
+  animation: catFloat 4.2s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.catTail {
+  animation: tailSway 3.4s ease-in-out infinite;
+  transform-origin: 118px 104px;
+}
+
+.catEarLeft {
+  animation: earTwitch 5.5s ease-in-out infinite;
+  transform-origin: 64px 48px;
+}
+
+.catPaw {
+  animation: pawWave 2.8s ease-in-out infinite;
+  transform-origin: 54px 96px;
+}
+
+.catSparkleOne {
+  animation: sparklePulse 3.2s ease-in-out infinite;
+  transform-origin: 34px 42px;
+}
+
+.catSparkleTwo {
+  animation: sparklePulse 3.8s ease-in-out 1.2s infinite;
+  transform-origin: 136px 38px;
+}
+
+.comingSoonText {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--ink);
+  margin: 0;
+  max-width: 36ch;
+}
+
+/* --- Appointment Lookup --- */
+
+.appointmentWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.controlsBar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 680px;
+}
+
+.lookupActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.lookupButton {
+  min-width: 148px;
+}
+
+.instructionsDetails {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0 18px;
+}
+
+.instructionsSummary {
+  font-weight: 500;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  min-height: 46px;
+  user-select: none;
+}
+
+.instructionsBody {
+  padding: 4px 0 18px;
+  border-top: 1px solid var(--line);
+}
+
+.instructionsBody textarea {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--canvas);
+  color: var(--ink);
+  resize: vertical;
+  min-height: 76px;
+}
+
+.resultsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.resultsHeading {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.resultsGrid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.resultCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px;
+  height: 100%;
+  min-width: 0;
+}
+
+.resultBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resultSource {
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--secondary);
+  margin: 0;
+}
+
+.resultTitle {
+  font-size: 1.1875rem;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.resultReason {
+  font-size: 0.9375rem;
+  color: var(--secondary);
+  margin: 4px 0 0;
+  line-height: 1.5;
+}
+
+.resultFooter {
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.goLink {
+  width: 100%;
+  justify-content: center;
+}
+
+.helpNote {
+  margin-top: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 1120px) {
+  .resultsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .comingSoonCard {
+    padding: 40px 20px;
+  }
+
+  .resultsGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .lookupButton {
+    width: 100%;
+  }
+
+  .resultCard {
+    padding: 20px;
+  }
+}

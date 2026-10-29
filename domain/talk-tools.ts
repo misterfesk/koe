@@ -30,6 +30,10 @@ import { detectRisk, mentionsContact } from "./safety";
 
 export const toolNames = [
   "add_item",
+  "break_down_topic",
+  "edit_item",
+  "split_item",
+  "merge_items",
   "move_item",
   "shrink_item",
   "set_reminder",
@@ -49,6 +53,15 @@ const itemId = z.string().trim().min(1).max(64);
 const minute = z.number().int().min(0).max(1439);
 const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
+export const subareaSchema = z.object({
+  kind: z.enum(planKinds).default("work_chunk"),
+  title: z.string().trim().min(3).max(80),
+  size: z.enum(planSizes).default("small"),
+  why: z.string().trim().min(3).max(120).nullish(),
+});
+
+export type Subarea = z.infer<typeof subareaSchema>;
+
 export const toolSchemas = {
   add_item: z.object({
     kind: z.enum(planKinds),
@@ -56,6 +69,35 @@ export const toolSchemas = {
     size: z.enum(planSizes),
     minuteOfDay: minute.nullish(),
     why: z.string().trim().min(3).max(120).nullish(),
+  }),
+  break_down_topic: z.object({
+    topic: z.string().trim().min(3).max(80),
+    subareas: z.array(subareaSchema).min(2).max(5),
+  }),
+  edit_item: z.object({
+    itemId,
+    newTitle: z.string().trim().min(3).max(80),
+    size: z.enum(planSizes).nullish(),
+    minuteOfDay: minute.nullish(),
+  }),
+  split_item: z.object({
+    itemId,
+    parts: z
+      .array(
+        z.object({
+          title: z.string().trim().min(3).max(80),
+          size: z.enum(planSizes).nullish(),
+          minuteOfDay: minute.nullish(),
+        }),
+      )
+      .min(2)
+      .max(3),
+  }),
+  merge_items: z.object({
+    itemIds: z.array(itemId).min(2).max(4),
+    mergedTitle: z.string().trim().min(3).max(80),
+    size: z.enum(planSizes).nullish(),
+    minuteOfDay: minute.nullish(),
   }),
   move_item: z.object({ itemId, minuteOfDay: minute }),
   shrink_item: z.object({
@@ -86,6 +128,14 @@ export const toolSchemas = {
 export const toolDescriptions: Record<ToolName, string> = {
   add_item:
     "Propose adding one small thing to today's plan. Use only when the person asked for it or clearly would benefit. size is tiny, small or medium. minuteOfDay is minutes after midnight (5pm is 1020); leave it out if no time was asked for.",
+  break_down_topic:
+    "When a big topic or goal comes up (such as exam prep, a project or moving house), propose 2 to 5 meaningful sub-areas the person can accept, edit or drop (for example 'Algebra review', 'Geometry practice', 'Timed practice section'). Never propose trivial micro-steps like 'write three rough words' or 'open the file'.",
+  edit_item:
+    "Propose renaming or changing one of today's items (itemId from today.items) when the person asks to rename or change it.",
+  split_item:
+    "Propose splitting one of today's items (itemId from today.items) into 2 or 3 distinct parts when the person asks to split it.",
+  merge_items:
+    "Propose merging 2 to 4 of today's items (itemIds from today.items) into one combined title when the person asks to combine or merge them.",
   move_item:
     "Propose moving one of today's items to a new time. itemId must be an id from today.items. minuteOfDay is minutes after midnight (5pm is 1020).",
   shrink_item:
@@ -93,7 +143,7 @@ export const toolDescriptions: Record<ToolName, string> = {
   set_reminder:
     "Propose a reminder, either for one of today's items (itemId from today.items) or for the daily morning plan reminder (morningPlan as HH:MM, 24-hour). Give exactly one of the two.",
   save_memory:
-    "Propose saving one lasting, ordinary fact the person said about themselves, in second person and in under 120 characters. Never health, diagnoses, medication, self-harm, trauma or private details of others.",
+    "Save one lasting fact the person said about themselves, in second person and in under 120 characters. Everyday facts (goals, routines, likes, what helped) save automatically with an Undo option; sensitive details (what gets in the way, people, feelings) ask for approval first. Never clinical diagnoses, medication, self-harm or trauma.",
   find_resources:
     "Propose looking for something to read or watch on the person's Shelf. Choose only from the listed values; never put the person's own words in. The person sees the exact search before it runs.",
   draft_message:
@@ -110,9 +160,14 @@ export type ToolStatus = "pending" | "done" | "dismissed";
 export type ToolMeta = {
   /** The title of the plan item or the name of the person. */
   title?: string;
+  /** Titles of multiple items, for merge_items. */
+  titles?: string[];
   /** For a move: where it is now. */
   from?: number;
   channel?: string;
+  /** Set when an everyday memory card was saved automatically on the turn. */
+  memoryId?: string;
+  autoSaved?: boolean;
 };
 
 export type ToolProposal = {
@@ -152,8 +207,11 @@ const stored = z.object({
         meta: z
           .object({
             title: z.string().optional(),
+            titles: z.array(z.string()).optional(),
             from: z.number().optional(),
             channel: z.string().optional(),
+            memoryId: z.string().optional(),
+            autoSaved: z.boolean().optional(),
           })
           .optional(),
       }),
@@ -211,11 +269,35 @@ export type VetContext = {
   /** Text of the memory cards already kept. */
   memories: string[];
   planMode: "normal" | "lighter";
+  todayCount?: number;
 };
 
 /** Words that make a memory card a health record, not a preference. */
 const sensitiveMemory =
   /\b(diagnos\w*|depress\w*|anxi\w*|medicat\w*|medicine|pills?|tablets?|dose|doses|mg|antidepress\w*|suicid\w*|self[- ]?harm\w*|trauma\w*|abus\w*|therap\w*|psychiatr\w*|disorder|panic|overdos\w*)\b/i;
+
+/**
+ * Words that touch on feelings, personal struggles, relationships/people, or
+ * health/body state (while still passing clinical guardrails): these require
+ * explicit user approval before saving, whereas everyday facts (goals,
+ * routines, likes, what helped) save automatically with "Noted · Undo".
+ */
+const approvalNeededMemory =
+  /\b(feel\w*|felt|sad\w*|lonely|loneliness|grief|griev\w*|cry\w*|cried|ashamed|shame|guilt\w*|afraid|scared|worr\w*|overwhelm\w*|exhaust\w*|drained|hopeless|worthless|hurt\w*|pain\w*|sick|ill|insomnia|nightmare\w*|migraine\w*|headache\w*|partner|husband|wife|boyfriend|girlfriend|ex|mum|mom|mother|dad|father|parent\w*|sister|brother|family|friend\w*|boss|manager|landlord|doctor|gp)\b/i;
+
+export function isEverydayMemory(
+  kind: "helps" | "hard" | "people" | "preference",
+  text: string,
+): boolean {
+  if (kind === "hard" || kind === "people") return false;
+  return !approvalNeededMemory.test(text);
+}
+
+/** Trivial micro-steps rejected by D036 ("write three rough words", "open laptop"). */
+const microStepPattern =
+  /\b(three (rough )?words|one sentence|open\s+(?:(the|your|a)\s+)?(file|doc|document|tab|folder|laptop|computer|app)|create a folder|name the file|stare at|two minutes on)\b/i;
+
+export const isMicroStep = (title: string) => microStepPattern.test(title);
 
 /** Rules every string a tool carries must pass, whatever the tool. */
 export const textOk = (s: string) =>
@@ -227,14 +309,30 @@ export const textOk = (s: string) =>
  */
 const wordFields: Partial<Record<ToolName, string[]>> = {
   add_item: ["title", "why"],
+  break_down_topic: ["topic"],
+  edit_item: ["newTitle"],
+  merge_items: ["mergedTitle"],
   shrink_item: ["smallerTitle"],
   save_memory: ["text"],
   draft_message: ["draft"],
 };
-const wordsOf = (name: ToolName, args: Record<string, unknown>) =>
-  (wordFields[name] ?? []).flatMap((k) =>
+const wordsOf = (name: ToolName, args: Record<string, unknown>) => {
+  const base = (wordFields[name] ?? []).flatMap((k) =>
     typeof args[k] === "string" ? [args[k] as string] : [],
   );
+  if (name === "break_down_topic" && Array.isArray(args.subareas)) {
+    for (const s of args.subareas as { title?: unknown; why?: unknown }[]) {
+      if (typeof s.title === "string") base.push(s.title);
+      if (typeof s.why === "string") base.push(s.why);
+    }
+  }
+  if (name === "split_item" && Array.isArray(args.parts)) {
+    for (const p of args.parts as { title?: unknown }[]) {
+      if (typeof p.title === "string") base.push(p.title);
+    }
+  }
+  return base;
+};
 
 const sameTitle = (a: string, b: string) =>
   a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -300,6 +398,124 @@ export function vetCall(
           size: x.size,
           why,
           minuteOfDay: at,
+        },
+      };
+    }
+    case "break_down_topic": {
+      const x = a as z.infer<(typeof toolSchemas)["break_down_topic"]>;
+      if (v.items.length >= 5) return null;
+      if (!itemTextOk({ title: x.topic, why: "Because you asked" }, eating))
+        return null;
+      const seen = new Set(v.items.map((i) => i.title.trim().toLowerCase()));
+      const valid: Subarea[] = [];
+      for (const s of x.subareas) {
+        const why = s.why || `Because you are working on ${x.topic}`;
+        const key = s.title.trim().toLowerCase();
+        if (seen.has(key) || isMicroStep(s.title)) continue;
+        if (!itemTextOk({ title: s.title, why }, eating)) continue;
+        if (eating && s.kind === "move") continue;
+        seen.add(key);
+        valid.push({ kind: s.kind, title: s.title, size: s.size, why });
+      }
+      if (valid.length < 2) return null;
+      return {
+        name,
+        args: { topic: x.topic, subareas: valid },
+        meta: { title: x.topic },
+      };
+    }
+    case "edit_item": {
+      const x = a as z.infer<(typeof toolSchemas)["edit_item"]>;
+      const it = item(x.itemId);
+      if (!it || it.done) return null;
+      if (!itemTextOk({ title: x.newTitle, why: it.why }, eating)) return null;
+      const at = x.minuteOfDay ?? undefined;
+      if (at !== undefined && (at < EARLIEST_MINUTE || at > LAST_MINUTE))
+        return null;
+      const nextSize = x.size ?? undefined;
+      if (
+        sameTitle(x.newTitle, it.title) &&
+        (!nextSize || nextSize === it.size) &&
+        (at === undefined || at === it.minuteOfDay)
+      )
+        return null;
+      if (
+        !sameTitle(x.newTitle, it.title) &&
+        v.items.some(
+          (other) =>
+            other.stepId !== it.stepId && sameTitle(other.title, x.newTitle),
+        )
+      )
+        return null;
+      return {
+        name,
+        args: {
+          itemId: x.itemId,
+          newTitle: x.newTitle,
+          ...(nextSize ? { size: nextSize } : {}),
+          ...(at !== undefined ? { minuteOfDay: at } : {}),
+        },
+        meta: { title: it.title, from: it.minuteOfDay },
+      };
+    }
+    case "split_item": {
+      const x = a as z.infer<(typeof toolSchemas)["split_item"]>;
+      const it = item(x.itemId);
+      if (!it || it.done) return null;
+      if (v.items.length - 1 + x.parts.length > 5) return null;
+      const seen = new Set(
+        v.items
+          .filter((other) => other.stepId !== it.stepId)
+          .map((other) => other.title.trim().toLowerCase()),
+      );
+      const parts: {
+        title: string;
+        size?: (typeof planSizes)[number];
+        minuteOfDay?: number;
+      }[] = [];
+      for (const p of x.parts) {
+        const key = p.title.trim().toLowerCase();
+        if (seen.has(key) || isMicroStep(p.title)) return null;
+        if (!itemTextOk({ title: p.title, why: it.why }, eating)) return null;
+        const at = p.minuteOfDay ?? undefined;
+        if (at !== undefined && (at < EARLIEST_MINUTE || at > LAST_MINUTE))
+          return null;
+        seen.add(key);
+        parts.push({
+          title: p.title,
+          ...(p.size ? { size: p.size } : {}),
+          ...(at !== undefined ? { minuteOfDay: at } : {}),
+        });
+      }
+      return {
+        name,
+        args: { itemId: x.itemId, parts },
+        meta: { title: it.title, from: it.minuteOfDay },
+      };
+    }
+    case "merge_items": {
+      const x = a as z.infer<(typeof toolSchemas)["merge_items"]>;
+      const uniqueIds = [...new Set(x.itemIds)];
+      if (uniqueIds.length < 2) return null;
+      const matched = uniqueIds.map((id) => item(id));
+      if (matched.some((m) => !m || m.done)) return null;
+      const validItems = matched as VetItem[];
+      if (!itemTextOk({ title: x.mergedTitle, why: validItems[0].why }, eating))
+        return null;
+      const at = x.minuteOfDay ?? undefined;
+      if (at !== undefined && (at < EARLIEST_MINUTE || at > LAST_MINUTE))
+        return null;
+      return {
+        name,
+        args: {
+          itemIds: uniqueIds,
+          mergedTitle: x.mergedTitle,
+          ...(x.size ? { size: x.size } : {}),
+          ...(at !== undefined ? { minuteOfDay: at } : {}),
+        },
+        meta: {
+          title: validItems.map((i) => i.title).join(" + "),
+          titles: validItems.map((i) => i.title),
         },
       };
     }
@@ -432,11 +648,17 @@ export const undoOnToday = "You can undo it on Today.";
 /** Lines shown on a card once it is done. Times arrive already written the way the person reads them. */
 export const resultLines = {
   add_item: () => `Added to today. ${undoOnToday}`,
+  break_down_topic: (count = 1) => `Added ${count} to today. ${undoOnToday}`,
+  edit_item: (title: string) => `Renamed to "${title}". ${undoOnToday}`,
+  split_item: (count = 2) =>
+    `Split into ${count} parts on today. ${undoOnToday}`,
+  merge_items: (title: string) => `Combined into "${title}". ${undoOnToday}`,
   move_item: (time: string) => `Moved to ${time}. ${undoOnToday}`,
   shrink_item: () => `Made it smaller. ${undoOnToday}`,
   reminderItem: (time: string) => `Reminder set for ${time}.`,
   reminderMorning: (time: string) => `Morning plan reminder on at ${time}.`,
   save_memory: () => "Saved to what Koe knows.",
+  auto_memory: (text: string) => `Noted: ${text}`,
   find_resources: (count = 0) =>
     count
       ? `Added ${count} ${count === 1 ? "pick" : "picks"} to your Shelf.`

@@ -1,6 +1,6 @@
 import "server-only";
 import { after } from "next/server";
-import { and, count, eq, gte, ne } from "drizzle-orm";
+import { and, count, eq, gte, like, ne } from "drizzle-orm";
 import {
   cachedResourceOk,
   goalWhy,
@@ -44,6 +44,7 @@ import { searchEnabled, searchWeb } from "./tavily";
 import { ensureCovers } from "./cover";
 import { markShelfRunning } from "./in-flight";
 import { classifyWeekTopics } from "./week-topics";
+import { planPersonalizedSearches, type PlannedSearch } from "./intents";
 
 // Koe is single-instance (PGlite); serialize owner work and coalesce shared
 // public cache misses. These maps contain no snippets and release on failure.
@@ -68,9 +69,12 @@ export type ShelfRefreshResult = {
   ok: boolean;
   count: number;
   unavailable?: boolean;
+  rateLimited?: boolean;
 };
 
 const DAILY_SEARCHES = 3;
+const MANUAL_DAILY_SEARCHES = 12;
+export const MANUAL_REFRESH_DAILY_LIMIT = 3;
 const TALK_TARGET = 3;
 /** At most this many tag sets per weekly refresh; searches stay under the cap. */
 const WEEKLY_TAG_SETS = 4;
@@ -104,6 +108,18 @@ function usable(ctx: Ctx, list: ResourceTags[]) {
       // A recent Not for me on a tag set skips it.
       return !ctx.feedback.some((r) => r.tagsKey === key);
     });
+}
+
+function toPlanned(ctx: Ctx, tags: ResourceTags): PlannedSearch {
+  return {
+    tags,
+    tagsKey: resourceTagsKey(tags),
+    query: buildResourceQuery(tags),
+    why: tags.weekTopic
+      ? weekWhy(ctx.things.find((t) => t.topic === tags.weekTopic)?.title)
+      : goalWhy(tags, ctx.chosen),
+    custom: false,
+  };
 }
 
 const topGoals = (ctx: Ctx): Goal[] =>
@@ -163,11 +179,13 @@ function weeklyTags(ctx: Ctx) {
   return usable(ctx, [...topics, ...rotated]).slice(0, WEEKLY_TAG_SETS);
 }
 
-/** Screened public results for one tag set: the shared cache, else one search. */
-async function resultsFor(ctx: Ctx, tags: ResourceTags) {
+/** Screened public results for one planned search: the shared cache, else one search. */
+async function resultsFor(ctx: Ctx, planned: PlannedSearch, manual = false) {
   const { v } = ctx;
-  const cacheKey = `${ctx.week}:${resourceTagsKey(tags)}`;
+  const { tags, tagsKey, query, custom } = planned;
+  const cacheKey = `${ctx.week}:${tagsKey}`;
   const video = tags.format === "video";
+  const dailyCap = manual ? MANUAL_DAILY_SEARCHES : DAILY_SEARCHES;
   const results = await locked(v.db, `cache:${cacheKey}`, async () => {
     const [cached] = await v.db
       .select()
@@ -186,18 +204,21 @@ async function resultsFor(ctx: Ctx, tags: ResourceTags) {
           gte(agentRun.createdAt, start),
         ),
       );
-    if ((usage?.n ?? 0) >= DAILY_SEARCHES) throw new Error("daily cap");
+    if ((usage?.n ?? 0) >= dailyCap) throw new Error("daily cap");
     const hits = await searchWeb({
-      query: buildResourceQuery(tags),
-      includeDomains: video
-        ? ["youtube.com"]
-        : orderedSources(tags.region).map((s) => s.host),
+      query,
+      includeDomains: video ? ["youtube.com"] : [],
       maxResults: 6,
       rawContent: !video,
       userId: v.user.id,
       database: v.db,
     });
-    const { kept } = await screenResources(hits, tags, v.user.id);
+    const { kept } = await screenResources(
+      hits,
+      tags,
+      v.user.id,
+      custom ? query : undefined,
+    );
     // Public result data only: never a why line, snippet or page text.
     await v.db
       .insert(resourceCache)
@@ -210,12 +231,14 @@ async function resultsFor(ctx: Ctx, tags: ResourceTags) {
     cachedResourceOk(r, ctx.eatingConcern, aiOn),
   );
   const order: string[] = orderedSources(tags.region).map((s) => s.host);
+  const rankHost = (host: string) => {
+    const idx = order.indexOf(host);
+    return idx === -1 ? order.length : idx;
+  };
   const disliked = (r: PublicResource) =>
     Number(r.format !== "video" && ctx.feedback.some((f) => f.host === r.host));
   return safe.sort(
-    (a, b) =>
-      disliked(a) - disliked(b) ||
-      order.indexOf(a.host) - order.indexOf(b.host),
+    (a, b) => disliked(a) - disliked(b) || rankHost(a.host) - rankHost(b.host),
   );
 }
 
@@ -229,10 +252,11 @@ function interleave<T>(lists: T[][]): T[] {
 
 async function fill(
   ctx: Ctx,
-  plan: ResourceTags[],
+  plan: PlannedSearch[],
   target: number,
   requestKey: string,
   runAll: boolean,
+  manual = false,
 ): Promise<ShelfRefreshResult> {
   const { v } = ctx;
   const existing = new Map(
@@ -240,26 +264,28 @@ async function fill(
   );
   const fresh = (r: PublicResource) => {
     const row = existing.get(r.url);
-    return !row || (row.status === "current" && row.week !== ctx.week);
+    if (!row) return true;
+    if (manual && row.status === "current") return true;
+    return row.status === "current" && row.week !== ctx.week;
   };
-  const batches: { tags: ResourceTags; list: PublicResource[] }[] = [];
+  const batches: { planned: PlannedSearch; list: PublicResource[] }[] = [];
   let failed = false;
-  for (const tags of plan) {
+  for (const planned of plan) {
     const have = new Set(
       batches.flatMap((b) => b.list.filter(fresh).map((r) => r.url)),
     );
     if (!runAll && have.size >= target) break;
     try {
-      batches.push({ tags, list: await resultsFor(ctx, tags) });
+      batches.push({ planned, list: await resultsFor(ctx, planned, manual) });
     } catch (error) {
       failed = true;
       if ((error as Error).message === "daily cap") break;
     }
   }
   if (failed && !batches.length) throw new Error("unavailable");
-  const chosen: { r: PublicResource; tags: ResourceTags }[] = [];
+  const chosen: { r: PublicResource; planned: PlannedSearch }[] = [];
   for (const pick of interleave(
-    batches.map((b) => b.list.map((r) => ({ r, tags: b.tags }))),
+    batches.map((b) => b.list.map((r) => ({ r, planned: b.planned }))),
   )) {
     if (chosen.length >= target) break;
     if (fresh(pick.r) && !chosen.some((c) => c.r.url === pick.r.url))
@@ -275,16 +301,19 @@ async function fill(
       .where(eq(profile.userId, v.user.id));
     if (!current || current.coachingPausedAt || !searchEnabled())
       throw new Error("paused");
-    for (const { r, tags } of chosen) {
+    if (manual && chosen.length > 0) {
+      await tx
+        .delete(shelfItem)
+        .where(
+          and(eq(shelfItem.userId, v.user.id), eq(shelfItem.status, "current")),
+        );
+    }
+    for (const { r, planned } of chosen) {
       const facts = {
         week: ctx.week,
-        tagsKey: resourceTagsKey(tags),
+        tagsKey: planned.tagsKey,
         // Per person and sealed; never in the shared cache.
-        whyEnc: seal(
-          tags.weekTopic
-            ? weekWhy(ctx.things.find((t) => t.topic === tags.weekTopic)?.title)
-            : goalWhy(tags, ctx.chosen),
-        ),
+        whyEnc: seal(planned.why),
         foodOrExercise: r.foodOrExercise,
         aiScreened: r.aiScreened,
         format: r.format ?? ("article" as const),
@@ -319,7 +348,7 @@ async function fill(
         userId: v.user.id,
         requestKey,
         week: ctx.week,
-        tagsKey: plan[0] ? resourceTagsKey(plan[0]) : "",
+        tagsKey: plan[0] ? plan[0].tagsKey : "",
         count: added,
         outcome: "done",
       })
@@ -364,18 +393,20 @@ async function recordUnavailable(
 
 /**
  * One Shelf refresh. With `explicit` tags it serves a Talk request (keyed by
- * `requestId`); otherwise it runs whichever of day one, the same-day top-up
- * or the weekly top-up is due, or nothing.
+ * `requestId`); with `options.manual` it rebuilds the Shelf from the latest
+ * user data within the daily manual refresh limit; otherwise it runs whichever
+ * of day one, the same-day top-up or the weekly top-up is due, or nothing.
  */
 export async function refreshShelfFor(
   v: Viewer,
   explicit?: ResourceTags,
   requestId?: string,
+  options?: { manual?: boolean },
 ): Promise<ShelfRefreshResult> {
   const release = markShelfRunning(v.user.id);
   try {
     return await locked(v.db, `owner:${v.user.id}`, () =>
-      refreshLocked(v, explicit, requestId),
+      refreshLocked(v, explicit, requestId, options),
     );
   } finally {
     release();
@@ -386,6 +417,7 @@ async function refreshLocked(
   v: Viewer,
   explicit?: ResourceTags,
   requestId?: string,
+  options?: { manual?: boolean },
 ): Promise<ShelfRefreshResult> {
   const [settings] = await v.db
     .select()
@@ -394,13 +426,34 @@ async function refreshLocked(
   if (!settings || settings.coachingPausedAt || !searchEnabled())
     return { ok: false, count: 0, unavailable: true };
   const week = shelfWeek(v.today);
+  const manual = !!options?.manual;
+
+  if (manual) {
+    const start = new Date();
+    start.setUTCHours(0, 0, 0, 0);
+    const [manualUsed] = await v.db
+      .select({ n: count() })
+      .from(shelfRefresh)
+      .where(
+        and(
+          eq(shelfRefresh.userId, v.user.id),
+          like(shelfRefresh.requestKey, "manual:%"),
+          gte(shelfRefresh.createdAt, start),
+        ),
+      );
+    if ((manualUsed?.n ?? 0) >= MANUAL_REFRESH_DAILY_LIMIT)
+      return { ok: true, count: 0, rateLimited: true };
+  }
+
   const rows = await listShelfExport(v.db, v.user.id);
   const current = rows.filter(
     (r) => r.status === "current" && r.week === week,
   ).length;
   let due: RefreshMode | null = null;
   let requestKey: string;
-  if (explicit) {
+  if (manual) {
+    requestKey = `manual:${v.today}:${Date.now()}`;
+  } else if (explicit) {
     requestKey = requestId ? `talk:${requestId}` : `week:${week}`;
     const [attempt] = await v.db
       .select()
@@ -419,7 +472,7 @@ async function refreshLocked(
     if (!due) return { ok: true, count: 0 };
     requestKey = due.requestKey;
   }
-  if (due?.mode === "weekly")
+  if (due?.mode === "weekly" || manual)
     await classifyWeekTopics(v.db, v.user.id, settings.memoryOn);
   const { model, eatingConcern } = await shelfContext(v);
   const personal = settings.memoryOn ? model : undefined;
@@ -437,11 +490,11 @@ async function refreshLocked(
     feedback: await recentShelfFeedback(v.db, v.user.id),
     week,
     things:
-      due?.mode === "weekly"
+      due?.mode === "weekly" || due?.mode === "day1" || manual
         ? await weekTopicThings(v.db, v.user.id, settings.memoryOn)
         : [],
   };
-  let plan: ResourceTags[];
+  let plan: PlannedSearch[];
   let target: number;
   if (explicit) {
     const tags = resourceTagsSchema.parse({
@@ -449,26 +502,55 @@ async function refreshLocked(
       region: explicit.region ?? ctx.region,
     });
     if (unsafeQuery(ctx, tags)) return { ok: false, count: 0 };
-    plan = [tags];
+    plan = [toPlanned(ctx, tags)];
     target = TALK_TARGET;
   } else {
-    plan =
-      due!.mode === "day1"
+    const maxIntents = manual
+      ? 3
+      : due!.mode === "day1"
+        ? 2
+        : due!.mode === "topup"
+          ? 1
+          : WEEKLY_TAG_SETS;
+    const personalized = await planPersonalizedSearches({
+      v,
+      region: ctx.region,
+      eatingConcern,
+      memoryOn: settings.memoryOn,
+      model: personal,
+      things: ctx.things,
+      dislikedKeys: new Set(ctx.feedback.map((f) => f.tagsKey)),
+      maxIntents,
+    });
+    const fallbackTags = manual
+      ? weeklyTags(ctx).slice(0, 3)
+      : due!.mode === "day1"
         ? dayOneTags(ctx)
         : due!.mode === "topup"
           ? topUpTags(ctx)
           : weeklyTags(ctx);
-    target = (due!.mode === "weekly" ? WEEK_TARGET : DAY_ONE_TARGET) - current;
+    const fallbacks = fallbackTags.map((t) => toPlanned(ctx, t));
+    plan = personalized?.length ? personalized : fallbacks;
+    target = manual
+      ? DAY_ONE_TARGET
+      : (due!.mode === "weekly" ? WEEK_TARGET : DAY_ONE_TARGET) - current;
   }
   try {
-    return await fill(ctx, plan, target, requestKey, due?.mode === "day1");
+    return await fill(
+      ctx,
+      plan,
+      target,
+      requestKey,
+      due?.mode === "day1" || manual,
+      manual,
+    );
   } catch {
     // Day one and weekly retry on a later open; the top-up never retries.
     await recordUnavailable(
       v,
       requestKey,
-      plan[0] ? resourceTagsKey(plan[0]) : "",
-      due?.mode !== "topup",
+      plan[0] ? plan[0].tagsKey : "",
+      due?.mode !== "topup" && !manual,
     );
     return { ok: false, count: 0, unavailable: true };
   }

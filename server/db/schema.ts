@@ -195,7 +195,7 @@ export const conversation = pgTable(
     titleEnc: text("title_enc"),
     safetyPausedAt: timestamp("safety_paused_at"),
     // What the person opened Talk from (Stuck? Ask Koe), set when it starts.
-    contextKind: text("context_kind", { enum: ["thing"] }),
+    contextKind: text("context_kind", { enum: ["thing", "step"] }),
     contextId: text("context_id"),
     createdAt: created(),
     updatedAt: updated(),

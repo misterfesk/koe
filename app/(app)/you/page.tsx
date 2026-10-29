@@ -18,11 +18,7 @@ export default async function Page() {
       "Reach out to someone, and keep track of who you'd contact.",
       "/you/people",
     ],
-    [
-      "Prepare for an appointment",
-      "A short summary of how things have been, and what you want to ask.",
-      "/you/care",
-    ],
+    ["Appointment", "Find a service or professional to book.", "/you/care"],
     [
       "Look back",
       "Your week, and everything you've done and noticed so far.",

@@ -4,13 +4,19 @@ import { z } from "zod";
 import type { RiskLevel } from "@/domain/safety";
 import { patterns } from "@/domain/journey";
 import { weekStart } from "@/domain/time";
-import { addMemory } from "../data/memory";
+import {
+  addMemory,
+  removeMemoryForNote,
+  updateMemoryForNote,
+} from "../data/memory";
 import {
   addNote,
   deleteNote,
+  getNote,
   saveWeeklyReview,
   updateNote,
 } from "../data/notes";
+import { removeShelfNoteWhy, updateShelfNoteWhy } from "../data/shelf";
 import { updateProfile } from "../data/profile";
 import { listSteps } from "../data/steps";
 import { screen } from "../safety";
@@ -50,7 +56,19 @@ export async function editNote(
   const parsed = noteText.safeParse(text);
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0].message };
-  await updateNote(v.db, v.user.id, z.string().max(64).parse(id), parsed.data);
+  const parsedId = z.string().max(64).parse(id);
+  const existing = await getNote(v.db, v.user.id, parsedId);
+  await updateNote(v.db, v.user.id, parsedId, parsed.data);
+  if (existing) {
+    await updateShelfNoteWhy(v.db, v.user.id, existing.text, parsed.data);
+    await updateMemoryForNote(
+      v.db,
+      v.user.id,
+      parsedId,
+      existing.text,
+      parsed.data,
+    );
+  }
   const safety = await screen(v.db, v.user.id, "note", [parsed.data]);
   refresh();
   return { ok: true, safety };
@@ -58,7 +76,13 @@ export async function editNote(
 
 export async function removeNote(id: string) {
   const v = await requireViewer();
-  await deleteNote(v.db, v.user.id, z.string().max(64).parse(id));
+  const parsedId = z.string().max(64).parse(id);
+  const existing = await getNote(v.db, v.user.id, parsedId);
+  await deleteNote(v.db, v.user.id, parsedId);
+  if (existing) {
+    await removeShelfNoteWhy(v.db, v.user.id, existing.text);
+    await removeMemoryForNote(v.db, v.user.id, parsedId, existing.text);
+  }
   refresh();
 }
 

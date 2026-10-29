@@ -1,4 +1,5 @@
 "use client";
+import { Notice } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import {
   useEffect,
@@ -15,22 +16,22 @@ import {
   sendMessage,
 } from "@/server/actions/talk";
 import type { TakeawayView } from "@/server/talk-page";
-import { modeLabels, type TalkMode } from "@/domain/talk";
+import { modeLabels, modeTemplates, type TalkMode } from "@/domain/talk";
 import type { MessageView } from "@/server/data/talk";
 import { SafetyCheck } from "../safety/safety-check";
 import type { PushState } from "../reminders/remind-control";
 import { ToolCard } from "./proposals";
 import styles from "./talk.module.css";
 
-const openers: Record<TalkMode, string> = {
-  talk: "What's on your mind?",
-  plan: "What would you like to do a bit more of, or used to enjoy?",
-  problem: "What's the practical problem? One thing, as specific as you can.",
-  thought:
-    "What's a thought that's been bothering you? Where were you when it came up?",
-  reach: "Who would you like to get in touch with, and what's it about?",
-  care: "What's the appointment, and what would you like to get across?",
-};
+const quickActionModes = (Object.keys(modeLabels) as TalkMode[]).filter(
+  (m): m is Exclude<TalkMode, "talk"> => m !== "talk",
+);
+
+// Deduplicates in-flight auto-sends across StrictMode remounts or double-taps.
+const inflightAutoSend = new Map<
+  string,
+  Promise<Awaited<ReturnType<typeof sendMessage>>>
+>();
 
 export function Conversation({
   id,
@@ -55,12 +56,13 @@ export function Conversation({
   /** Set by the side panel: reload this conversation instead of changing the page. */
   onChanged?: (conversationId: string) => void | Promise<void>;
   /** What the person opened Talk from (used by Stuck? Ask Koe, A4b). */
-  context?: { kind: "thing" | "day"; id: string };
-  /** The This week thing it was opened from: its opener replaces the mode's. */
+  context?: { kind: "thing" | "step" | "day"; id: string };
+  /** The task it was opened from: its opener replaces the mode's. */
   focus?: { title: string } | null;
   takeaways?: TakeawayView[];
 }) {
   const inputId = useId();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const [mode, setMode] = useState<TalkMode>(initialMode);
   const [text, setText] = useState("");
@@ -80,8 +82,29 @@ export function Conversation({
   ]);
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    end.current?.scrollIntoView({ block: "nearest" });
+    end.current?.scrollIntoView?.({ block: "nearest" });
   }, [shown.length, pending]);
+
+  function selectMode(m: TalkMode) {
+    setMode(m);
+    setError("");
+    if (m === "talk") {
+      if ((Object.values(modeTemplates) as string[]).includes(text)) {
+        setText("");
+      }
+      requestAnimationFrame(() => inputRef.current?.focus());
+      return;
+    }
+    const tpl = modeTemplates[m];
+    setText(tpl);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(tpl.length, tpl.length);
+      }
+    });
+  }
 
   function send(e?: React.FormEvent) {
     e?.preventDefault();
@@ -97,9 +120,11 @@ export function Conversation({
         conversationId: id ?? undefined,
         mode,
         text: content,
-        // Only the kind and id: the server loads the thing itself.
-        ...(!id && focus && context?.kind === "thing"
-          ? { context: { kind: "thing" as const, id: context.id } }
+        // Only the kind and id: the server loads the task itself.
+        ...(!id &&
+        focus &&
+        (context?.kind === "thing" || context?.kind === "step")
+          ? { context: { kind: context.kind, id: context.id } }
           : {}),
       });
       if (!r.ok) {
@@ -119,76 +144,156 @@ export function Conversation({
   }
 
   const blocked = safety !== "none" || paused;
+  const autoSent = useRef(false);
+
+  useEffect(() => {
+    if (
+      autoSent.current ||
+      id ||
+      messages.length > 0 ||
+      !focus?.title ||
+      !context ||
+      (context.kind !== "thing" && context.kind !== "step") ||
+      blocked
+    )
+      return;
+    autoSent.current = true;
+    const content = `Help me with this task: ${focus.title}`;
+    const taskCtx = { kind: context.kind, id: context.id };
+    const inflightKey = `${taskCtx.kind}:${taskCtx.id}`;
+    startTransition(async () => {
+      addShown(content);
+      let pendingSend = inflightAutoSend.get(inflightKey);
+      if (!pendingSend) {
+        pendingSend = sendMessage({
+          mode,
+          text: content,
+          context: taskCtx,
+        }).finally(() => {
+          inflightAutoSend.delete(inflightKey);
+        });
+        inflightAutoSend.set(inflightKey, pendingSend);
+      }
+      const r = await pendingSend;
+      if (!r.ok) {
+        setText(content);
+        return setError(r.error);
+      }
+      setSafety(r.safety);
+      if (r.conversationId === null) return setText(content);
+      if (r.unavailable)
+        setNotice(
+          "Koe can't reply right now. What you wrote is saved. Try again in a little while.",
+        );
+      if (onChanged) await onChanged(r.conversationId);
+      else router.replace("/talk/" + r.conversationId);
+    });
+  }, [
+    id,
+    messages.length,
+    focus?.title,
+    context,
+    blocked,
+    mode,
+    addShown,
+    onChanged,
+    router,
+  ]);
 
   return (
     <div className={styles.talk}>
-      <p className={styles.disclosure}>
-        Koe is an AI, not a person or a therapist. It can get things wrong.
-      </p>
-      {!id && !focus && (
-        <fieldset className="chips">
-          <legend>What would help?</legend>
-          {(Object.keys(modeLabels) as TalkMode[]).map((m) => (
+      <div className={styles.thread}>
+        <p className={styles.disclosure}>
+          Koe is an AI, not a person or a therapist. It can get things wrong.
+        </p>
+        {!id && !focus && (
+          <fieldset className={styles.quickActions}>
+            <legend>What would help?</legend>
             <button
-              key={m}
               type="button"
-              className="chip small"
-              aria-pressed={mode === m}
-              onClick={() => setMode(m)}
+              className={styles.justTalkBtn}
+              aria-pressed={mode === "talk"}
+              onClick={() => selectMode("talk")}
             >
-              {modeLabels[m]}
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              {modeLabels.talk}
             </button>
-          ))}
-        </fieldset>
-      )}
-      <ol className={styles.messages} aria-label="Conversation">
-        <li className={styles.koe}>
-          <span className={styles.who}>Koe</span>
-          <p>
-            {focus
-              ? `What's getting in the way with "${focus.title}"?`
-              : openers[mode]}
-          </p>
-        </li>
-        {shown.map((m) => (
-          <li
-            key={m.id}
-            className={
-              m.role === "user"
-                ? styles.you
-                : m.role === "safety"
-                  ? styles.safetyNote
-                  : styles.koe
-            }
-          >
-            <span className={styles.who}>
-              {m.role === "user" ? "You" : "Koe"}
-            </span>
-            <p>{m.content}</p>
-            {id &&
-              m.role === "assistant" &&
-              m.proposals?.tools.map((t) => (
-                <ToolCard
-                  key={t.id}
-                  messageId={m.id}
-                  tool={t}
-                  push={push}
-                  hour12={hour12}
-                />
+            <div className={styles.templateActions}>
+              {quickActionModes.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={styles.templateChip}
+                  aria-pressed={mode === m}
+                  onClick={() => selectMode(m)}
+                >
+                  {modeLabels[m]}
+                </button>
               ))}
-          </li>
-        ))}
-        {pending && (
-          <li className={styles.koe} aria-live="polite">
-            <span className={styles.who}>Koe</span>
-            <p className="meta">Thinking…</p>
-          </li>
+            </div>
+          </fieldset>
         )}
-      </ol>
-      <div ref={end} />
-      {id && takeaways.length > 0 && (
-        <Takeaways conversationId={id} items={takeaways} />
-      )}
+        <ol className={styles.messages} aria-label="Conversation">
+          <li className={styles.koe}>
+            <span className={styles.who}>Koe</span>
+            <p>
+              {focus
+                ? `What's getting in the way with "${focus.title}"?`
+                : "What's on your mind?"}
+            </p>
+          </li>
+          {shown.map((m) => (
+            <li
+              key={m.id}
+              className={
+                m.role === "user"
+                  ? styles.you
+                  : m.role === "safety"
+                    ? styles.safetyNote
+                    : styles.koe
+              }
+            >
+              <span className={styles.who}>
+                {m.role === "user" ? "You" : "Koe"}
+              </span>
+              <p>{m.content}</p>
+              {id &&
+                m.role === "assistant" &&
+                m.proposals?.tools.map((t) => (
+                  <ToolCard
+                    key={t.id}
+                    messageId={m.id}
+                    tool={t}
+                    push={push}
+                    hour12={hour12}
+                  />
+                ))}
+            </li>
+          ))}
+          {pending && (
+            <li className={styles.koe} aria-live="polite">
+              <span className={styles.who}>Koe</span>
+              <p className="meta">Thinking…</p>
+            </li>
+          )}
+        </ol>
+        <div ref={end} />
+        {id && takeaways.length > 0 && (
+          <Takeaways conversationId={id} items={takeaways} />
+        )}
+      </div>
       {blocked ? (
         <SafetyCheck
           region={region}
@@ -197,35 +302,50 @@ export function Conversation({
         />
       ) : (
         <form onSubmit={send} className={styles.composer}>
-          <label htmlFor={inputId} className="sr-only">
-            Your message
-          </label>
-          <textarea
-            id={inputId}
-            rows={3}
-            maxLength={4000}
-            value={text}
-            placeholder="Type here"
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
-            }}
-            aria-invalid={!!error}
-            aria-describedby={error ? inputId + "-error" : undefined}
-          />
           {error && (
             <p id={inputId + "-error"} className="error" role="alert">
               {error}
             </p>
           )}
-          {notice && (
-            <p className="notice" role="status">
-              {notice}
-            </p>
-          )}
-          <div className="actions">
-            <button type="submit" disabled={pending}>
-              Send
+          {notice && <Notice onDismiss={() => setNotice("")}>{notice}</Notice>}
+          <label htmlFor={inputId} className="sr-only">
+            Your message
+          </label>
+          <div className={styles.inputRow}>
+            <textarea
+              ref={inputRef}
+              id={inputId}
+              rows={2}
+              maxLength={4000}
+              value={text}
+              placeholder="Type here"
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send();
+              }}
+              aria-invalid={!!error}
+              aria-describedby={error ? inputId + "-error" : undefined}
+            />
+            <button
+              type="submit"
+              className={styles.sendBtn}
+              disabled={pending}
+              aria-label="Send"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M22 2 11 13" />
+                <path d="M22 2 15 22 11 13 2 9 22 2z" />
+              </svg>
             </button>
           </div>
         </form>

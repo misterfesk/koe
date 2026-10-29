@@ -1,131 +1,132 @@
 "use client";
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Notice } from "@/components/ui";
 import type { RiskLevel } from "@/domain/safety";
-import { saveCarePrep } from "@/server/actions/connect";
-import { copyText } from "@/services/clipboard";
+import { lookupAppointments } from "@/server/actions/connect";
+import type { AppointmentResult } from "@/server/search/intents";
 import { SafetyCheck } from "../safety/safety-check";
+import styles from "./connect.module.css";
 
-export function CarePreparation({
-  facts,
-  region,
-}: {
-  /** Plain lines built from the person's own records, which they can edit. */
-  facts: string[];
-  region: string | null;
-}) {
-  const [summary, setSummary] = useState(facts.join("\n"));
-  const [say, setSay] = useState("");
-  const [ask, setAsk] = useState("");
-  const [easier, setEasier] = useState("");
+export function AppointmentLookup({ region }: { region: string | null }) {
+  const [instructions, setInstructions] = useState("");
+  const [results, setResults] = useState<AppointmentResult[]>([]);
+  const [searched, setSearched] = useState(false);
   const [status, setStatus] = useState("");
   const [safety, setSafety] = useState<RiskLevel>("none");
   const [pending, startTransition] = useTransition();
-  const text = useMemo(
-    () =>
-      [
-        summary.trim() && "How things have been:\n" + summary.trim(),
-        say.trim() && "What I want to say:\n" + say.trim(),
-        ask.trim() && "What I want to ask:\n" + ask.trim(),
-        easier.trim() && "What would make this easier:\n" + easier.trim(),
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-    [summary, say, ask, easier],
-  );
-  const field = (
-    id: string,
-    label: string,
-    value: string,
-    set: (v: string) => void,
-    hint?: string,
-  ) => (
-    <div className="field">
-      <label htmlFor={id}>{label}</label>
-      {hint && <p className="hint">{hint}</p>}
-      <textarea
-        id={id}
-        rows={3}
-        maxLength={1500}
-        value={value}
-        onChange={(e) => {
-          set(e.target.value);
-          setStatus("");
-        }}
-      />
-    </div>
-  );
-  if (safety !== "none")
+
+  const onLookup = () => {
+    setStatus("");
+    startTransition(async () => {
+      try {
+        const res = await lookupAppointments(instructions);
+        if (res.safety !== "none") {
+          setSafety(res.safety);
+          return;
+        }
+        setSearched(true);
+        setResults(res.results);
+        if (res.unavailable || !res.ok) {
+          setStatus("Search is unavailable right now. Check back later.");
+        } else if (res.results.length === 0) {
+          setStatus(
+            "No matching services came up. Try changing your instructions or check back later.",
+          );
+        }
+      } catch {
+        setSearched(true);
+        setResults([]);
+        setStatus("Search is unavailable right now. Check back later.");
+      }
+    });
+  };
+
+  if (safety !== "none") {
     return <SafetyCheck region={region} onResume={() => setSafety("none")} />;
+  }
+
   return (
-    <div className="prose">
-      {field(
-        "care-summary",
-        "How things have been",
-        summary,
-        setSummary,
-        "Filled in from what you've recorded in Koe. Change or remove anything; share only what you want.",
-      )}
-      {field(
-        "care-say",
-        "What you want to say",
-        say,
-        setSay,
-        "For example: how long you've felt this way, sleep, appetite, what's hardest.",
-      )}
-      {field("care-ask", "What you want to ask", ask, setAsk)}
-      {field(
-        "care-easier",
-        "What would make the appointment easier",
-        easier,
-        setEasier,
-        "For example: bringing someone, writing things down, a longer slot.",
-      )}
-      <h2>Your summary</h2>
-      <pre className="panel care-preview">{text || "Nothing yet."}</pre>
-      <div className="actions">
-        <button
-          type="button"
-          disabled={!text}
-          onClick={async () => {
-            try {
-              await copyText(text);
-              setStatus("Copied. Nothing was sent.");
-            } catch {
-              setStatus("Copying didn't work here. Select the text yourself.");
-            }
-          }}
-        >
-          Copy
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={!text}
-          onClick={() => window.print()}
-        >
-          Print
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={!text || pending}
-          onClick={() =>
-            startTransition(async () => {
-              const r = await saveCarePrep(text);
-              setStatus("Saved as a note in Look back.");
-              setSafety(r.safety ?? "none");
-            })
-          }
-        >
-          Save as a note
-        </button>
+    <div className={styles.appointmentWrap}>
+      <div className={styles.controlsBar}>
+        <div className={styles.lookupActions}>
+          <button
+            type="button"
+            className={styles.lookupButton}
+            disabled={pending}
+            onClick={onLookup}
+          >
+            {pending ? "Looking up…" : "Look up"}
+          </button>
+        </div>
+
+        <details className={styles.instructionsDetails}>
+          <summary className={styles.instructionsSummary}>
+            Add instructions
+          </summary>
+          <div className={styles.instructionsBody}>
+            <label htmlFor="appointment-instructions" className="meta">
+              Add what kind of professional, subject or preference you want
+              included.
+            </label>
+            <textarea
+              id="appointment-instructions"
+              rows={3}
+              maxLength={300}
+              placeholder="e.g. Online CBT therapist, math tutor, or evening appointments"
+              value={instructions}
+              onChange={(e) => {
+                setInstructions(e.target.value);
+                setStatus("");
+              }}
+            />
+          </div>
+        </details>
       </div>
+
       {status && <Notice>{status}</Notice>}
-      <p className="meta">
-        Want help working out what to say?{" "}
-        <Link href="/talk?mode=care">Talk it through with Koe</Link>
+
+      {searched && results.length > 0 && (
+        <section
+          className={styles.resultsSection}
+          aria-labelledby="appointment-results-heading"
+        >
+          <h2
+            id="appointment-results-heading"
+            className={styles.resultsHeading}
+          >
+            Results
+          </h2>
+          <ul className={styles.resultsGrid}>
+            {results.map((item) => (
+              <li key={item.url} className={`panel ${styles.resultCard}`}>
+                <div className={styles.resultBody}>
+                  <p className={styles.resultSource}>{item.sourceName}</p>
+                  <h3 className={styles.resultTitle}>{item.title}</h3>
+                  <p className={styles.resultReason}>{item.why}</p>
+                </div>
+                <div className={styles.resultFooter}>
+                  <a
+                    className={`button secondary ${styles.goLink}`}
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Go to link: ${item.title} (opens in a new tab)`}
+                  >
+                    Go to link <span aria-hidden="true">↗</span>
+                  </a>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <p className={`meta ${styles.helpNote}`}>
+        Need urgent support right now?{" "}
+        <Link href="/help">
+          Open Help <span aria-hidden="true">→</span>
+        </Link>
       </p>
     </div>
   );

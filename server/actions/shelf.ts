@@ -13,8 +13,9 @@ export async function readShelf() {
   return getShelf(await requireViewer());
 }
 
-export async function refreshShelf() {
+export async function refreshShelf(options?: { manual?: boolean }) {
   const v = await requireViewer();
+  const manual = !!options?.manual;
   // Older confirmed S5 requests are consumed once through the same pipeline.
   for (const r of await requestedSearches(v.db, v.user.id)) {
     const tags = resourceTagsSchema.safeParse(r.tags);
@@ -32,11 +33,12 @@ export async function refreshShelf() {
         startedAt: undefined,
       });
   }
-  // While day one runs in the background, this open does not start another
-  // refresh (or count as the same-day top-up); the UI polls readShelf.
-  const result = shelfLoading(v.user.id)
-    ? { ok: true, count: 0 }
-    : await refreshShelfFor(v);
+  // While day one runs in the background, an automatic open does not start
+  // another refresh (or count as the same-day top-up); the UI polls readShelf.
+  const result =
+    !manual && shelfLoading(v.user.id)
+      ? { ok: true, count: 0 }
+      : await refreshShelfFor(v, undefined, undefined, { manual });
   revalidatePath("/shelf");
   revalidatePath("/today");
   return { ...result, shelf: await getShelf(v) };

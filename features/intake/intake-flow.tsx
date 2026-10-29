@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { AskCard, ChatThread, type ChatMessage } from "@/components/chat";
+import { AskCard } from "@/components/chat";
 import { ActionLink } from "@/components/ui";
 import type { ChatAsk } from "@/domain/chat-turn";
 import type { WeekDraft } from "@/domain/week";
@@ -12,16 +12,12 @@ import {
   goals,
   liftLabels,
   lifts,
-  wakeLabels,
-  wakes,
   type Reveal as RevealData,
 } from "@/domain/intake";
 import { buildReveal, checkIntakeText } from "@/server/actions/intake";
 import { SafetyCheck } from "../safety/safety-check";
 import {
   blankDraft,
-  dayAnswer,
-  noteLimit,
   loadDraft,
   saveDraft,
   toModel,
@@ -74,12 +70,6 @@ const asks: Record<number, ChatAsk> = {
     info: "This gives your first plan something concrete to start from. A few words are enough.",
   },
 };
-const wakeAsk: ChatAsk = {
-  kind: "single",
-  options: options(wakes, wakeLabels),
-  allowOther: true,
-  placeholder: "e.g. Your wake time changes with night shifts.",
-};
 const textKey = (q: number) =>
   (q === 1
     ? "goalsNote"
@@ -94,11 +84,10 @@ const textKey = (q: number) =>
 const hasAnswer = (d: IntakeDraft, q: number) =>
   Boolean(
     d[textKey(q)].trim() ||
-    (q === 2 && d.wakeNote.trim()) ||
     (q === 1
       ? d.goals.length
       : q === 2
-        ? d.days.length + d.wake.length
+        ? d.days.length
         : q === 3
           ? d.lifts.length
           : 0),
@@ -110,29 +99,11 @@ function cleared(d: IntakeDraft, q: number): IntakeDraft {
     ...(q === 1
       ? { goals: [] }
       : q === 2
-        ? { days: [], wake: [], wakeNote: "" }
+        ? { days: [] }
         : q === 3
           ? { lifts: [] }
           : {}),
   };
-}
-function answer(d: IntakeDraft, q: number): string {
-  const chosen =
-    q === 1
-      ? d.goals.map((v) => goalLabels[v])
-      : q === 2
-        ? [
-            ...d.days.map((v) => dayLabels[v]),
-            ...d.wake.map((v) => wakeLabels[v]),
-          ]
-        : q === 3
-          ? d.lifts.map((v) => liftLabels[v])
-          : [];
-  return (
-    [...chosen, d[textKey(q)].trim(), q === 2 ? d.wakeNote.trim() : ""]
-      .filter(Boolean)
-      .join(" · ") || "Skipped"
-  );
 }
 export function IntakeFlow({
   region,
@@ -190,11 +161,7 @@ export function IntakeFlow({
 
   const finish = async (d: IntakeDraft, forceFallback = false) => {
     setStage("thinking");
-    // The weekly answer belongs to the interview, not the retired avoidance field.
-    const result = await buildReveal(
-      { ...toModel(d), puttingOff: undefined },
-      forceFallback,
-    );
+    const result = await buildReveal(toModel(d), forceFallback);
     if (!result.ok) {
       setError("Your plan couldn't load. Try Done or Skip again.");
       setStage(4);
@@ -230,24 +197,20 @@ export function IntakeFlow({
     if (from === 4) setStage("thinking");
     startTransition(async () => {
       try {
-        const texts = [d[textKey(from)], from === 2 ? d.wakeNote : ""].filter(
-          (text) => text.trim(),
-        );
+        const texts = [d[textKey(from)]].filter((text) => text.trim());
         if (texts.length) {
           const { safety } = await checkIntakeText(texts);
           if (safety !== "none") {
             setDraft({
               ...d,
               [textKey(from)]: "",
-              ...(from === 2 ? { wakeNote: "" } : {}),
             });
             setFlag(next);
             setStage(from as IntakeStage);
             return;
           }
         }
-        if (from === 4 && d.puttingOff.trim()) setStage("interview");
-        else if (from === 4) await finish(d, true);
+        if (from === 4) await finish(d, !hasAnswer(d, 4));
         else setStage(next);
       } catch {
         setStage(from as IntakeStage);
@@ -345,13 +308,6 @@ export function IntakeFlow({
       />
     );
   if (typeof stage !== "number") return null;
-  const messages: ChatMessage[] = Array.from(
-    { length: stage - 1 },
-    (_, i) => i + 1,
-  ).flatMap((q) => [
-    { id: `q-${q}`, role: "assistant" as const, text: titles[q] },
-    { id: `a-${q}`, role: "user" as const, text: answer(draft, q) },
-  ]);
   const key = textKey(stage);
   const value =
     stage === 1
@@ -381,11 +337,6 @@ export function IntakeFlow({
         }
       }}
     >
-      {messages.length > 0 && (
-        <div className={styles.history}>
-          <ChatThread messages={messages} status="" />
-        </div>
-      )}
       <header className="page-heading">
         <p className="eyebrow">{stage} of 4</p>
         <h1 ref={heading} tabIndex={-1}>
@@ -404,35 +355,11 @@ export function IntakeFlow({
           if (stage === 2) set("days", v as IntakeDraft["days"]);
           if (stage === 3) set("lifts", v as IntakeDraft["lifts"]);
         }}
-        onOtherChange={(v) =>
-          set(key, stage === 2 ? v.slice(0, noteLimit(draft, "dayNote")) : v)
-        }
+        onOtherChange={(v) => set(key, v.slice(0, 200))}
         maxSelections={stage === 1 ? 2 : undefined}
-        maxLength={stage === 2 ? noteLimit(draft, "dayNote") : 200}
+        maxLength={200}
         disabled={pending}
       />
-      {stage === 2 && (
-        <div className={styles.wake}>
-          <AskCard
-            ask={wakeAsk}
-            label="Roughly when do you wake?"
-            value={draft.wake}
-            other={draft.wakeNote}
-            onChange={(v) => set("wake", v as IntakeDraft["wake"])}
-            onOtherChange={(value) =>
-              set("wakeNote", value.slice(0, noteLimit(draft, "wakeNote")))
-            }
-            maxLength={noteLimit(draft, "wakeNote")}
-            disabled={pending}
-          />
-          {(draft.dayNote || draft.wakeNote) && (
-            <p className="meta">
-              Your day and wake answers share 200 characters. Shorten one to add
-              more. {dayAnswer(draft).length} of 200.
-            </p>
-          )}
-        </div>
-      )}
       {error && (
         <p className="error" role="alert">
           {error}

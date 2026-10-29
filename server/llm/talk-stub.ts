@@ -82,5 +82,15 @@ export function stubTurn(
       content: "That sounds like a hard start. What made it feel rough?",
       toolCalls: [],
     };
+  if (/^help me with this task:/i.test(said?.content ?? "")) {
+    const focusTitle = (context.packet.focus as { title?: string } | undefined)
+      ?.title;
+    return {
+      content: focusTitle
+        ? `What part of "${focusTitle}" feels hardest to start?`
+        : "Which part of it feels hardest to start?",
+      toolCalls: [],
+    };
+  }
   return { content: "I'm listening. Say as much as you like.", toolCalls: [] };
 }

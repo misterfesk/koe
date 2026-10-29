@@ -60,13 +60,7 @@ test("old entry links reach current actions or read-only history, with owner che
     .getByRole("button", { name: "Undo" })
     .click();
   await page.goto("/steps/" + id);
-  await expect(page).toHaveURL(new RegExp("/you/look-back/entry/" + id + "$"));
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Water the plants" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /Make it smaller|Plan it again|Delete/ }),
-  ).toHaveCount(0);
+  await expect(page).toHaveURL(/\/today$/);
   await capture(page, "old-detail", info.project.name);
   const other = await browser.newContext({
     baseURL: new URL("/", page.url()).href,
@@ -76,16 +70,13 @@ test("old entry links reach current actions or read-only history, with owner che
     await otherPage.goto(new URL("/", page.url()).href);
     await startAsGuest(otherPage);
     await otherPage.goto(new URL("/steps/" + id, page.url()).href);
-    await expect(
-      otherPage.getByRole("heading", { level: 1, name: "This isn't here" }),
-    ).toBeVisible();
-    await expect(otherPage.getByText("Water the plants")).toHaveCount(0);
+    await expect(otherPage).toHaveURL(/\/today$/);
   } finally {
     await other.close();
   }
 });
 
-test("add and problem drafts survive a way out, and People hands off to Today", async ({
+test("add and problem drafts survive a way out, and People shows the coming soon placeholder", async ({
   page,
 }, info) => {
   await startAsGuest(page);
@@ -109,26 +100,9 @@ test("add and problem drafts survive a way out, and People hands off to Today", 
   await capture(page, "problem-plan", info.project.name);
 
   await page.goto("/you/people");
-  await page.getByRole("button", { name: "Write it myself" }).click();
-  await page.getByLabel("Your message").fill("Could you call later?");
-  await page
-    .getByRole("button", { name: "Add this to today", exact: true })
-    .click();
-  await capture(page, "people-plan", info.project.name);
-  await page.getByRole("button", { name: "Add to today", exact: true }).click();
   await expect(
-    page.getByText("Added to today. Your message stays here."),
+    page.getByText("Connecting helpful people, coming soon."),
   ).toBeVisible();
-  await expect(page.getByLabel("Your message")).toHaveValue(
-    "Could you call later?",
-  );
-  await page.getByRole("link", { name: /See today's plan/ }).click();
-  await expect(entry(page, "Send someone a message")).toBeVisible();
-  await page
-    .getByRole("region", { name: "What changed" })
-    .getByRole("button", { name: "Undo" })
-    .click();
-  await expect(
-    page.getByRole("heading", { level: 3, name: "Send someone a message" }),
-  ).toHaveCount(0);
+  await expect(page.locator("[data-people-parked] svg")).toBeVisible();
+  await capture(page, "people-plan", info.project.name);
 });

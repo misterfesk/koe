@@ -34,7 +34,7 @@ export type ConversationView = {
   title: string;
   safetyPaused: boolean;
   /** What it was opened from (Stuck? Ask Koe); kept for every later turn. */
-  context: { kind: "thing"; id: string } | null;
+  context: { kind: "thing" | "step"; id: string } | null;
   updatedAt: string;
 };
 

@@ -58,19 +58,20 @@ it("recovers a failed text action without losing the answer", async () => {
     expect(screen.getByRole("button", { name: "Done" })).toBeEnabled(),
   );
   fireEvent.click(screen.getByRole("button", { name: "Done" }));
-  await screen.findByRole("heading", { name: "Weekly interview" });
-  expect(screen.getByText("Update my CV")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Enough for now" }));
   await screen.findByRole("heading", { name: "Plan ready" });
+  expect(actions.buildReveal).toHaveBeenCalledWith(
+    expect.objectContaining({ puttingOff: "Update my CV" }),
+    false,
+  );
 });
-it("screens wake Other and drops it before safety resumes", async () => {
+it("screens day Other and drops it before safety resumes", async () => {
   show(2);
-  const groups = await screen.findAllByRole("group");
+  const group = await screen.findByRole("group");
   const { within } = await import("@testing-library/react");
   fireEvent.click(
-    within(groups[1]).getByRole("button", { name: /Something else/ }),
+    within(group).getByRole("button", { name: /Something else/ }),
   );
-  fireEvent.change(within(groups[1]).getByLabelText("Your words"), {
+  fireEvent.change(within(group).getByLabelText("Your words"), {
     target: { value: "I want to end it all" },
   });
   actions.checkIntakeText.mockResolvedValue({ safety: "high" });

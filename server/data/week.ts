@@ -16,6 +16,8 @@ import type { Db } from "../db";
 import { step, stepReport, week, weekItem } from "../db/schema";
 import { getUserModel } from "./intake";
 import type { OpenThing } from "@/domain/week-picker";
+import { formatMinutes } from "@/domain/time";
+import { getStep } from "./steps";
 
 export type WeekTx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Reader = Db | WeekTx;
@@ -202,6 +204,41 @@ export async function weekThing(
     { id: row.id, captured: readCaptured(JSON.parse(open(row.capturedEnc))) },
   ]);
   return { ...state, position: siblings.findIndex((s) => s.id === row.id) };
+}
+
+/**
+ * Resolves a Talk task context (`thing` or `step`) to its current state,
+ * owner-scoped. Returns null for another person's id or a missing one.
+ */
+export async function taskFocus(
+  db: Db,
+  userId: string,
+  context: { kind: "thing" | "step"; id: string },
+  today?: string,
+): Promise<ThingState | null> {
+  if (context.kind === "thing") return weekThing(db, userId, context.id);
+  const s = await getStep(db, userId, context.id);
+  if (!s) return null;
+  if (s.weekItemId) {
+    const linked = await weekThing(db, userId, s.weekItemId);
+    if (linked) return linked;
+  }
+  const notToday = s.reports.filter(
+    (r) => r.outcome === "not" || r.outcome === "skip",
+  );
+  return {
+    id: s.id,
+    title: s.title,
+    what: s.why ?? s.problem ?? s.cue ?? s.title,
+    when: s.minuteOfDay !== null ? formatMinutes(s.minuteOfDay) : "",
+    position: 0,
+    done:
+      s.status === "finished" || s.reports.some((r) => r.outcome === "done"),
+    partly: s.reports.filter((r) => r.outcome === "partly").length,
+    notToday: notToday.length,
+    flagged: notToday.length >= 2,
+    letGoToday: !!today && notToday.some((r) => r.day === today),
+  };
 }
 
 async function withStates(

@@ -19,8 +19,11 @@ test("Shelf finds picks, saves, removes and undoes a choice after reload", async
     page.getByRole("status").filter({ hasText: "Your picks are ready." }),
   ).toBeVisible();
   await expect(
-    page.getByText("Picked from trusted health sites and channels."),
+    page.getByText("Picked for your week and interests."),
   ).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Refresh picks", exact: true }),
+  ).toBeVisible();
   const first = current
     .getByRole("listitem")
     .filter({ has: page.getByRole("link", { name: /^Open / }) })

@@ -127,7 +127,7 @@ function answersForPrompt(model: IntakeModel) {
   put(a, "usually wakes", model.wake && wakeLabels[model.wake]);
   put(a, "days are mostly", model.days && dayLabels[model.days]);
   put(a, "busiest time", model.busiest && busiestLabels[model.busiest]);
-  put(a, "keeps putting off", model.puttingOff);
+  put(a, "wants to get done this week", model.puttingOff);
   put(a, "a few words about their day", model.notes.day);
   // Food and exercise lifts are not sent when food or weight worry is flagged.
   put(

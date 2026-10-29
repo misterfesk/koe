@@ -274,4 +274,35 @@ describe("Shelf rows, chips and covers", () => {
     );
     expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
   });
+
+  it("rebuilds picks when Refresh picks is clicked and shows a calm message at the daily limit", async () => {
+    vi.mocked(refreshShelf).mockResolvedValueOnce({
+      ok: true,
+      count: 1,
+      shelf: view([weekRead]),
+    });
+    render(<Shelf ownerId="v" initial={view([pick])} />);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh picks" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Work email help" }),
+      ).toBeVisible(),
+    );
+    expect(refreshShelf).toHaveBeenCalledWith({ manual: true });
+
+    vi.mocked(refreshShelf).mockResolvedValueOnce({
+      ok: true,
+      count: 0,
+      rateLimited: true,
+      shelf: view([weekRead]),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh picks" }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "You've refreshed a few times today. Check back tomorrow.",
+        ),
+      ).toBeVisible(),
+    );
+  });
 });

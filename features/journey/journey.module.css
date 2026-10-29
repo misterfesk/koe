@@ -1,3 +1,4 @@
+/* Existing journey classes kept for backwards compatibility */
 .noticed {
   margin-bottom: 36px;
 }
@@ -35,4 +36,171 @@
 }
 .entries li p {
   margin: 0 0 4px;
+}
+
+/* --- Parked Look back placeholder --- */
+
+.comingSoonCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 56px 28px;
+  max-width: 560px;
+  margin: 12px 0 32px;
+  gap: 20px;
+}
+
+.catAvatarWrap {
+  position: relative;
+  width: 168px;
+  height: 148px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.catSvg {
+  width: 168px;
+  height: 148px;
+  overflow: visible;
+}
+
+@keyframes catWalkBob {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-3.5px) rotate(1deg);
+  }
+}
+
+@keyframes catTailSway {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-8deg);
+  }
+}
+
+@keyframes catEarTwitch {
+  0%,
+  82%,
+  100% {
+    transform: rotate(0deg);
+  }
+  90% {
+    transform: rotate(-6deg);
+  }
+}
+
+@keyframes catPawStride {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes sparklePulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+.catWalkGroup {
+  animation: catWalkBob 3.8s ease-in-out infinite;
+  transform-origin: 84px 94px;
+}
+
+.catTail {
+  animation: catTailSway 3.2s ease-in-out infinite;
+  transform-origin: 66px 88px;
+}
+
+.catEar {
+  animation: catEarTwitch 5s ease-in-out infinite;
+  transform-origin: 64px 44px;
+}
+
+.catFrontPaw {
+  animation: catPawStride 2.4s ease-in-out infinite;
+  transform-origin: 104px 90px;
+}
+
+.catSparkleOne {
+  animation: sparklePulse 3.2s ease-in-out infinite;
+  transform-origin: 32px 45px;
+}
+
+.catSparkleTwo {
+  animation: sparklePulse 3.8s ease-in-out 1.2s infinite;
+  transform-origin: 138px 42px;
+}
+
+.comingSoonText {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--ink);
+  margin: 0;
+  max-width: 36ch;
+}
+
+/* --- Saved Notes section on /you/notes --- */
+
+.savedNotesSection {
+  margin-top: 36px;
+}
+
+.savedNotesHeading {
+  font-size: 1.375rem;
+  margin: 0 0 16px;
+}
+
+.notesList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+}
+
+.noteCard {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catWalkGroup,
+  .catTail,
+  .catEar,
+  .catFrontPaw,
+  .catSparkleOne,
+  .catSparkleTwo {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 650px) {
+  .comingSoonCard {
+    padding: 40px 20px;
+  }
+  .noteCard {
+    padding: 16px;
+  }
 }

@@ -4,6 +4,7 @@ import { ConfirmDelete } from "@/components/ui";
 import type { Pattern } from "@/domain/journey";
 import type { RiskLevel } from "@/domain/safety";
 import type { Energy } from "@/domain/steps";
+import { localDay, readableDay } from "@/domain/time";
 import {
   dismissPattern,
   editNote,
@@ -11,7 +12,9 @@ import {
   removeNote,
   writeNote,
 } from "@/server/actions/reflect";
+import type { NoteView } from "@/server/data/notes";
 import { SafetyCheck } from "../safety/safety-check";
+import styles from "./journey.module.css";
 
 export function NoteComposer({ region }: { region: string | null }) {
   const [text, setText] = useState("");
@@ -81,7 +84,7 @@ export function NoteComposer({ region }: { region: string | null }) {
         <button disabled={pending}>Save note</button>
         {saved && (
           <p className="meta" role="status">
-            Saved to Look back.
+            Saved.
           </p>
         )}
       </div>
@@ -100,9 +103,16 @@ export function NoteItem({
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(text);
+  const [prevText, setPrevText] = useState(text);
   const [error, setError] = useState("");
   const [safety, setSafety] = useState<RiskLevel>("none");
   const [pending, startTransition] = useTransition();
+
+  if (text !== prevText) {
+    setPrevText(text);
+    setValue(text);
+  }
+
   if (editing)
     return (
       <form
@@ -140,6 +150,7 @@ export function NoteItem({
             className="secondary"
             onClick={() => {
               setValue(text);
+              setError("");
               setEditing(false);
             }}
           >
@@ -152,7 +163,15 @@ export function NoteItem({
     <>
       <p className="note-text">{text}</p>
       <div className="row-actions">
-        <button type="button" className="text" onClick={() => setEditing(true)}>
+        <button
+          type="button"
+          className="text"
+          onClick={() => {
+            setValue(text);
+            setError("");
+            setEditing(true);
+          }}
+        >
           Edit
         </button>
         <ConfirmDelete
@@ -165,6 +184,55 @@ export function NoteItem({
         <SafetyCheck region={region} onResume={() => setSafety("none")} />
       )}
     </>
+  );
+}
+
+export function SavedNotesList({
+  notes,
+  region,
+  timezone,
+  today,
+}: {
+  notes: NoteView[];
+  region: string | null;
+  timezone: string;
+  today: string;
+}) {
+  if (notes.length === 0) return null;
+  return (
+    <section aria-labelledby="saved-notes" className={styles.savedNotesSection}>
+      <h2 id="saved-notes" className={styles.savedNotesHeading}>
+        Saved notes
+      </h2>
+      <ul className={`plain-list ${styles.notesList}`}>
+        {notes.map((n) => {
+          const day = localDay(timezone, new Date(n.createdAt));
+          const dayLabel = readableDay(day, today);
+          const energyText = n.energy
+            ? ` · Energy: ${
+                n.energy === "low"
+                  ? "Low"
+                  : n.energy === "okay"
+                    ? "Okay"
+                    : "More than usual"
+              }`
+            : "";
+          return (
+            <li
+              key={n.id}
+              className={`panel ${styles.noteCard}`}
+              data-note-id={n.id}
+            >
+              <p className="meta">
+                {dayLabel}
+                {energyText}
+              </p>
+              <NoteItem id={n.id} text={n.text} region={region} />
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

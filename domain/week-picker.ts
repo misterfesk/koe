@@ -2,18 +2,23 @@ import type { DayItem } from "./day-plan";
 import type { IntakeModel } from "./intake";
 import {
   assignTimes,
+  breaksGuardrails,
   candidatesFor,
   chooseKinds,
   LAST_MINUTE,
+  mentionsExercise,
+  mentionsFood,
   pickFirst,
   wakeStart,
   type PlanItem,
   type PlanKind,
 } from "./plan-menu";
+import { detectRisk } from "./safety";
 import type { Energy } from "./steps";
 
-// Today's plan from This week things (v3 A3): the things in a fixed order,
-// one anchor, times and why lines from templates. Pure, no AI.
+// Today's plan from This week things (v3 A3 + D037): the things in a fixed order,
+// one anchor (shaped by saved memories or notes when present), times and why lines.
+// Pure, no AI.
 
 /** One This week thing with what its plan entries have recorded so far. */
 export type OpenThing = {
@@ -124,6 +129,151 @@ function candidate(kind: PlanKind, model: IntakeModel, tiny: boolean) {
   return candidatesFor(kind, model).find((c) => c.size === "tiny") ?? first;
 }
 
+const VERB_STARTERS = new Set([
+  "walk",
+  "listen",
+  "read",
+  "sit",
+  "make",
+  "draw",
+  "stretch",
+  "put",
+  "play",
+  "watch",
+  "take",
+  "write",
+  "spend",
+  "drink",
+  "step",
+  "go",
+  "call",
+  "message",
+  "text",
+  "open",
+  "wash",
+  "tidy",
+  "review",
+  "practice",
+  "do",
+]);
+
+function startsWithVerb(s: string): boolean {
+  const first = s.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  return VERB_STARTERS.has(first);
+}
+
+const GERUND_TO_VERB: Record<string, string> = {
+  walking: "Walk",
+  listening: "Listen",
+  reading: "Read",
+  sitting: "Sit",
+  making: "Make",
+  drawing: "Draw",
+  stretching: "Stretch",
+  putting: "Put",
+  playing: "Play",
+  watching: "Watch",
+  taking: "Take",
+  writing: "Write",
+  spending: "Spend",
+  drinking: "Drink",
+  stepping: "Step",
+  going: "Go",
+  calling: "Call",
+  messaging: "Message",
+  texting: "Text",
+};
+
+function memoryTitle(raw: string, tiny: boolean): string | null {
+  const cleaned = raw
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.!?]+$/, "");
+  if (!cleaned) return null;
+  if (startsWithVerb(cleaned) && cleaned.length <= 80) {
+    return cleaned[0].toUpperCase() + cleaned.slice(1);
+  }
+  const stripped = cleaned
+    .replace(
+      /^(you\s+(said|like|love|enjoy|prefer|find\s+that|chose\s+to)|that\s+|having\s+)/i,
+      "",
+    )
+    .replace(
+      /\s+(helps|helped|lifts|lifted|calms|calmed|clears|cleared|works|worked|is\s+good|makes\s+it\s+easier)\b.*$/i,
+      "",
+    )
+    .trim()
+    .replace(/[,.;:!?]+$/, "");
+  if (!stripped) return null;
+  if (startsWithVerb(stripped) && stripped.length <= 80) {
+    return stripped[0].toUpperCase() + stripped.slice(1);
+  }
+  const firstWord = stripped.split(/\s+/)[0].toLowerCase();
+  const rest = stripped.slice(firstWord.length).trim();
+  if (GERUND_TO_VERB[firstWord]) {
+    const built = `${GERUND_TO_VERB[firstWord]}${rest ? " " + rest : ""}`;
+    if (built.length <= 80 && startsWithVerb(built)) return built;
+  }
+  const lower = stripped.toLowerCase();
+  const prefix =
+    /\b(music|song|playlist|album|jazz|lo-fi|lofi|podcast|radio)\b/.test(lower)
+      ? "Put on"
+      : /\b(tea|coffee|water|hot drink)\b/.test(lower)
+        ? "Make"
+        : tiny
+          ? "Take two minutes for"
+          : "Take ten minutes for";
+  const phrase = `${prefix} ${lower}`.slice(0, 80).trim();
+  return startsWithVerb(phrase) ? phrase : null;
+}
+
+/**
+ * Turns a saved `helps` or `preference` memory card or recent note into the
+ * daily anchor item when safe, so saved memories and notes visibly shape Today.
+ */
+export function memoryCandidate(
+  fallbackKind: PlanKind,
+  model: IntakeModel,
+  memories: { kind: string; text: string }[] | undefined,
+  notes: { kind?: string; text: string }[] | undefined,
+  tiny: boolean,
+): Omit<PlanItem, "minuteOfDay"> | null {
+  const sources: { text: string }[] = [
+    ...(memories ?? []).filter(
+      (m) => m.kind === "helps" || m.kind === "preference",
+    ),
+    ...(notes ?? []),
+  ];
+  for (const s of sources) {
+    const text = s.text?.trim();
+    if (!text) continue;
+    if (breaksGuardrails(text) || detectRisk(text) !== "none") continue;
+    if (model.eatingConcern && (mentionsFood(text) || mentionsExercise(text)))
+      continue;
+    const title = memoryTitle(text, tiny);
+    if (!title || breaksGuardrails(title) || detectRisk(title) !== "none")
+      continue;
+    if (model.eatingConcern && (mentionsFood(title) || mentionsExercise(title)))
+      continue;
+    const lower = title.toLowerCase();
+    const kind: PlanKind =
+      !model.eatingConcern && /\b(walk|stretch)\b/.test(lower)
+        ? "move"
+        : /\b(outside|balcony|garden|air|park)\b/.test(lower)
+          ? "outside"
+          : fallbackKind === "task"
+            ? "enjoy"
+            : fallbackKind;
+    return {
+      kind,
+      title,
+      why: thingWhy(text),
+      size: tiny ? "tiny" : "small",
+    };
+  }
+  return null;
+}
+
 export type WeekDayInput = {
   things: OpenThing[];
   energy: Energy | null;
@@ -135,11 +285,16 @@ export type WeekDayInput = {
   locked?: Set<string>;
   /** Things let go for today: they come back tomorrow, not today. */
   skip?: Set<string>;
+  /** Saved memory cards when memory is on. */
+  memories?: { kind: string; text: string }[];
+  /** Recent saved notes when memory is on. */
+  notes?: { kind?: string; text: string }[];
 };
 
 /**
- * Today's plan from This week things: the picked things, one anchor and, if
- * the person chose the basics and the day is not low, one basics entry.
+ * Today's plan from This week things: the picked things, one anchor (shaped by
+ * saved memories or notes when present) and, if the person chose the basics and
+ * the day is not low, one basics entry.
  */
 export function weekDay(a: WeekDayInput): DayItem[] {
   const current = a.current ?? [];
@@ -172,23 +327,30 @@ export function weekDay(a: WeekDayInput): DayItem[] {
     );
 
   const extra: DayItem[] = [];
-  const add = (kind: PlanKind, tiny: boolean) => {
+  const add = (kind: PlanKind, tiny: boolean, useMemory = false) => {
     const same = free.find(
       (x) => !x.weekItemId && x.kind === kind && (!tiny || x.size === "tiny"),
     );
     if (same) return void extra.push(same);
-    const c = candidate(kind, a.model, tiny);
-    if (c) extra.push({ ...c, minuteOfDay: assignTimes([kind], wake)[0] });
+    const c =
+      (useMemory
+        ? memoryCandidate(kind, a.model, a.memories, a.notes, tiny)
+        : null) ?? candidate(kind, a.model, tiny);
+    if (c)
+      extra.push({
+        ...c,
+        minuteOfDay: assignTimes([c.kind], wake)[0],
+      });
   };
   const anchor = anchorKind(a.model);
-  if (!kept.some((x) => !x.weekItemId)) add(anchor, small);
+  if (!kept.some((x) => !x.weekItemId)) add(anchor, small, true);
   if (
     !small &&
     a.model.goals.includes("basics") &&
     anchor !== "basics" &&
     ![...kept, ...extra].some((x) => x.kind === "basics")
   )
-    add("basics", false);
+    add("basics", false, false);
 
   return spaceOut([...kept, ...things, ...extra]);
 }

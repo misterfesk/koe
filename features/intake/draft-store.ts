@@ -113,7 +113,7 @@ export function toModel(draft: IntakeDraft): IntakeInput {
     goals: draft.goals,
     days: draft.days[0],
     wake: draft.wake[0],
-    puttingOff: draft.puttingOff,
+    puttingOff: draft.puttingOff.trim() || undefined,
     lifts: draft.lifts,
     people: [],
     names: [],

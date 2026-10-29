@@ -40,7 +40,7 @@ export async function submitCheckIn(input: {
       word: z
         .string()
         .trim()
-        .max(40, "Use 40 characters or fewer.")
+        .max(500, "Use 500 characters or fewer.")
         .transform((w) => w || null)
         .optional(),
     })

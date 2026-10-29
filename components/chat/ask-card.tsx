@@ -37,7 +37,7 @@ export function AskCard({
   const parsed = chatAskSchema.safeParse(input);
   const ask = parsed.success ? parsed.data : plainTextAsk;
   const id = useId();
-  const field = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [otherOpen, setOtherOpen] = useState(Boolean(other));
   const options = ask.options ?? [];
   const limit = Math.max(
@@ -149,29 +149,44 @@ export function AskCard({
           </div>
           {ask.allowOther && (
             <div className={styles.other}>
-              <button
-                type="button"
-                className={styles.otherButton}
-                aria-expanded={otherOpen || Boolean(other)}
-                aria-controls={`${id}-other`}
-                onClick={() => {
-                  setOtherOpen(true);
-                  requestAnimationFrame(() => field.current?.focus());
-                }}
-              >
-                ✎ Something else…
-              </button>
-              {(otherOpen || Boolean(other)) && (
-                <div id={`${id}-other`} className={styles.inlineField}>
-                  <label htmlFor={id}>Your words</label>
-                  <textarea
-                    id={id}
-                    ref={field}
-                    rows={3}
+              {!(otherOpen || Boolean(other)) ? (
+                <button
+                  type="button"
+                  className={styles.otherButton}
+                  aria-expanded={false}
+                  onClick={() => {
+                    setOtherOpen(true);
+                    requestAnimationFrame(() => inputRef.current?.focus());
+                  }}
+                >
+                  ✎ Something else…
+                </button>
+              ) : (
+                <div className={styles.inlineOther}>
+                  <label htmlFor={`${id}-other`} className={styles.srOnly}>
+                    Your words
+                  </label>
+                  <input
+                    id={`${id}-other`}
+                    ref={inputRef}
+                    type="text"
+                    className={styles.inlineOtherInput}
                     value={other}
                     onChange={(event) => onOtherChange(event.target.value)}
-                    placeholder={ask.placeholder || plainTextAsk.placeholder}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape" && !other.trim()) {
+                        setOtherOpen(false);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!other.trim()) {
+                        setOtherOpen(false);
+                      }
+                    }}
+                    placeholder={ask.placeholder || "Something else…"}
                     maxLength={maxLength}
+                    disabled={disabled}
+                    autoFocus
                   />
                 </div>
               )}

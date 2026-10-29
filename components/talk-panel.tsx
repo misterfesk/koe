@@ -19,7 +19,7 @@ import {
 import { useDialog, useMedia } from "./use-dialog";
 import styles from "./talk-panel.module.css";
 
-export type TalkContext = { kind: "thing" | "day"; id: string };
+export type TalkContext = { kind: "thing" | "step" | "day"; id: string };
 
 type Ctx = {
   open: boolean;
@@ -27,6 +27,9 @@ type Ctx = {
   /** The conversation the panel is on; kept while it is closed. */
   convoId: string | null;
   setConvoId: (id: string | null) => void;
+  getContextConvo: (c: TalkContext) => string | null;
+  bindContextConvo: (c: TalkContext, id: string) => void;
+  clearContext: () => void;
   openTalk: (context?: TalkContext) => void;
   close: () => void;
 };
@@ -41,30 +44,77 @@ export function openTalk(context?: TalkContext) {
   window.dispatchEvent(new CustomEvent("koe:open-talk", { detail: context }));
 }
 
+/** Closes the Talk panel from anywhere on the page. */
+export function closeTalk() {
+  window.dispatchEvent(new CustomEvent("koe:close-talk"));
+}
+
+/** Whether the Talk panel is currently open (false outside TalkProvider). */
+export function useTalkOpen() {
+  return useContext(TalkCtx)?.open ?? false;
+}
+
 /** Holds the panel's state above the pages, so it survives navigation. */
 export function TalkProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [context, setContext] = useState<TalkContext>();
   const [convoId, setConvoId] = useState<string | null>(null);
+  const contextConvos = useRef(new Map<string, string>());
+  const getContextConvo = useCallback(
+    (c: TalkContext) => contextConvos.current.get(`${c.kind}:${c.id}`) ?? null,
+    [],
+  );
+  const bindContextConvo = useCallback((c: TalkContext, id: string) => {
+    contextConvos.current.set(`${c.kind}:${c.id}`, id);
+  }, []);
+  const clearContext = useCallback(() => {
+    setContext((prev) => {
+      if (prev) contextConvos.current.delete(`${prev.kind}:${prev.id}`);
+      return undefined;
+    });
+  }, []);
   const show = useCallback((c?: TalkContext) => {
-    setContext(c);
+    setContext((prev) =>
+      prev && c && prev.kind === c.kind && prev.id === c.id ? prev : c,
+    );
     setOpen(true);
   }, []);
+  const hide = useCallback(() => {
+    setOpen(false);
+    setContext(undefined);
+  }, []);
   useEffect(() => {
-    const on = (e: Event) => show((e as CustomEvent<TalkContext>).detail);
-    window.addEventListener("koe:open-talk", on);
-    return () => window.removeEventListener("koe:open-talk", on);
-  }, [show]);
+    const onOpen = (e: Event) => show((e as CustomEvent<TalkContext>).detail);
+    const onClose = () => hide();
+    window.addEventListener("koe:open-talk", onOpen);
+    window.addEventListener("koe:close-talk", onClose);
+    return () => {
+      window.removeEventListener("koe:open-talk", onOpen);
+      window.removeEventListener("koe:close-talk", onClose);
+    };
+  }, [show, hide]);
   const value = useMemo(
     () => ({
       open,
       context,
       convoId,
       setConvoId,
+      getContextConvo,
+      bindContextConvo,
+      clearContext,
       openTalk: show,
-      close: () => setOpen(false),
+      close: hide,
     }),
-    [open, context, convoId, show],
+    [
+      open,
+      context,
+      convoId,
+      getContextConvo,
+      bindContextConvo,
+      clearContext,
+      show,
+      hide,
+    ],
   );
   return <TalkCtx.Provider value={value}>{children}</TalkCtx.Provider>;
 }
@@ -88,7 +138,21 @@ export function TalkButton() {
       aria-expanded={open}
       onClick={() => show()}
     >
-      Talk
+      <span className={styles.openerDot} aria-hidden="true" />
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+      <span>Talk</span>
     </button>
   );
 }
@@ -118,9 +182,17 @@ export function TalkPanel() {
 }
 
 function PanelBody() {
-  const { context, convoId, setConvoId, close } = useTalk();
+  const {
+    context,
+    convoId,
+    setConvoId,
+    getContextConvo,
+    bindContextConvo,
+    clearContext,
+    close,
+  } = useTalk();
   const router = useRouter();
-  const phone = useMedia("(max-width: 1023px)");
+  const phone = useMedia("(max-width: 767px)");
   const ref = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<"chat" | "history">("chat");
   const [data, setData] = useState<Loaded | null>(null);
@@ -144,7 +216,9 @@ function PanelBody() {
     async (id: string | null, from?: TalkContext) => {
       let r = await loadConversation(
         id,
-        from?.kind === "thing" ? { kind: "thing", id: from.id } : undefined,
+        from?.kind === "thing" || from?.kind === "step"
+          ? { kind: from.kind, id: from.id }
+          : undefined,
       );
       if (!r.ok) r = await loadConversation(null);
       if (!r.ok) return null;
@@ -163,15 +237,22 @@ function PanelBody() {
       }),
     [load],
   );
+  const mounted = useRef(false);
   useEffect(() => {
-    // On open, and when Stuck? Ask Koe starts a new conversation about a
-    // thing; later loads are asked for by the buttons.
+    // On open, and when Stuck? Ask Koe starts or reopens a conversation about a
+    // task; later loads are asked for by the buttons.
+    const task =
+      context?.kind === "thing" || context?.kind === "step"
+        ? context
+        : undefined;
+    if (mounted.current && !task) return;
+    mounted.current = true;
     let live = true;
-    const thing = context?.kind === "thing" ? context : undefined;
-    void load(thing ? null : convoId, thing).then((r) => {
+    const existingId = task ? getContextConvo(task) : convoId;
+    void load(existingId, existingId ? undefined : task).then((r) => {
       if (!live || !r) return;
       setData(r);
-      if (thing) {
+      if (task) {
         setView("chat");
         setKey((k) => k + 1);
       }
@@ -203,6 +284,7 @@ function PanelBody() {
           className="secondary"
           aria-label="Start a new conversation"
           onClick={() => {
+            clearContext();
             setView("chat");
             void show(null, true);
           }}
@@ -249,6 +331,7 @@ function PanelBody() {
                   key={row.id}
                   row={row}
                   onOpen={() => {
+                    clearContext();
                     setView("chat");
                     void show(row.id, true);
                   }}
@@ -270,7 +353,12 @@ function PanelBody() {
               context={context}
               focus={data.focus}
               takeaways={data.takeaways}
-              onChanged={(id) => show(id, false)}
+              onChanged={(id) => {
+                if (context?.kind === "thing" || context?.kind === "step") {
+                  bindContextConvo(context, id);
+                }
+                return show(id, false);
+              }}
             />
           )
         )}

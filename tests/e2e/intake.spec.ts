@@ -1,10 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import {
-  intakeDraftText,
-  noHorizontalScroll,
-  proposeInterview,
-} from "./helpers";
+import { intakeDraftText, noHorizontalScroll } from "./helpers";
 
 /** Opens the welcome dialog and starts, stopping on the intake. */
 async function startIntake(page: Page) {
@@ -68,7 +64,6 @@ test("welcome, four chat turns, reveal and Start my day land on Today", async ({
   // 2. A usual day.
   await expect(heading(page, "What fills your days?")).toBeVisible();
   await expect(page.getByText("2 of 4")).toBeVisible();
-  await chip(page, "Between 7 and 9").click();
   await chip(page, "Working").click();
   await clean(page, "q2");
   await page.getByRole("button", { name: "Next" }).click();
@@ -127,7 +122,7 @@ test("welcome, four chat turns, reveal and Start my day land on Today", async ({
   ).not.toBeChecked();
   await expect(
     page.getByRole("checkbox", { name: /Remind me at the time/ }),
-  ).not.toBeChecked();
+  ).toHaveCount(0);
   await clean(page, "reveal");
   const summary = page.getByLabel(/You can change this/);
   await expect(summary).toHaveValue(/^You/);
@@ -136,9 +131,7 @@ test("welcome, four chat turns, reveal and Start my day land on Today", async ({
   for (const li of await items.all()) {
     await expect(li.getByRole("heading", { level: 3 })).toBeVisible();
     await expect(li.getByText(/^Because/)).toBeVisible();
-    await expect(li.locator(".eyebrow")).toHaveText(
-      /^\d{1,2}:\d\d( [ap]m)? · (Tiny|Small)$/,
-    );
+    await expect(li.locator(".eyebrow")).toHaveText(/^(Tiny|Small)$/);
   }
   const titles = await items
     .getByRole("heading", { level: 3 })
@@ -280,9 +273,9 @@ test("the questions work at 320px and by keyboard", async ({ page }) => {
   await page.getByLabel("Your words").press("Enter");
   await expect(heading(page, "What fills your days?")).toBeVisible();
   // Chips are real controls: Space picks one.
-  await page.getByRole("button", { name: "Before 7" }).focus();
+  await page.getByRole("button", { name: "Working" }).focus();
   await page.keyboard.press("Space");
-  await expect(page.getByRole("button", { name: "Before 7" })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: "Working" })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
@@ -304,13 +297,14 @@ test("a reload picks up the intake where it was", async ({ page }) => {
   await page.getByLabel("Your words").fill("Mornings are hard");
   await page.getByRole("button", { name: "Next" }).click();
   await expect(heading(page, "What fills your days?")).toBeVisible();
-  await chip(page, "Between 7 and 9").click();
+  await chip(page, "Working").click();
   await page.reload();
   // Back on the second question, with the earlier answers kept.
   await expect(heading(page, "What fills your days?")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Between 7 and 9" }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Working" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await page.getByRole("button", { name: "Back" }).click();
   await expect(page.getByRole("button", { name: "Sleep" })).toHaveAttribute(
     "aria-pressed",
@@ -318,7 +312,8 @@ test("a reload picks up the intake where it was", async ({ page }) => {
   );
   await expect(page.getByLabel("Your words")).toHaveValue("Mornings are hard");
   // Words that trip the safety check are never kept.
-  await page.getByRole("button", { name: /Something else/ }).click();
+  if (await page.getByRole("button", { name: /Something else/ }).isVisible())
+    await page.getByRole("button", { name: /Something else/ }).click();
   await page.getByLabel("Your words").fill("I want to end it all");
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByRole("button", { name: "I'm safe for now" }).click();
@@ -342,9 +337,6 @@ test("inline Other and weekly words reach a saved lean plan", async ({
   });
   await days.getByRole("button", { name: /Something else/ }).click();
   await days.getByLabel("Your words").fill("Freelance drawing");
-  const wake = page.getByRole("group", { name: "Roughly when do you wake?" });
-  await wake.getByRole("button", { name: /Something else/ }).click();
-  await wake.getByLabel("Your words").fill("After night shifts");
   await page.getByRole("button", { name: "Next" }).click();
   await expect(heading(page, "What used to lift you?")).toBeVisible();
   await page.getByRole("button", { name: /Something else/ }).click();
@@ -352,49 +344,31 @@ test("inline Other and weekly words reach a saved lean plan", async ({
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByLabel("Your answer").fill("Update my CV");
   await page.getByLabel("Your answer").press("Enter");
-  await proposeInterview(page);
-  await page.getByRole("button", { name: "Review your first day" }).click();
   await expect(heading(page, "Here's what I understood")).toBeVisible();
-  // The reveal's plan already shows the week thing, as Today will.
+  // Today's plan shows the items generated from their answers.
   const plan = page.getByRole("region", { name: "Today's plan" });
-  await expect(
-    plan.getByRole("heading", { level: 3, name: "Update my CV" }),
-  ).toBeVisible();
-  await expect(plan.getByText('Because you said "Update my CV"')).toBeVisible();
+  await expect(plan.getByRole("heading", { level: 3 })).toHaveCount(3);
   await page.getByRole("button", { name: "Start my day" }).click();
   await expect(page).toHaveURL(/\/today$/);
   const body = await (await page.request.get("/api/export")).json();
-  // Day 1 is the week thing plus one anchor from the intro plan.
-  const day1 = body.planDays[0].items as {
-    title: string;
-    weekItemId?: string;
-  }[];
-  expect(day1.filter((i) => i.weekItemId).map((i) => i.title)).toEqual([
-    "Update my CV",
-  ]);
-  expect(day1.filter((i) => !i.weekItemId)).toHaveLength(1);
   expect(body.userModel.model).toMatchObject({
+    puttingOff: "Update my CV",
     people: [],
     names: [],
     tone: "calm",
     notes: {
       goals: "Starting the morning",
-      day: "Freelance drawing. Wake: After night shifts",
+      day: "Freelance drawing",
       lifts: "Drawing cats",
     },
   });
   expect(body.userModel.model.support).toBeUndefined();
-  expect(body.userModel.model.puttingOff).toBeUndefined();
-  expect(body.weeks[0].items[0].captured).toEqual({
-    what: "Update my CV",
-    when: "By the weekend",
-    title: "Update my CV",
-  });
+  expect(body.userModel.model.puttingOff).toBe("Update my CV");
   expect(
     body.memoryCards.some((card: { text: string }) =>
-      /keep putting off/i.test(card.text),
+      /Update my CV|done this week/i.test(card.text),
     ),
-  ).toBe(false);
+  ).toBe(true);
   expect(await intakeDraftText(page)).toBeNull();
   await page.context().clearCookies();
   await startIntake(page);
@@ -500,7 +474,6 @@ test("keyboard-only lean intake reaches Today", async ({ page }) => {
   await activate("Sleep");
   await activate("Next");
   await activate("Working");
-  await activate("Before 7");
   await activate("Next");
   await activate("Music");
   await activate("Next");

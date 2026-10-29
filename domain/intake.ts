@@ -353,8 +353,16 @@ export function templateMemories(model: IntakeModel): MemoryProposal[] {
       kind: "people",
       text: `${list(namedPeople(model))} ${model.names.length > 1 ? "are" : "is"} in your corner.`,
     });
-  if (model.puttingOff)
-    out.push({ kind: "hard", text: "There's one thing you keep putting off." });
+  if (model.puttingOff) {
+    const trimmed = model.puttingOff.trim().replace(/[.]+$/, "");
+    out.push({
+      kind: "hard",
+      text:
+        trimmed.length <= 60
+          ? `You want to get ${trimmed} done this week.`
+          : "There's one thing you'd like to get done this week.",
+    });
+  }
   // Intake never asks for a tone (it starts as calm), so this card is unticked.
   if (model.tone)
     out.push({

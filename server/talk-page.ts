@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { uses12Hour } from "@/domain/time";
 import { subscriptionsFor } from "./data/reminders";
 import { keptFrom, type getConversation } from "./data/talk";
-import { weekThing } from "./data/week";
+import { taskFocus } from "./data/week";
 import { env } from "./env";
 import { pushConfigured } from "./push";
 import type { Viewer } from "./viewer";
@@ -34,7 +34,7 @@ export async function conversationExtras(
   convo: NonNullable<Awaited<ReturnType<typeof getConversation>>>,
 ) {
   const thing = convo.context
-    ? await weekThing(v.db, v.user.id, convo.context.id)
+    ? await taskFocus(v.db, v.user.id, convo.context, v.today)
     : null;
   const kept =
     v.profile.memoryOn && convo.takeaways.length

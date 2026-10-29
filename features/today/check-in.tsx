@@ -101,11 +101,11 @@ export function CheckIn({
           ))}
         </div>
         <div className="field">
-          <label htmlFor="arrive-word">One word, if you like</label>
+          <label htmlFor="arrive-word">A few words, if you like</label>
           <input
             id="arrive-word"
             value={word}
-            maxLength={40}
+            maxLength={500}
             onChange={(e) => setWord(e.target.value)}
             autoComplete="off"
           />

@@ -41,7 +41,7 @@ import {
   type CompositionContext,
 } from "@/domain/plan-menu";
 import { detectRisk } from "@/domain/safety";
-import { weekDay } from "@/domain/week-picker";
+import { anchorKind, memoryCandidate, weekDay } from "@/domain/week-picker";
 import type { Energy } from "@/domain/steps";
 import { addDays, localDay } from "@/domain/time";
 import type { Db } from "../db";
@@ -49,6 +49,8 @@ import { db as openDefaultDb } from "../db";
 import { profile } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { getPlanDay, getUserModel, type PlanDayView } from "../data/intake";
+import { listNotes } from "../data/notes";
+import { listMemory } from "../data/memory";
 import {
   ensureTodayPlan,
   hasEarlierPlan,
@@ -67,7 +69,7 @@ import { toneWording, within } from "./intake";
 import { completeJson } from "./nebius";
 
 /** Bump when a prompt or a reply shape changes; evals report it. */
-export const PLANNER_PROMPT_VERSION = "planner-3";
+export const PLANNER_PROMPT_VERSION = "planner-4";
 
 /** A whole day is planned by the big model; a swap or shrink by the fast one. */
 export const DAY_TIMEOUT_MS = 25_000;
@@ -134,20 +136,28 @@ type Situation = {
   history: (KindOutcome & { vsExpected: string | null })[];
   /** The things in the person's newest week, with their state. */
   things: ThingState[];
+  /** Saved memory cards when memory is on. */
+  memories: { kind: string; text: string }[];
+  /** Recent saved notes when memory is on. */
+  notes: { kind: string; text: string }[];
 };
 
 async function situation(userId: string, where: Where): Promise<Situation> {
   const db = where.db ?? (await openDefaultDb());
   const [p] = await db.select().from(profile).where(eq(profile.userId, userId));
   const today = where.today ?? localDay(p?.timezone ?? "UTC");
-  const [view, current, reports, history, earlier, things] = await Promise.all([
-    getUserModel(db, userId),
-    getPlanDay(db, userId, today),
-    todayReports(db, userId, today),
-    kindOutcomes(db, userId, addDays(today, -6)),
-    hasEarlierPlan(db, userId, today),
-    weekThingStates(db, userId, today),
-  ]);
+  const memoryOn = p?.memoryOn !== false;
+  const [view, current, reports, history, earlier, things, mems, noteRows] =
+    await Promise.all([
+      getUserModel(db, userId),
+      getPlanDay(db, userId, today),
+      todayReports(db, userId, today),
+      kindOutcomes(db, userId, addDays(today, -6)),
+      hasEarlierPlan(db, userId, today),
+      weekThingStates(db, userId, today),
+      memoryOn ? listMemory(db, userId) : Promise.resolve([]),
+      memoryOn ? listNotes(db, userId) : Promise.resolve([]),
+    ]);
   const locked = new Set<string>();
   for (const i of current?.items ?? [])
     if (i.stepId) {
@@ -160,18 +170,24 @@ async function situation(userId: string, where: Where): Promise<Situation> {
     userId,
     today,
     tone: p?.tone ?? "expressive",
-    memoryOn: p?.memoryOn !== false,
+    memoryOn,
     coachingPaused: !!p?.coachingPausedAt,
-    model:
-      p?.memoryOn === false
-        ? { ...emptyModel(), eatingConcern: view?.model.eatingConcern ?? false }
-        : (view?.model ?? emptyModel()),
+    model: !memoryOn
+      ? { ...emptyModel(), eatingConcern: view?.model.eatingConcern ?? false }
+      : (view?.model ?? emptyModel()),
     firstDay: !earlier,
     current,
     reports,
     locked,
     history,
     things,
+    memories: mems
+      .filter((m) => m.useForSuggestions)
+      .slice(0, 10)
+      .map((m) => ({ kind: m.kind, text: m.text })),
+    notes: noteRows
+      .slice(0, 5)
+      .map((n) => ({ kind: n.kind, text: n.text.slice(0, 200) })),
   };
 }
 
@@ -193,6 +209,8 @@ function weekItems(
     current: replan ? (sit.current?.items ?? []) : [],
     locked: sit.locked,
     skip: new Set(sit.things.filter((t) => t.letGoToday).map((t) => t.id)),
+    memories: sit.memories,
+    notes: sit.notes,
   });
 }
 
@@ -278,6 +296,7 @@ function dayPrompt(
       ? "- keepId is the id of an existing item that stays exactly as it is (same kind, title and size); null for any new or changed item."
       : "- keepId is the id of an existing item that stays exactly as it is (same kind and size); null for any new or changed item. The input gives each existing item by kind, size and time only.",
     "- Items marked done or partly in the input stay in the plan with their keepId, unchanged.",
+    "- When memories or notes are present in the input, use them to shape new or changed titles and 'Because you said ...' why lines so the plan reflects what actually helps them or how they like things.",
     "",
     "THE MENU (kind: when to pick it)",
     menuPromptText(),
@@ -341,6 +360,7 @@ async function dayInput(sit: Situation, run: PlanRun) {
     about: packet.memory === "on" ? packet.intake : undefined,
     summary: packet.summary,
     memories: packet.memories,
+    ...(packet.notes?.length ? { notes: packet.notes } : {}),
     lastSevenDays: summarise(sit.history),
     earliestMinuteOfDay: wakeStart(sit.model.wake),
     latestMinuteOfDay: LAST_MINUTE,
@@ -455,12 +475,33 @@ function rulesDay(
 ): DayItem[] {
   const current = sit.current?.items ?? [];
   if (run.reason === "first_open") {
-    if (sit.firstDay) return fallbackPlan(sit.model);
-    const base = plainDay(sit.model, {
-      day: sit.today,
-      history: sit.history,
-    });
-    return lighterDay ? adaptLighter(base, sit.model) : base;
+    const raw = sit.firstDay
+      ? fallbackPlan(sit.model)
+      : plainDay(sit.model, {
+          day: sit.today,
+          history: sit.history,
+        });
+    const base = lighterDay ? adaptLighter(raw, sit.model) : raw;
+    if (sit.memories.length || sit.notes.length) {
+      const mem = memoryCandidate(
+        anchorKind(sit.model),
+        sit.model,
+        sit.memories,
+        sit.notes,
+        lighterDay,
+      );
+      if (mem) {
+        const idx = base.findIndex(
+          (i) => i.kind === "enjoy" || i.kind === mem.kind,
+        );
+        if (idx >= 0) {
+          return base.map((item, i) =>
+            i === idx ? { ...mem, minuteOfDay: item.minuteOfDay } : item,
+          );
+        }
+      }
+    }
+    return base;
   }
   if (run.reason === "lighter")
     return adaptLighter(current, sit.model, sit.locked);
@@ -530,6 +571,8 @@ async function aiOne(
                 ),
               about: packet.memory === "on" ? packet.intake : undefined,
               summary: packet.summary,
+              memories: packet.memories,
+              ...(packet.notes?.length ? { notes: packet.notes } : {}),
             }),
           },
         ],
@@ -710,20 +753,72 @@ export async function planToday(
   let items: DayItem[];
   let proposal: Proposal | null = null;
   let mode = cur.mode;
+  let checkInNote: string | null = null;
+
   if (run.reason === "check_in") {
-    if (run.energy !== "low" && run.energy !== "more")
+    const rawWord = run.word?.trim();
+    const hasWord = !!rawWord && rawWord.length > 0;
+    if (!hasWord && run.energy !== "low" && run.energy !== "more")
       return noChange("Your plan already fits today.");
+
+    const isFatigue =
+      hasWord &&
+      /\b(tired|exhausted|low|drained|sleepy|heavy|sick|unwell|headache|migraine|overwhelmed|rest|take it easy|slow|gentle|rough|ill)\b/i.test(
+        rawWord,
+      );
+
+    const effectiveEnergy =
+      isFatigue || run.energy === "low" ? "low" : (run.energy ?? "okay");
+
     if (weekOn(live)) {
-      // This week things are re-picked by rules for the new energy.
-      items = weekItems(live, run.energy, false, true);
-    } else if (run.energy === "more" && live.firstDay) {
-      // Nothing grows on the first day, so there is nothing to ask the model.
-      return noChange("Your plan already fits today.");
+      if (effectiveEnergy === "low") {
+        mode = "lighter";
+        items = weekItems(live, "low", true, true);
+        if (hasWord && isFatigue) {
+          checkInNote = `Lighter day because you noted "${rawWord}".`;
+        }
+      } else {
+        items = weekItems(live, run.energy ?? null, false, true);
+      }
+    } else if (effectiveEnergy === "more" && live.firstDay) {
+      if (!hasWord) return noChange("Your plan already fits today.");
+      items = [...cur.items];
     } else {
-      const ctx = ctxFor(live, run.energy === "low");
-      const kind = run.energy === "low" ? "low" : "more";
+      const isLow = effectiveEnergy === "low";
+      const ctx = ctxFor(live, isLow);
+      const kind = isLow ? "low" : effectiveEnergy === "more" ? "more" : "day";
       proposal = await aiDay(live, run, kind, ctx);
-      items = proposal?.items ?? rulesDay(live, run, false);
+      items = proposal?.items ?? rulesDay(live, run, isLow);
+    }
+
+    if (hasWord && !isFatigue) {
+      const trimmed =
+        rawWord.length > 80 ? rawWord.slice(0, 80).trimEnd() : rawWord;
+      const title =
+        trimmed.charAt(0).toUpperCase() + trimmed.slice(1).replace(/\.+$/, "");
+      const existing = items.some(
+        (it) => it.title.toLowerCase() === title.toLowerCase(),
+      );
+      if (!existing && !breaksGuardrails(title)) {
+        const phrase =
+          rawWord.length > 60 ? rawWord.slice(0, 60).trimEnd() + "…" : rawWord;
+        const newItem: DayItem = {
+          kind: "task",
+          title,
+          why: `Because you wrote "${phrase}"`,
+          size: effectiveEnergy === "low" ? "tiny" : "small",
+          minuteOfDay: wakeStart(live.model.wake) + 120,
+        };
+        if (items.length >= 5) {
+          const replaceIdx = items.findLastIndex(
+            (it) => !it.stepId || !live.locked.has(it.stepId),
+          );
+          if (replaceIdx >= 0) items[replaceIdx] = newItem;
+        } else {
+          items.push(newItem);
+        }
+        checkInNote = `Added "${title}" to today.`;
+      }
     }
   } else if (run.reason === "lighter") {
     mode = "lighter";
@@ -746,7 +841,9 @@ export async function planToday(
   const note =
     proposal?.note && !isEmptyDiff(diff) && noteOk(proposal.note, live, diff)
       ? proposal.note
-      : templateNote(diff, { reason: run.reason, energy: run.energy });
+      : checkInNote && !isEmptyDiff(diff)
+        ? checkInNote
+        : templateNote(diff, { reason: run.reason, energy: run.energy });
   const written = await writePlanVersion(live.db, userId, {
     day: live.today,
     items,

@@ -42,11 +42,32 @@ export function PageHeading({
     </header>
   );
 }
-export function Notice({ children, id }: { children: ReactNode; id?: string }) {
+export function Notice({
+  children,
+  id,
+  onDismiss,
+}: {
+  children: ReactNode;
+  id?: string;
+  onDismiss?: () => void;
+}) {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
   return (
-    <p id={id} tabIndex={-1} className="notice" role="status">
-      {children}
-    </p>
+    <div id={id} tabIndex={-1} className="notice" role="status">
+      <div className="notice-content">{children}</div>
+      <button
+        type="button"
+        className="notice-dismiss"
+        aria-label="Dismiss"
+        onClick={() => {
+          setDismissed(true);
+          onDismiss?.();
+        }}
+      >
+        ×
+      </button>
+    </div>
   );
 }
 /** Keeps a textarea as tall as its text, so nothing is hidden behind a scroll. */

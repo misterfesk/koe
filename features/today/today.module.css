@@ -112,6 +112,12 @@
 .taps button {
   flex: 1 1 6rem;
 }
+.askLink {
+  align-self: flex-start;
+  font-size: 0.875rem;
+  font-weight: 400;
+  margin-top: 4px;
+}
 .metaRow {
   display: flex;
   flex-wrap: wrap;
@@ -333,9 +339,37 @@
   padding: 16px 18px;
   margin: 0 0 24px;
 }
-.bannerNote {
+.bannerTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
   margin: 0 0 8px;
+}
+.bannerNote {
+  margin: 0;
   font-weight: 500;
+}
+.bannerDismiss {
+  background: transparent;
+  border: none;
+  color: var(--secondary);
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 2px 6px;
+  margin: -4px -6px 0 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm, 4px);
+  min-height: 28px;
+  min-width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.bannerDismiss:hover,
+.bannerDismiss:focus-visible {
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.06);
 }
 .bannerLines {
   margin: 0 0 12px;

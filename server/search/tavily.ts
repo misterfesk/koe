@@ -82,7 +82,8 @@ export async function searchWeb(input: {
     : [];
   let hits: SearchHit[] | undefined;
   try {
-    if (searchStubbed()) hits = stubSearchHits(input.includeDomains);
+    if (searchStubbed())
+      hits = stubSearchHits(input.includeDomains, input.query);
     else {
       const res = await tavily({ apiKey: e.TAVILY_API_KEY! }).search(
         input.query,

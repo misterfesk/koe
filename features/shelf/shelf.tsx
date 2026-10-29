@@ -138,6 +138,30 @@ export function Shelf({
     };
   }, [serverLoading]);
 
+  const manualRefresh = () => {
+    setError("");
+    keepUndo(undoKey, null);
+    setUndo(null);
+    setLoading(true);
+    startTransition(async () => {
+      try {
+        const r = await refreshShelf({ manual: true });
+        setShelf(r.shelf);
+        setMessage(
+          r.rateLimited
+            ? "You've refreshed a few times today. Check back tomorrow."
+            : r.ok
+              ? doneMessage(r.shelf)
+              : "Search is unavailable. Check back later.",
+        );
+      } catch {
+        setMessage("Search is unavailable. Check back later.");
+      } finally {
+        setLoading(false);
+      }
+    });
+  };
+
   const feedback = (pick: ShelfPick, status: "saved" | "not_for_me") =>
     startTransition(async () => {
       setError("");
@@ -231,23 +255,35 @@ export function Shelf({
 
   return (
     <>
-      <p className="meta">Picked from trusted health sites and channels.</p>
+      <p className="meta">Picked for your week and interests.</p>
       <div ref={notice} tabIndex={-1}>
         <p role="status" aria-live="polite">
           {loading
             ? "Looking for a few good picks…"
             : (undo?.message ?? message)}
         </p>
-        {undo && (
-          <button
-            type="button"
-            className="secondary"
-            disabled={pending}
-            onClick={restore}
-          >
-            Undo
-          </button>
-        )}
+        <div className="actions">
+          {shelf.searchEnabled && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={pending || loading}
+              onClick={manualRefresh}
+            >
+              Refresh picks
+            </button>
+          )}
+          {undo && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={pending}
+              onClick={restore}
+            >
+              Undo
+            </button>
+          )}
+        </div>
       </div>
       {error && (
         <p className="error" role="alert">

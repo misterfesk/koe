@@ -74,7 +74,7 @@ test("the day plan: check-in, undo, answers, not today and letting go", async ({
   // Check-in: low. The effect is visible, with a diff and Undo.
   await expect(page.getByText("How are you arriving today?")).toBeVisible();
   await page.getByRole("button", { name: "Low", exact: true }).click();
-  await page.getByLabel("One word, if you like").fill("tired");
+  await page.getByLabel(/words, if you like/i).fill("tired");
   await page.getByRole("button", { name: "Update my day" }).click();
   const banner = page.getByRole("region", { name: "What changed" });
   await expect(banner).toBeVisible();

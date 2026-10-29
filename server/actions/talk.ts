@@ -6,14 +6,16 @@ import { z } from "zod";
 import type { RiskLevel } from "@/domain/safety";
 import {
   clockToMinutes,
+  isEverydayMemory,
   resultLines,
+  subareaSchema,
   toolSchemas,
   vetCall,
   type ToolProposal,
 } from "@/domain/talk-tools";
 import { conversation, talkModes } from "../db/schema";
 import { recordSafetyEvent, updateProfile } from "../data/profile";
-import { addMemory } from "../data/memory";
+import { addMemory, deleteMemory, updateMemory } from "../data/memory";
 import { getUserModel } from "../data/intake";
 import {
   addMessage,
@@ -32,7 +34,7 @@ import {
   startConversation,
   updateTool,
 } from "../data/talk";
-import { weekThing } from "../data/week";
+import { taskFocus } from "../data/week";
 import type { MessageView } from "../data/talk";
 import { summarise } from "../llm/summaries";
 import { env } from "../env";
@@ -41,7 +43,14 @@ import { planToday } from "../llm/planner";
 import { classifyRisk, reply } from "../llm/talk";
 import { buildTalkContext } from "../llm/talk-context";
 import { talkStubbed } from "../llm/talk-stub";
-import { addToToday, moveItemTo } from "../plan-edit";
+import {
+  addSubareasToToday,
+  addToToday,
+  editPlanItem,
+  mergePlanItems,
+  moveItemTo,
+  splitPlanItem,
+} from "../plan-edit";
 import { screen } from "../safety";
 import { requireViewer, type Viewer } from "../viewer";
 import { formatClock, localDay, readableDay, uses12Hour } from "@/domain/time";
@@ -66,7 +75,7 @@ const GONE = "This conversation is gone.";
 
 /** What Talk was opened from. Only the kind and id come from the client. */
 const talkContext = z.object({
-  kind: z.literal("thing"),
+  kind: z.enum(["thing", "step"]),
   id: z.string().min(1).max(64),
 });
 
@@ -115,9 +124,9 @@ export async function sendMessage(
   let id = parsed.data.conversationId;
   let convo = id ? await getConversation(v.db, v.user.id, id) : null;
   if (id && !convo) return { ok: false, error: GONE };
-  // A new conversation opened from a thing: it must be the person's own.
+  // A new conversation opened from a task: it must be the person's own.
   const asked = !id ? parsed.data.context : undefined;
-  if (asked && !(await weekThing(v.db, v.user.id, asked.id)))
+  if (asked && !(await taskFocus(v.db, v.user.id, asked, v.today)))
     return { ok: false, error: GONE };
   if (convo?.safetyPaused || v.profile.coachingPausedAt)
     return { ok: true, conversationId: id ?? null, safety: "concern" };
@@ -153,7 +162,7 @@ export async function sendMessage(
   convo = await getConversation(v.db, v.user.id, id);
   const history = convo!.messages;
   const focus = convo!.context
-    ? await weekThing(v.db, v.user.id, convo!.context.id)
+    ? await taskFocus(v.db, v.user.id, convo!.context, v.today)
     : null;
 
   // Layer 2 (model check) runs alongside the reply to save time. A reply is
@@ -192,6 +201,28 @@ export async function sendMessage(
   if (!answer || risk === null) {
     refresh();
     return { ok: true, conversationId: id, safety: "none", unavailable: true };
+  }
+  // D037 progressive profiling: everyday facts (helps/preference without
+  // feelings, people or struggles) save automatically with an inline Undo,
+  // while sensitive details stay pending for explicit approval.
+  if (v.profile.memoryOn && !answer.risky && answer.proposals?.tools.length) {
+    for (const t of answer.proposals.tools) {
+      if (t.name !== "save_memory") continue;
+      const parsedMem = toolSchemas.save_memory.safeParse(t.args);
+      if (
+        parsedMem.success &&
+        isEverydayMemory(parsedMem.data.kind, parsedMem.data.text)
+      ) {
+        const memoryId = await addMemory(v.db, v.user.id, {
+          kind: parsedMem.data.kind,
+          text: parsedMem.data.text,
+          source: "talk",
+          sourceRef: id,
+        });
+        await screen(v.db, v.user.id, "memory", [parsedMem.data.text]);
+        t.meta = { ...t.meta, memoryId, autoSaved: true };
+      }
+    }
   }
   await addMessage(
     v.db,
@@ -232,6 +263,8 @@ const confirmInput = z
     text: z.string().trim().max(200).optional(),
     /** How a draft was taken: copied, or opened in messages or email. */
     via: z.enum(["copy", "sms", "email"]).optional(),
+    /** Accepted/edited sub-areas from a topic breakdown card. */
+    subareas: z.array(subareaSchema).min(1).max(5).optional(),
   })
   .optional();
 
@@ -274,7 +307,16 @@ async function run(
   const clock = await clockFor();
   // Today's plan may have changed since the card was made: check it again.
   if (
-    ["add_item", "move_item", "shrink_item", "set_reminder"].includes(tool.name)
+    [
+      "add_item",
+      "break_down_topic",
+      "edit_item",
+      "split_item",
+      "merge_items",
+      "move_item",
+      "shrink_item",
+      "set_reminder",
+    ].includes(tool.name)
   ) {
     const { vet } = await buildTalkContext(v, 0);
     if (!vetCall(tool.name, a, vet))
@@ -294,6 +336,58 @@ async function run(
       if (!r.ok) return { ok: false, error: r.error };
       return r.changed
         ? { ok: true, result: resultLines.add_item() }
+        : { ok: false, error: r.note };
+    }
+    case "break_down_topic": {
+      const x = toolSchemas.break_down_topic.parse(a);
+      const chosen = extra?.subareas ?? x.subareas;
+      const r = await addSubareasToToday(v, x.topic, chosen);
+      if (!r.ok) return { ok: false, error: r.error };
+      return r.changed
+        ? {
+            ok: true,
+            result: resultLines.break_down_topic(r.addedCount ?? chosen.length),
+          }
+        : { ok: false, error: r.note };
+    }
+    case "edit_item": {
+      const x = toolSchemas.edit_item.parse(a);
+      const r = await editPlanItem(v, x.itemId, {
+        title: x.newTitle,
+        size: x.size ?? undefined,
+        minute: x.minuteOfDay ?? undefined,
+      });
+      if (!r.ok) return { ok: false, error: r.error };
+      return r.changed
+        ? { ok: true, result: resultLines.edit_item(x.newTitle) }
+        : { ok: false, error: r.note };
+    }
+    case "split_item": {
+      const x = toolSchemas.split_item.parse(a);
+      const r = await splitPlanItem(
+        v,
+        x.itemId,
+        x.parts.map((p) => ({
+          title: p.title,
+          size: p.size ?? undefined,
+          minuteOfDay: p.minuteOfDay ?? undefined,
+        })),
+      );
+      if (!r.ok) return { ok: false, error: r.error };
+      return r.changed
+        ? { ok: true, result: resultLines.split_item(x.parts.length) }
+        : { ok: false, error: r.note };
+    }
+    case "merge_items": {
+      const x = toolSchemas.merge_items.parse(a);
+      const r = await mergePlanItems(v, x.itemIds, {
+        title: x.mergedTitle,
+        size: x.size ?? undefined,
+        minuteOfDay: x.minuteOfDay ?? undefined,
+      });
+      if (!r.ok) return { ok: false, error: r.error };
+      return r.changed
+        ? { ok: true, result: resultLines.merge_items(x.mergedTitle) }
         : { ok: false, error: r.note };
     }
     case "move_item": {
@@ -347,13 +441,21 @@ async function run(
       const text = memoryText.safeParse(extra?.text ?? a.text);
       if (!text.success)
         return { ok: false, error: text.error.issues[0].message };
-      // The person's own edit is kept as they wrote it; the safety rules still read it.
-      await addMemory(v.db, v.user.id, {
-        kind: toolSchemas.save_memory.parse(a).kind,
-        text: text.data,
-        source: "talk",
-        sourceRef: conversationId,
-      });
+      const kind = toolSchemas.save_memory.parse(a).kind;
+      // If already auto-saved on send, update the stored card in place.
+      if (tool.meta?.memoryId) {
+        await updateMemory(v.db, v.user.id, tool.meta.memoryId, {
+          kind,
+          text: text.data,
+        });
+      } else {
+        await addMemory(v.db, v.user.id, {
+          kind,
+          text: text.data,
+          source: "talk",
+          sourceRef: conversationId,
+        });
+      }
       await screen(v.db, v.user.id, "memory", [text.data]);
       return { ok: true, result: resultLines.save_memory() };
     }
@@ -499,7 +601,10 @@ export async function confirmProposal(
   return done;
 }
 
-/** The person said no to a card. Nothing is written except that the card is answered. */
+/**
+ * The person said no to a card (or tapped Undo on an auto-saved everyday memory).
+ * If the card was an auto-saved memory, its stored memory_card row is removed.
+ */
 export async function dismissProposal(
   messageId: string,
   proposalId: string,
@@ -515,6 +620,9 @@ export async function dismissProposal(
     "pending",
     { status: "dismissed" },
   );
+  if (r.ok && r.tool?.meta?.memoryId) {
+    await deleteMemory(v.db, v.user.id, r.tool.meta.memoryId);
+  }
   refresh();
   return { ok: r.ok || r.tool?.status === "dismissed" };
 }
@@ -552,10 +660,10 @@ export async function loadConversation(
   const v = await requireViewer();
   const paused = !!v.profile.coachingPausedAt;
   if (id === null) {
-    // Opened from a thing: only the person's own, else nothing is loaded.
+    // Opened from a task: only the person's own, else nothing is loaded.
     const asked = context ? talkContext.safeParse(context) : null;
     const thing = asked?.success
-      ? await weekThing(v.db, v.user.id, asked.data.id)
+      ? await taskFocus(v.db, v.user.id, asked.data, v.today)
       : null;
     if (asked && !thing) return { ok: false as const, error: GONE };
     return {

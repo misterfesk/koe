@@ -64,6 +64,27 @@
   min-height: 48px;
   max-width: 100%;
 }
+.inlineOther {
+  width: 100%;
+}
+.inlineOtherInput {
+  width: 100%;
+  min-height: 48px;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.inlineOtherInput:focus {
+  border-color: var(--coffee);
+  box-shadow: 0 0 0 1px var(--coffee);
+}
 .inlineField {
   display: grid;
   gap: 8px;
@@ -177,5 +198,35 @@
   .dots span {
     animation: none;
     opacity: 0.7;
+  }
+}
+
+@media (max-width: 480px) {
+  .pills .option {
+    min-height: 38px;
+    padding: 6px 12px;
+    font-size: 0.875rem;
+  }
+  .stack .option {
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 0.9375rem;
+  }
+  .otherButton {
+    min-height: 38px;
+    padding: 6px 2px;
+    font-size: 0.875rem;
+  }
+  .inlineOtherInput {
+    min-height: 38px;
+    padding: 6px 12px;
+    font-size: 0.875rem;
+  }
+  .info {
+    margin: -4px 0 8px;
+  }
+  .info summary {
+    min-height: 30px;
+    padding: 4px 0;
   }
 }

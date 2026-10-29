@@ -11,7 +11,6 @@ const pages = [
   "/today/add",
   "/today/problem",
   "/you/look-back",
-  "/you/look-back/journey",
   "/you/people",
   "/you/care",
   "/you/notes",

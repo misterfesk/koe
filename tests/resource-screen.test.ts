@@ -4,6 +4,7 @@ import {
   buildResourceQuery,
   resourceInterests,
   resourceFormats,
+  sanitizeSearchQuery,
 } from "@/domain/resources";
 import { orderedSources, sourceForUrl } from "@/domain/sources";
 import {
@@ -11,6 +12,7 @@ import {
   resourceRuleReason,
   goalWhy,
   weekWhy,
+  noteWhy,
 } from "@/domain/resource-screen";
 import { shelfWeek } from "@/server/data/shelf";
 
@@ -29,9 +31,22 @@ describe("Shelf pure safety rules", () => {
     "https://me:secret@www.nhs.uk/read",
     "https://www.nhs.uk:444/read",
     "https://youtube.com/read",
+    "https://www.tiktok.com/@user/video/123",
+    "https://x.com/someone/status/123",
+    "https://bit.ly/short-link",
+    "https://www.amazon.com/dp/B000123",
   ])("rejects untrusted URL %s", (url) => expect(sourceForUrl(url)).toBeNull());
-  it("accepts only exact https source hosts and orders by region", () => {
+  it("accepts verified health hosts and reputable open-web educational/tool hosts", () => {
     expect(sourceForUrl(hit.url)?.name).toBe("NHS");
+    expect(sourceForUrl("https://www.khanacademy.org/math/algebra")?.name).toBe(
+      "Khan Academy",
+    );
+    expect(
+      sourceForUrl("https://www.freecodecamp.org/news/python-guide")?.name,
+    ).toBe("freeCodeCamp");
+    expect(sourceForUrl("https://ocw.mit.edu/courses/intro")?.name).toBe(
+      "MIT OpenCourseWare",
+    );
     expect(
       orderedSources("AU")
         .slice(0, 2)
@@ -62,6 +77,27 @@ describe("Shelf pure safety rules", () => {
   ])("rejects unsafe content %s", (title) =>
     expect(resourceRuleReason({ ...hit, title })).not.toBeNull(),
   );
+  it("rejects commercial, checkout, login and clickbait pages", () => {
+    expect(
+      resourceRuleReason({
+        ...hit,
+        url: "https://www.khanacademy.org/login",
+      }),
+    ).toBe("commercial or utility page");
+    expect(
+      resourceRuleReason({
+        ...hit,
+        content:
+          "Buy now and add to cart with our limited-time offer discount code for instant access to this course.",
+      }),
+    ).toBe("commercial or sales page");
+    expect(
+      resourceRuleReason({
+        ...hit,
+        title: "One weird trick for algebra that doctors hate",
+      }),
+    ).toBe("low quality or clickbait");
+  });
   it("rejects thin snippets and applies local eating constraints", () => {
     expect(resourceRuleReason(hit)).toBeNull();
     expect(resourceRuleReason({ ...hit, content: "Too short." })).toBe(
@@ -123,7 +159,7 @@ describe("Shelf pure safety rules", () => {
   ])("rejects actual unsafe snippet advice: %s", (content, reason) => {
     expect(resourceRuleReason({ ...hit, content })).toBe(reason);
   });
-  it("why lines are templates naming only a chosen goal or a week title", () => {
+  it("why lines are templates naming only a chosen goal, week title or note", () => {
     expect(goalWhy({ goal: "sleep" }, ["sleep"])).toBe(
       'Because you chose "sleep"',
     );
@@ -132,6 +168,34 @@ describe("Shelf pure safety rules", () => {
     expect(weekWhy("Update my CV")).toBe('For "Update my CV"');
     expect(weekWhy(" ")).toBe("");
     expect(weekWhy(undefined)).toBe("");
+    expect(noteWhy("Playing acoustic guitar helps me unwind.")).toBe(
+      'Because you noted "Playing acoustic guitar helps me unwind"',
+    );
+  });
+  it("scrubs generated search queries for privacy, names, verbatim phrases and safety", () => {
+    expect(
+      sanitizeSearchQuery("SAT algebra practice problems step by step"),
+    ).toBe("SAT algebra practice problems step by step");
+    // Rejects personal names
+    expect(
+      sanitizeSearchQuery("how to email Marcus about apartment lease", {
+        forbiddenNames: ["Marcus"],
+      }),
+    ).toBeNull();
+    // Rejects verbatim 4+ word user sentences
+    expect(
+      sanitizeSearchQuery("email my landlord about broken boiler", {
+        rawUserTexts: ["I need to email my landlord about broken boiler soon"],
+      }),
+    ).toBeNull();
+    // Rejects diet/medication/crisis/eating-concern queries
+    expect(sanitizeSearchQuery("calorie deficit diet plan")).toBeNull();
+    expect(sanitizeSearchQuery("ssri dosage 20mg guide")).toBeNull();
+    expect(
+      sanitizeSearchQuery("easy sourdough bread recipe", {
+        eatingConcern: true,
+      }),
+    ).toBeNull();
   });
   it("checks all fixed why lines and all enum query combinations", () => {
     for (const goal of goals) {

@@ -85,3 +85,61 @@ export async function deleteMemory(db: Db, userId: string, id: string) {
     .delete(memoryCard)
     .where(and(eq(memoryCard.userId, userId), eq(memoryCard.id, id)));
 }
+
+export async function updateMemoryForNote(
+  db: Db,
+  userId: string,
+  noteId: string,
+  oldText: string,
+  newText: string,
+) {
+  const cards = await db
+    .select({
+      id: memoryCard.id,
+      textEnc: memoryCard.textEnc,
+      sourceRef: memoryCard.sourceRef,
+      source: memoryCard.source,
+    })
+    .from(memoryCard)
+    .where(eq(memoryCard.userId, userId));
+  for (const c of cards) {
+    const cardText = open(c.textEnc);
+    if (
+      c.sourceRef === noteId ||
+      (c.source === "you" && cardText === oldText)
+    ) {
+      await db
+        .update(memoryCard)
+        .set({ textEnc: seal(newText), updatedAt: new Date() })
+        .where(and(eq(memoryCard.userId, userId), eq(memoryCard.id, c.id)));
+    }
+  }
+}
+
+export async function removeMemoryForNote(
+  db: Db,
+  userId: string,
+  noteId: string,
+  noteText: string,
+) {
+  const cards = await db
+    .select({
+      id: memoryCard.id,
+      textEnc: memoryCard.textEnc,
+      sourceRef: memoryCard.sourceRef,
+      source: memoryCard.source,
+    })
+    .from(memoryCard)
+    .where(eq(memoryCard.userId, userId));
+  for (const c of cards) {
+    const cardText = open(c.textEnc);
+    if (
+      c.sourceRef === noteId ||
+      (c.source === "you" && cardText === noteText)
+    ) {
+      await db
+        .delete(memoryCard)
+        .where(and(eq(memoryCard.userId, userId), eq(memoryCard.id, c.id)));
+    }
+  }
+}

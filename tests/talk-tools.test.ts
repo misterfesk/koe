@@ -6,6 +6,8 @@ import {
   resourceFormats,
 } from "@/domain/resources";
 import {
+  isEverydayMemory,
+  isMicroStep,
   readProposals,
   resultLines,
   toolSchemas,
@@ -410,6 +412,10 @@ describe("card lines", () => {
   it("are plain templates with no banned words", () => {
     const lines = [
       resultLines.add_item(),
+      resultLines.break_down_topic(3),
+      resultLines.edit_item("Review linear equations"),
+      resultLines.split_item(2),
+      resultLines.merge_items("Practice algebra and geometry"),
       resultLines.move_item("5:00 pm"),
       resultLines.shrink_item(),
       resultLines.reminderItem("5:00 pm"),
@@ -427,5 +433,107 @@ describe("card lines", () => {
       expect(l).not.toMatch(/\b(we|us)\b|!/i);
     }
     expect(resultLines.draftCopied()).toBe("Copied. Nothing was sent.");
+  });
+});
+
+describe("D037 topic breakdown, task editing and progressive profiling", () => {
+  it("accepts 2–5 meaningful sub-areas on break_down_topic and rejects micro-steps", () => {
+    expect(isMicroStep("Write three rough words for your CV")).toBe(true);
+    expect(isMicroStep("Open laptop")).toBe(true);
+    expect(isMicroStep("Review linear equations and inequalities")).toBe(false);
+
+    const good = vetCall(
+      "break_down_topic",
+      {
+        topic: "SAT math prep",
+        subareas: [
+          { title: "Review linear equations and algebra", size: "small" },
+          { title: "Practice geometry and right triangles", size: "small" },
+          { title: "Do a 15-minute timed problem set", size: "small" },
+        ],
+      },
+      base(),
+    );
+    expect(good).not.toBeNull();
+    expect(good?.meta?.title).toBe("SAT math prep");
+
+    const micro = vetCall(
+      "break_down_topic",
+      {
+        topic: "CV update",
+        subareas: [
+          { title: "Write three rough words for your CV", size: "tiny" },
+          { title: "Open the file", size: "tiny" },
+        ],
+      },
+      base(),
+    );
+    expect(micro).toBeNull();
+  });
+
+  it("vets edit_item, split_item and merge_items against today's items", () => {
+    const edited = vetCall(
+      "edit_item",
+      { itemId: "letter", newTitle: "Reply to the council letter" },
+      base(),
+    );
+    expect(edited?.meta?.title).toBe("Open the letter");
+    expect(
+      vetCall(
+        "edit_item",
+        { itemId: "letter", newTitle: "Open the letter" },
+        base(),
+      ),
+    ).toBeNull();
+
+    const split = vetCall(
+      "split_item",
+      {
+        itemId: "letter",
+        parts: [
+          { title: "Read the council letter and note the reference" },
+          { title: "Draft a two-line reply to the council" },
+        ],
+      },
+      base(),
+    );
+    expect(split?.meta?.title).toBe("Open the letter");
+
+    const merged = vetCall(
+      "merge_items",
+      {
+        itemIds: ["walk", "letter"],
+        mergedTitle: "Post the council reply on a short walk",
+      },
+      base(),
+    );
+    expect(merged?.meta?.titles).toEqual([
+      "Take a short walk",
+      "Open the letter",
+    ]);
+  });
+
+  it("distinguishes everyday facts from sensitive details for progressive profiling", () => {
+    expect(
+      isEverydayMemory("helps", "Lo-fi music and tea in the afternoon helps"),
+    ).toBe(true);
+    expect(
+      isEverydayMemory(
+        "preference",
+        "Studying algebra in 20-minute blocks works best for you",
+      ),
+    ).toBe(true);
+    expect(
+      isEverydayMemory("hard", "Loud mornings make it hard to start"),
+    ).toBe(false);
+    expect(
+      isEverydayMemory(
+        "people",
+        "Sam is your brother who checks in on Sundays",
+      ),
+    ).toBe(false);
+    expect(
+      isEverydayMemory("helps", "Talking when you feel lonely helps"),
+    ).toBe(false);
   });
 });
