@@ -24,6 +24,7 @@ const search = vi.hoisted(() => vi.fn());
 vi.mock("@tavily/core", () => ({ tavily: () => ({ search }) }));
 
 const ULTRA = "nvidia/Nemotron-3-Ultra-550b-a55b";
+const CHAT = "nvidia/Nemotron-3.5-Super-VL";
 const SUPER = "nvidia/nemotron-3-super-120b-a12b";
 const NANO = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B";
 
@@ -107,7 +108,7 @@ describe("requests", () => {
     await nebius.streamText([user], { purpose: "talk" }).next();
     expect(bodyOf(3).chat_template_kwargs).toEqual({ enable_thinking: false });
     expect(bodyOf(3).stream_options).toEqual({ include_usage: true });
-    expect(bodyOf(0).model).toBe(ULTRA);
+    expect(bodyOf(0).model).toBe(CHAT);
   });
 
   it("is switched off by the operator kill switch", async () => {
@@ -131,12 +132,12 @@ describe("fallback model", () => {
     fetchMock.mockImplementationOnce(async () => first());
     fetchMock.mockImplementationOnce(async () => reply("hello"));
     expect(await nebius.complete([user], { purpose: "talk" })).toBe("hello");
-    expect(bodyOf(0).model).toBe(ULTRA);
+    expect(bodyOf(0).model).toBe(CHAT);
     expect(bodyOf(1).model).toBe(SUPER);
     const rows = await runs();
     expect(rows.map((r) => [r.model, r.ok, r.fellBack]).sort()).toEqual(
       [
-        [ULTRA, false, false],
+        [CHAT, false, false],
         [SUPER, true, true],
       ].sort(),
     );
@@ -264,7 +265,7 @@ describe("structured replies", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(bodyOf(1).response_format).toEqual({ type: "json_object" });
     // Same model both times: a 400 is not a reason to switch models.
-    expect(bodyOf(1).model).toBe(ULTRA);
+    expect(bodyOf(1).model).toBe(CHAT);
   });
 
   it("feeds validation errors back once, then gives up", async () => {
@@ -429,14 +430,14 @@ describe("usage log", () => {
     expect(row).toMatchObject({
       userId: "u1",
       purpose: "intake",
-      model: ULTRA,
+      model: CHAT,
       tokensIn: 1000,
       tokensOut: 500,
       ok: true,
       fellBack: false,
     });
-    // 1000 in at $1/M plus 500 out at $3/M.
-    expect(Number(row.estCostUsd)).toBeCloseTo(0.0025, 6);
+    // 1000 in at $0.30/M plus 500 out at $0.90/M.
+    expect(Number(row.estCostUsd)).toBeCloseTo(0.00075, 6);
     expect(row.latencyMs).toBeGreaterThanOrEqual(0);
     expect(Object.keys(getTableColumns(schema.agentRun)).sort()).toEqual(
       [
@@ -493,7 +494,7 @@ describe("daily budget", () => {
   const rowFor = (userId: string, createdAt = new Date()) => ({
     userId,
     purpose: "talk",
-    model: ULTRA,
+    model: CHAT,
     ok: true,
     createdAt,
   });

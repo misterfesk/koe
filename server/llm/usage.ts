@@ -25,12 +25,14 @@ export type Purpose = (typeof aiPurposes)[number];
 
 type Price = { in: number; out: number; cachedIn?: number };
 
-// USD per 1M tokens, Nebius Token Factory list prices (checked 2026-10-26).
+// USD per 1M tokens, Nebius Token Factory list prices (checked 2026-10-29).
 // A model missing here is logged with a null cost rather than a guess.
 export const prices: Record<string, Price> = {
   "nvidia/Nemotron-3-Ultra-550b-a55b": { in: 1, out: 3, cachedIn: 0.12 },
   "nvidia/nemotron-3-super-120b-a12b": { in: 0.3, out: 0.9 },
   "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": { in: 0.06, out: 0.24 },
+  "nvidia/Nemotron-3.5-Super-VL": { in: 0.3, out: 0.9, cachedIn: 0.06 },
+  "nvidia/Nemotron-3_5-Lightning": { in: 0.06, out: 0.24, cachedIn: 0.03 },
 };
 
 export function estimateCostUsd(

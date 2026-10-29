@@ -24,8 +24,8 @@ All model calls go through Nebius Token Factory to open NVIDIA Nemotron models. 
 
 | Role | Model | Used for |
 |---|---|---|
-| Chat | `nvidia/Nemotron-3-Ultra-550b-a55b` | Talk replies, intake summary, the weekly-things interview, planning a whole day |
-| Fast and safety | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Safety classification on every Talk turn, Shelf search intents, resource screening, appointment lookup, week topics, swapping or shrinking one entry, short summaries |
+| Chat | `nvidia/Nemotron-3.5-Super-VL` | Talk replies, intake summary, the weekly-things interview, planning a whole day |
+| Fast and safety | `nvidia/Nemotron-3_5-Lightning` | Safety classification on every Talk turn, Shelf search intents, resource screening, appointment lookup, week topics, swapping or shrinking one entry, short summaries |
 | Fallback | `nvidia/nemotron-3-super-120b-a12b` | One retry when the primary call fails on a network error, timeout, 5xx or 429 |
 
 Where Token Factory helped:
@@ -41,7 +41,7 @@ Every call is logged with its purpose, model, tokens, latency and cost, never th
 
 Tavily powers two features.
 
-- **Shelf picks.** Nemotron Nano turns your context (weekly things, today's plan, memories you approved) into generic topic queries of a few words. Code scrubs them. Results are screened by domain, path, quality and safety rules plus a Nano adult-audience check. YouTube videos are kept only from listed, verified channels.
+- **Shelf picks.** Nemotron Lightning turns your context (weekly things, today's plan, memories you approved) into generic topic queries of a few words. Code scrubs them. Results are screened by domain, path, quality and safety rules plus a Lightning adult-audience check. YouTube videos are kept only from listed, verified channels.
 - **Appointment lookup.** One tap searches for services, meetups, classes and therapy directories in your region, with a reason for each result.
 
 Your own words are never sent verbatim to search. Names, contact details, long numbers and risk language are removed or rejected in code. In Talk, the proposal card shows the exact query before it runs. `KOE_SEARCH=off` turns search off, and saved picks stay readable.

@@ -251,9 +251,7 @@ describe("the planner with a model", { timeout: 60_000 }, () => {
     );
     expect(r.source).toBe("ai");
     expect(r.changed).toBe(true);
-    expect(fake.calls[0][2].model).toBe(
-      "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
-    );
+    expect(fake.calls[0][2].model).toBe("nvidia/Nemotron-3_5-Lightning");
 
     // A "smaller" version that is not smaller is refused.
     current = await setup();
