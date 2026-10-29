@@ -31,6 +31,9 @@ const animClass: Record<Anim, string> = {
   leaf: styles.leaf,
   twinkle: styles.twinkle,
   glow: styles.glow,
+  drift: styles.drift,
+  sway: styles.sway,
+  breathe: styles.breathe,
 };
 
 type Paint = Record<string, string | number | undefined>;
@@ -43,6 +46,7 @@ export function El({ shape, paint }: { shape: Shape; paint: Paint }) {
     className: shape.anim
       ? `${styles.anim} ${animClass[shape.anim]}`
       : undefined,
+    style: shape.delay ? { animationDelay: `${shape.delay}s` } : undefined,
     "data-role": shape.role,
   };
   switch (shape.kind) {
