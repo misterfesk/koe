@@ -340,7 +340,29 @@ async function run(
     }
     case "break_down_topic": {
       const x = toolSchemas.break_down_topic.parse(a);
-      const chosen = extra?.subareas ?? x.subareas;
+      // The person may rename or drop sub-areas; kind and why stay the
+      // vetted ones from the card, never the client's.
+      const chosen = extra?.subareas
+        ? extra.subareas.map((s, i) => {
+            const vetted =
+              x.subareas.find((o) => o.title === s.title) ??
+              x.subareas[Math.min(i, x.subareas.length - 1)];
+            return { ...vetted, title: s.title, size: s.size };
+          })
+        : x.subareas;
+      const risk = await screen(
+        v.db,
+        v.user.id,
+        "talk-card",
+        chosen.map((s) => s.title),
+      );
+      if (risk !== "none") {
+        refresh();
+        return {
+          ok: false,
+          error: "This is on hold for now. Help is at the top of the screen.",
+        };
+      }
       const r = await addSubareasToToday(v, x.topic, chosen);
       if (!r.ok) return { ok: false, error: r.error };
       return r.changed

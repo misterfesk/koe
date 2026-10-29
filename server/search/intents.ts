@@ -15,6 +15,9 @@ import {
   resourceSource,
   weekWhy,
 } from "@/domain/resource-screen";
+import { eatingSafe } from "@/domain/interview-text";
+import { breaksGuardrails } from "@/domain/plan-menu";
+import { detectRisk, mentionsContact } from "@/domain/safety";
 import {
   intentTagsKey,
   sanitizeSearchQuery,
@@ -128,8 +131,15 @@ async function collectCandidateSources(input: {
     });
   }
 
+  // Text that is risky, breaks the plan guardrails, names a contact or (with an
+  // eating concern) mentions food or exercise is never quoted or searched.
+  const usable = (text: string) =>
+    detectRisk(text) === "none" &&
+    !breaksGuardrails(text) &&
+    !mentionsContact(text) &&
+    (!eatingConcern || eatingSafe(text));
   const addCandidate = (c: Omit<CandidateSource, "id">) => {
-    if (!c.text.trim()) return;
+    if (!c.text.trim() || !usable(c.text) || !usable(c.why)) return;
     const nextIndex = candidates.filter((x) => x.id !== "S0").length + 1;
     candidates.push({ ...c, id: `S${nextIndex}` });
   };
@@ -222,7 +232,8 @@ async function collectCandidateSources(input: {
     addCandidate({
       kind: "talk",
       text,
-      why: noteWhy(text),
+      // Takeaways are model-written: a fixed line, never quoted as their words.
+      why: "Because of what you talked about recently",
       goal: defaultGoal,
     });
   }
@@ -310,6 +321,7 @@ export async function planPersonalizedSearches(input: {
 Rules:
 - Start from the user's numbered sources (tasks, memories, notes, today's plan, interests, goals) and current energy.
 - Pick a balanced mix: practical help for their concrete tasks or skills (e.g. "SAT algebra practice problems guide", "writing a software resume guide"), resources for their interests or what helps them unwind, and support for their energy or routine.
+- Favour sources that are supportive, practical and well made. Communities and forums (Reddit included) are welcome when they help with the topic; avoid ones known for hostility, hopelessness or harmful advice.
 - Include at least one "article" and, when helpful, one "video" (for YouTube channels like Khan Academy, TED-Ed, CrashCourse, 3Blue1Brown, freeCodeCamp, Mind, NHS).
 - Privacy: abstract every query into a generic 3 to 8 word topic search. NEVER include personal names, employer names, locations, usernames, or verbatim multi-word sentences from the user's text.
 - Safety: never search for diets, calories, weight loss, fasting, supplements, medication, dosages, or crisis/self-harm topics.${eatingConcern ? " Never search for food, cooking, nutrition, running, workouts, or exercise." : ""}
@@ -406,6 +418,8 @@ const appointmentCategories = [
   "career_support",
   "money_advice",
   "community_support",
+  "meetups",
+  "classes",
 ] as const;
 type AppointmentCategory = (typeof appointmentCategories)[number];
 
@@ -418,6 +432,8 @@ const categoryLabels: Record<AppointmentCategory, string> = {
   career_support: "Work and career advice",
   money_advice: "Money and debt advice",
   community_support: "Community support",
+  meetups: "Local meetups and groups",
+  classes: "Classes and study groups",
 };
 
 const regionWord: Record<"GB" | "US" | "AU" | "global", string> = {
@@ -471,6 +487,10 @@ function fallbackCategoryQuery(
       return region === "GB"
         ? "Mind local Minds service finder support group UK"
         : `NAMI adult mental health support group finder register ${r}`;
+    case "meetups":
+      return `find local adult meetup groups hobby clubs join ${r}`;
+    case "classes":
+      return `find local adult classes study group sessions join ${r}`;
   }
 }
 
@@ -488,6 +508,10 @@ const categorySubjectPattern: Record<AppointmentCategory, RegExp> = {
     /\b(debt\w*|money|financial|budget\w*|stepchange|citizens advice|nfcc|greenpath|bills?)\b/i,
   community_support:
     /\b(support group\w*|peer support|mind|nami|community|mental health)\b/i,
+  meetups:
+    /\b(meetup\w*|meet up|group\w*|club\w*|social|walk\w*|volunteer\w*)\b/i,
+  classes:
+    /\b(class\w*|course\w*|workshop\w*|study group\w*|session\w*|lesson\w*)\b/i,
 };
 
 function ensureBookingIntentQuery(
@@ -500,7 +524,7 @@ function ensureBookingIntentQuery(
     return fallbackCategoryQuery(category, region);
   }
   if (
-    !/\b(book|booking|appointment\w*|directory|referral|service-search|find a|register|consultation|tutors|therapists|counsellors|counselors|advisers|advisors|clinic)\b/i.test(
+    !/\b(book|booking|appointment\w*|directory|referral|service-search|find a|register|consultation|tutors|therapists|counsellors|counselors|advisers|advisors|clinic|join|meetups?|groups?|clubs?|classes|workshops?)\b/i.test(
       q,
     )
   ) {
@@ -597,6 +621,9 @@ function deterministicAppointmentPlans(
       add("counselling", c.why);
     } else if (c.goal === "less_alone" || c.weekTopic === "people") {
       add("community_support", c.why);
+      add("meetups", c.why);
+    } else if (c.weekTopic === "creative") {
+      add("classes", c.why);
     }
   }
 
@@ -679,11 +706,14 @@ Available categories:
 - "career_support": 1-to-1 career adviser booking (National Careers Service, career coaching appointments)
 - "money_advice": free confidential debt/money adviser booking (StepChange, Citizens Advice, GreenPath, NFCC)
 - "community_support": local mental health service finders and peer support group registration
+- "meetups": in-person meetups, hobby clubs, walking groups, volunteering and social groups for adults
+- "classes": local or live classes, workshops and study group sessions for adults
 
 Rules:
 - Choose 2 to 3 intents that best match the user's numbered sources.
+- Favour real sessions with real people: therapy or counselling sessions, local meetups, classes or study groups, tutoring or adviser appointments. Pick whichever fit this person; don't default to therapy when their sources point elsewhere.
 - If source "S0" (kind "instruction") is present, your first intent MUST directly serve "S0".
-- Every query MUST include booking, referral, or directory terms such as "service search self referral", "find a therapist directory book", "find a tutor book session", "book adviser appointment", or "find a clinic".
+- Every query MUST include booking, referral, or directory terms such as "service search self referral", "find a therapist directory book", "find a tutor book session", "book adviser appointment", "find a clinic", "join a local group" or "find a class near me".
 - Tailor queries to region "${region}" (e.g. NHS service search, BACP, Counselling Directory, StepChange, Citizens Advice, National Careers Service, Superprof for GB; Psychology Today, Wyzant, NFCC, GreenPath for US; healthdirect, Medicare Mental Health, National Debt Helpline for AU).
 - Privacy: abstract every query into a generic 4 to 8 word booking/directory search. NEVER copy 4 or more consecutive words from any source or instruction, and never include personal names, employer names, or private details.
 - Safety: never search for diets, weight loss, calories, supplements, medication, dosages, or crisis/self-harm hotlines.${eatingConcern ? " Never search for food, cooking, nutrition, or exercise." : ""}

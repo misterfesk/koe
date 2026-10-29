@@ -232,14 +232,14 @@ export function appointmentBookableScore(hit: {
   let score = 0;
 
   if (
-    /\b(service-search|find[- ]a[- ](?:therapist|counsellor|counselor|tutor|adviser|advisor|coach|doctor|gp|clinic|service|psychologist|specialist|support)|find[- ]an[- ]nhs|directory|self-referral|self referral|refer yourself|book|booking|appointment\w*|schedule|consultation|register|tutors|tutoring|therapists|talking[- ]therapies|counsellors|counselors|counselling|counseling|advisers|advisors|coaching|clinic|sleep-center|debt-counseling|debt-advice|debt-and-money|career-services|contact-us)\b/.test(
+    /\b(service-search|find[- ]a[- ](?:therapist|counsellor|counselor|tutor|adviser|advisor|coach|doctor|gp|clinic|service|psychologist|specialist|support)|find[- ]an[- ]nhs|directory|self-referral|self referral|refer yourself|book|booking|appointment\w*|schedule|consultation|register|tutors|tutoring|therapists|talking[- ]therapies|counsellors|counselors|counselling|counseling|advisers|advisors|coaching|clinic|sleep-center|debt-counseling|debt-advice|debt-and-money|career-services|contact-us|meetups?|groups?|clubs?|classes|courses?|workshops?|events?|join)\b/.test(
       `${title} ${path}`,
     )
   ) {
     score += 4;
   }
   if (
-    /\b(refer yourself|book an? |schedule an? |speak with a trained adviser|find an? (?:accredited |registered |qualified |local |online |nhs )?(?:therapist|counsellor|counselor|tutor|adviser|advisor|coach|doctor|gp|clinic|service)|search for a |1-to-1|one-to-one|accredited register|free confidential|study sessions)\b/.test(
+    /\b(refer yourself|book an? |schedule an? |speak with a trained adviser|find an? (?:accredited |registered |qualified |local |online |nhs )?(?:therapist|counsellor|counselor|tutor|adviser|advisor|coach|doctor|gp|clinic|service)|search for a |1-to-1|one-to-one|accredited register|free confidential|study sessions|join (?:a|our|the) |upcoming events?|meets (?:every|weekly|monthly)|sign up for)\b/.test(
       `${title} ${body}`,
     )
   ) {
