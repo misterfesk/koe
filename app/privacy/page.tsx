@@ -26,8 +26,8 @@ export default function Page() {
           If you have an account, Koe stores your email address and a hashed
           password. As a guest, Koe stores no email at all. For each signed-in
           session Koe also keeps the IP address and browser details, to keep the
-          session working and secure. A guest&apos;s data stays until it&apos;s
-          deleted; it doesn&apos;t expire on its own.
+          session working and secure. A guest who doesn&apos;t use Koe for 14
+          days is deleted, with everything they added.
         </p>
         <p>
           Your Shelf keeps titles, links, choices and short why lines. Page

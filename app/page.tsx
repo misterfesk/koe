@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionLink, Notice } from "@/components/ui";
 import { Welcome } from "@/features/onboarding/welcome";
@@ -36,7 +37,10 @@ export default async function Page({
               I have an account
             </ActionLink>
           </div>
-          <p className="meta">No sign-up needed to start.</p>
+          <p className="meta">
+            No sign-up needed to start. Koe can&apos;t respond in an emergency.{" "}
+            <Link href="/help">Help →</Link>
+          </p>
         </div>
         <div className={styles.art} aria-hidden="true">
           <span className={styles.circle} />
