@@ -1,8 +1,17 @@
 import { StrictMode } from "react";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Shelf } from "@/features/shelf/shelf";
-import { refreshShelf } from "@/server/actions/shelf";
+import type { ShelfPick } from "@/server/data/shelf";
+import { TodayPick } from "@/features/shelf/today-pick";
+import { readShelf, refreshShelf, shelfFeedback } from "@/server/actions/shelf";
 
 vi.mock("@/server/actions/shelf", () => ({
   refreshShelf: vi.fn(),
@@ -124,5 +133,145 @@ describe("Shelf fallbacks", () => {
       ).toBeVisible(),
     );
     expect(screen.queryByText("Your picks are ready.")).not.toBeInTheDocument();
+  });
+});
+
+const video: ShelfPick = {
+  ...pick,
+  id: "vid",
+  title: "Starting small tasks",
+  sourceName: "NHS Channel",
+  format: "video" as const,
+  videoId: "abc123",
+  cover: {
+    kind: "youtube" as const,
+    src: "https://i.ytimg.com/vi/abc123/hqdefault.jpg",
+  },
+};
+const weekRead: ShelfPick = {
+  ...pick,
+  id: "wk",
+  title: "Work email help",
+  forWeek: true,
+  weekTopic: "work" as const,
+  readMinutes: 4,
+};
+const read2: ShelfPick = {
+  ...pick,
+  id: "r2",
+  title: "Sleep notes",
+  readMinutes: 6,
+};
+const view = (current: ShelfPick[]) => ({ ...empty, current });
+
+describe("Shelf rows, chips and covers", () => {
+  it("hides the chips below two picks", () => {
+    render(<Shelf ownerId="v" initial={view([pick])} />);
+    expect(
+      screen.queryByRole("group", { name: "Filter picks" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides Videos and Reads chips when none, and shows topic chips", () => {
+    render(<Shelf ownerId="v" initial={view([weekRead, read2])} />);
+    const group = screen.getByRole("group", { name: "Filter picks" });
+    expect(within(group).getByRole("button", { name: "All" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      within(group).queryByRole("button", { name: "Videos" }),
+    ).not.toBeInTheDocument();
+    expect(within(group).getByRole("button", { name: "Reads" })).toBeVisible();
+    expect(within(group).getByRole("button", { name: "Work" })).toBeVisible();
+  });
+
+  it("orders rows, omits empty ones and filters by topic", () => {
+    render(<Shelf ownerId="v" initial={view([read2, video, weekRead])} />);
+    const heads = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((h) => h.textContent);
+    expect(heads).toEqual(["For your week", "Videos", "Reads", "Saved"]);
+    fireEvent.click(screen.getByRole("button", { name: "Work" }));
+    expect(
+      screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent),
+    ).toEqual(["For your week", "Saved"]);
+    expect(
+      screen.queryByRole("heading", { name: "Sleep notes" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows Nothing here yet and Show all when a filter leaves nothing", async () => {
+    vi.mocked(shelfFeedback).mockResolvedValue({ ok: true, undoToken: "t" });
+    vi.mocked(readShelf).mockResolvedValue(view([read2]));
+    render(<Shelf ownerId="v" initial={view([weekRead, read2])} />);
+    fireEvent.click(screen.getByRole("button", { name: "Work" }));
+    fireEvent.click(screen.getByRole("button", { name: "Not for me" }));
+    await waitFor(() =>
+      expect(screen.getByText(/Nothing here yet./)).toBeVisible(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+    expect(screen.getByRole("heading", { name: "Sleep notes" })).toBeVisible();
+  });
+
+  it("badges videos and reads with minutes, and falls back to a generated cover", () => {
+    const { container } = render(
+      <Shelf
+        ownerId="v"
+        initial={view([
+          video,
+          {
+            ...read2,
+            cover: { kind: "image" as const, src: "/api/shelf/cover/k" },
+          },
+        ])}
+      />,
+    );
+    expect(screen.getByText("Video")).toBeVisible();
+    expect(screen.getByText("6 min read")).toBeVisible();
+    const img = container.querySelector('img[src="/api/shelf/cover/k"]')!;
+    fireEvent.error(img);
+    expect(container.querySelector('img[src="/api/shelf/cover/k"]')).toBeNull();
+    expect(container.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    expect(
+      screen.getByRole("link", {
+        name: /Watch Starting small tasks on YouTube/,
+      }),
+    ).toHaveAttribute("href", "https://www.youtube.com/watch?v=abc123");
+  });
+
+  it("generates a cover when a pick has no image", () => {
+    const { container } = render(<Shelf ownerId="v" initial={view([pick])} />);
+    expect(container.querySelector("img")).toBeNull();
+    expect(
+      container.querySelector('div[aria-hidden="true"]')?.textContent,
+    ).toContain("NHS");
+  });
+
+  it("loads no iframe until the play button is tapped", () => {
+    const { container } = render(<Shelf ownerId="v" initial={view([video])} />);
+    expect(container.querySelector("iframe")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Play Starting small tasks" }),
+    );
+    const frame = container.querySelector("iframe")!;
+    expect(frame.getAttribute("src")).toBe(
+      "https://www.youtube-nocookie.com/embed/abc123?autoplay=1",
+    );
+    expect(frame).toHaveFocus();
+  });
+
+  it("shows a Today card without Save or Not for me", () => {
+    render(<TodayPick picks={[video, weekRead]} />);
+    expect(
+      screen.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Not for me" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /See this pick/ })).toHaveLength(
+      2,
+    );
+    expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
   });
 });

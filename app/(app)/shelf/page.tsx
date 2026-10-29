@@ -11,7 +11,7 @@ export default async function Page() {
   const shelf = await getShelf(viewer);
   return (
     <>
-      <PageHeading eyebrow="Shelf">Shelf</PageHeading>
+      <PageHeading>Shelf</PageHeading>
       <Shelf key={viewer.user.id} ownerId={viewer.user.id} initial={shelf} />
     </>
   );

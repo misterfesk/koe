@@ -91,6 +91,13 @@ export default function Page() {
           Tavily&apos;s storage and reuse of searches haven&apos;t been
           verified. Search phrases contain no names, notes or conversation text.
         </p>
+        <p>
+          Shelf videos come from YouTube. Before you tap play, only the cover
+          image loads from YouTube. After you tap, YouTube&apos;s
+          privacy-enhanced player loads, and YouTube sees that visit. Koe
+          fetches cover images for reads itself, so those sites don&apos;t see
+          you open Shelf.
+        </p>
         <h2>Safety checks</h2>
         <p>
           Koe checks what you write for signs you might be in danger, so it can
