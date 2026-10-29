@@ -75,6 +75,8 @@ export type WeekView = {
   version: number;
   startedOn: string;
   reviewOn: string;
+  /** ISO time the week review was answered; null while it is open. */
+  reviewedAt?: string | null;
   items: { id: string; captured: CapturedThing }[];
 };
 export function reviewDue(week: Pick<WeekView, "reviewOn">, today: string) {

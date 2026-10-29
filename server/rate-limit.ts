@@ -31,7 +31,7 @@ export async function clientIp() {
 
 /** False when this caller has used up the allowance for `action`. */
 export async function allow(
-  action: "sign-in" | "sign-up" | "guest" | "reminder-test",
+  action: "sign-in" | "sign-up" | "guest" | "reminder-test" | "week-review",
   extraKey?: string,
 ) {
   // The e2e suite starts dozens of guests from one machine.
@@ -42,10 +42,11 @@ export async function allow(
     "sign-up": { limit: 5, windowMs: 60 * 60_000 },
     guest: { limit: 20, windowMs: 60 * 60_000 },
     "reminder-test": { limit: 5, windowMs: 60_000 },
+    "week-review": { limit: 10, windowMs: 60_000 },
   }[action];
-  // A test notification is limited per person, not per network address.
+  // A test notification or a week review is limited per person, not per network address.
   const byIp =
-    action === "reminder-test"
+    action === "reminder-test" || action === "week-review"
       ? true
       : hit(`${action}:ip:${ip}`, rules.limit, rules.windowMs);
   const byKey = extraKey

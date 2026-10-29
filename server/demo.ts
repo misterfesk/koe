@@ -281,7 +281,12 @@ export async function enterDemo(
     if (!userId) return notFound();
     const cookie = await demoSessionCookie(auth, userId);
     if (!cookie) return notFound();
-    const res = NextResponse.redirect(new URL("/today", url), 303);
+    // APP_URL, not the request URL: Next reports the host as localhost, and a
+    // cookie set for 127.0.0.1 wouldn't reach localhost. The guards made it local.
+    const res = NextResponse.redirect(
+      new URL("/today", process.env.APP_URL ?? url),
+      303,
+    );
     res.headers.set("cache-control", "no-store");
     res.cookies.set(cookie.name, cookie.value, {
       path: cookie.options.path ?? "/",

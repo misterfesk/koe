@@ -33,7 +33,9 @@ export function isLocalHost(host: string | null) {
  * Reads the environment at call time.
  */
 export function localOnlyRefusal(e: NodeJS.ProcessEnv = process.env) {
-  if (e.NODE_ENV === "production") return "Refused: NODE_ENV is production.";
+  // An explicit opt-in: `next start` runs as production even on this machine.
+  if (e.KOE_DEMO !== "on")
+    return "Refused: set KOE_DEMO=on to use local demo tools.";
   if (!isLocalAppUrl(e.APP_URL ?? "http://127.0.0.1"))
     return "Refused: APP_URL is not http://127.0.0.1 or http://localhost.";
   if (!isLocalDatabaseUrl(e.DATABASE_URL ?? "file:./.data/pglite"))

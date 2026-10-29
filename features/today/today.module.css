@@ -387,3 +387,36 @@
   color: var(--secondary);
   font-size: 0.9375rem;
 }
+/* Week review: under the greeting, above the banners. */
+.review {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 20px;
+  margin: 0 0 24px;
+}
+.review > p {
+  margin: 0;
+}
+.review > p + p {
+  margin-top: 8px;
+}
+.reviewTitle {
+  font-size: 1.25rem;
+  margin: 0 0 8px;
+}
+.reviewList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+}
+.reviewItem {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.reviewItem fieldset {
+  margin-top: 8px;
+}
+.reviewEdit {
+  margin-top: 8px;
+}

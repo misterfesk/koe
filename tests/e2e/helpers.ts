@@ -59,3 +59,9 @@ export async function proposeInterview(page: Page) {
     .click();
   await expect(title).toHaveText("This week");
 }
+
+/** Test builds only: gives the signed-in guest a two-thing week whose review is due today. */
+export async function seedDueWeek(page: Page) {
+  const res = await page.request.post("/api/test/week-due");
+  expect(res.ok()).toBe(true);
+}

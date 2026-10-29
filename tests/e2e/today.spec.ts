@@ -4,6 +4,7 @@ import {
   entry,
   noHorizontalScroll,
   proposeInterview,
+  seedDueWeek,
   startAsGuest,
 } from "./helpers";
 
@@ -371,4 +372,42 @@ test("Today on desktop shows cards side by side, with Previous and Next only on 
   expect(b!.x).toBeGreaterThan(a!.x);
   await expect(page.getByRole("button", { name: "Next" })).toBeHidden();
   await clean(page, "today desktop");
+});
+
+test("the week review keeps one thing, lets one go and starts this week", async ({
+  page,
+}) => {
+  await startAsGuest(page);
+  await seedDueWeek(page);
+  await page.goto("/today");
+  const review = page.locator("section", {
+    has: page.getByRole("heading", { level: 2, name: "Last week" }),
+  });
+  await expect(review).toBeVisible();
+  const start = review.getByRole("button", { name: "Start this week" });
+  await expect(start).toBeDisabled();
+  await review
+    .getByRole("group", { name: "Email the landlord" })
+    .getByRole("button", { name: "Keep it for this week" })
+    .click();
+  await review
+    .getByRole("group", { name: "Repot the plants" })
+    .getByRole("button", { name: "Let it go" })
+    .click();
+  await start.click();
+  const status = page
+    .getByRole("status")
+    .filter({ hasText: "This week is set." });
+  await expect(status).toBeFocused();
+  await expect(
+    page.getByRole("link", { name: /Add something for this week/ }),
+  ).toHaveAttribute("href", "/intake#interview");
+  const strip = page.locator("section", {
+    has: page.getByRole("heading", { level: 2, name: "This week" }),
+  });
+  await expect(strip.getByText("Email the landlord")).toBeVisible();
+  await expect(strip.getByText("Repot the plants")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Last week" }),
+  ).toHaveCount(0);
 });

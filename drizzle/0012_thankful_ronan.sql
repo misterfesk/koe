@@ -1,0 +1,1 @@
+ALTER TABLE "week" ADD COLUMN "reviewed_at" timestamp with time zone;

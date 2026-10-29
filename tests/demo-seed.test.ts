@@ -22,13 +22,13 @@ async function setup() {
 }
 
 describe("local-only guards", () => {
-  it("refuses a non-local app, a remote database and production", async () => {
+  it("refuses a non-local app, a remote database and no opt-in", async () => {
     const { localOnlyRefusal } = await import("@/server/local-only");
     const ok = {
       APP_URL: "http://127.0.0.1:3200",
       DATABASE_URL: "file:./.data/x",
-      NODE_ENV: "development",
-    } as NodeJS.ProcessEnv;
+      KOE_DEMO: "on",
+    } as unknown as NodeJS.ProcessEnv;
     expect(localOnlyRefusal(ok)).toBeNull();
     expect(
       localOnlyRefusal({ ...ok, DATABASE_URL: "postgres://u:p@localhost/k" }),
@@ -47,9 +47,7 @@ describe("local-only guards", () => {
       "mysql://localhost/koe",
     ])
       expect(localOnlyRefusal({ ...ok, DATABASE_URL })).toMatch(/DATABASE_URL/);
-    expect(localOnlyRefusal({ ...ok, NODE_ENV: "production" })).toMatch(
-      /production/,
-    );
+    expect(localOnlyRefusal({ ...ok, KOE_DEMO: "off" })).toMatch(/KOE_DEMO/);
   });
 });
 
@@ -195,6 +193,7 @@ describe("demo enter route", { timeout: 60_000 }, () => {
       new Request(`http://127.0.0.1:3200/api/demo/enter?token=${token}`);
 
     vi.stubEnv("DATABASE_URL", "file:./.data/v3-a7b-builder");
+    vi.stubEnv("KOE_DEMO", "on");
     expect((await enterDemo(local("x".repeat(43)), deps)).status).toBe(404);
     expect((await enterDemo(local(""), deps)).status).toBe(404);
 
@@ -207,9 +206,9 @@ describe("demo enter route", { timeout: 60_000 }, () => {
 
     // Guards are checked at request time.
     const token = await issueDemoToken(db, guestId);
-    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("KOE_DEMO", "off");
     expect((await enterDemo(local(token), deps)).status).toBe(404);
-    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("KOE_DEMO", "on");
     vi.stubEnv("APP_URL", "https://koe.example");
     expect((await enterDemo(local(token), deps)).status).toBe(404);
     vi.stubEnv("APP_URL", "http://127.0.0.1:3200");

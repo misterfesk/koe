@@ -44,7 +44,8 @@ import { openToday } from "@/server/llm/planner";
 import { requireViewer } from "@/server/viewer";
 import { getShelf } from "@/server/data/shelf";
 import { TodayPick } from "@/features/shelf/today-pick";
-import { weekThingStates } from "@/server/data/week";
+import { dueWeekReview, weekThingStates } from "@/server/data/week";
+import { WeekReview } from "@/features/today/week-review";
 
 export const metadata: Metadata = { title: "Today" };
 
@@ -74,6 +75,7 @@ export default async function Page({
   const plan = await openToday(v.user.id, { db: v.db, today: v.today });
   const shelfPicks = (await getShelf(v)).current.slice(0, 3);
   const things = await weekThingStates(v.db, v.user.id, v.today);
+  const due = await dueWeekReview(v.db, v.user.id, v.today);
   const [steps, checkIn, before, accept, reminders, subs] = await Promise.all([
     listSteps(v.db, v.user.id),
     getCheckInView(v.db, v.user.id, v.today),
@@ -252,6 +254,23 @@ export default async function Page({
           region={p.region}
         />
       </Greeting>
+      <WeekReview
+        owner={v.user.id}
+        today={v.today}
+        review={
+          due && {
+            weekId: due.week.id,
+            version: due.week.version,
+            things: due.things.map((t) => ({
+              id: t.id,
+              title: t.title,
+              when: t.when,
+              done: t.done,
+              partly: t.partly,
+            })),
+          }
+        }
+      />
       {away && <WelcomeBack older={older} />}
       {isDraft && <DraftBanner lighter={plan.mode === "lighter"} />}
       {banner && <ChangeBanner banner={banner} />}

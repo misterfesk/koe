@@ -625,6 +625,8 @@ export const week = pgTable("week", {
     .notNull()
     .defaultNow(),
   approvalIds: jsonb("approval_ids").$type<string[]>().notNull().default([]),
+  /** Set when the person answered the week review; a reviewed week is never due again. */
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
 });
 export const weekItem = pgTable("week_item", {
   id: id(),

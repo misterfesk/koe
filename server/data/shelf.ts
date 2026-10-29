@@ -96,12 +96,13 @@ export async function weekTopicThings(
 ): Promise<{ topic: WeekTopic; title: string }[]> {
   if (!memoryOn) return [];
   const [latest] = await db
-    .select({ id: week.id })
+    .select({ id: week.id, reviewedAt: week.reviewedAt })
     .from(week)
     .where(eq(week.userId, userId))
     .orderBy(desc(week.createdAt))
     .limit(1);
-  if (!latest) return [];
+  // A reviewed week with no newer week: no week topics.
+  if (!latest || latest.reviewedAt) return [];
   const items = await db
     .select()
     .from(weekItem)

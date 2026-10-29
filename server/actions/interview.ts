@@ -109,7 +109,9 @@ export async function startInterview(
       : null;
     if (
       input.weekId &&
-      (!existing || existing.version !== input.expectedVersion)
+      (!existing ||
+        existing.reviewedAt ||
+        existing.version !== input.expectedVersion)
     )
       throw new Error(
         "This week changed. Open it again before adding something.",

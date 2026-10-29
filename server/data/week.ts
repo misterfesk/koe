@@ -3,6 +3,9 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   readCaptured,
   reviewDate,
+  reviewDue,
+  tidyTitle,
+  type CapturedThing,
   weekDraftSchema,
   type WeekDraft,
   type WeekView,
@@ -11,6 +14,7 @@ import { safeInterviewText } from "@/domain/interview-text";
 import { seal, open } from "../crypto";
 import type { Db } from "../db";
 import { step, stepReport, week, weekItem } from "../db/schema";
+import { getUserModel } from "./intake";
 import type { OpenThing } from "@/domain/week-picker";
 
 export type WeekTx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -43,6 +47,7 @@ export async function getWeek(
     version: row.version,
     startedOn: row.startedOn,
     reviewOn: row.reviewOn,
+    reviewedAt: row.reviewedAt?.toISOString() ?? null,
     items: items.map((item) => ({
       id: item.id,
       captured: readCaptured(JSON.parse(open(item.capturedEnc))),
@@ -83,6 +88,9 @@ export async function saveWeekInTransaction(
       return (await getWeek(tx, userId, id))!;
     if (!input.expectedVersion)
       throw new Error("Open this week again before saving.");
+    // A reviewed week is closed; new things go in a new week.
+    if (current?.reviewedAt)
+      throw new Error("This week changed. Open it again before saving.");
     const updated = await tx
       .update(week)
       .set({
@@ -162,12 +170,13 @@ export async function weekThingStates(
   today?: string,
 ): Promise<ThingState[]> {
   const [latest] = await db
-    .select({ id: week.id })
+    .select({ id: week.id, reviewedAt: week.reviewedAt })
     .from(week)
     .where(eq(week.userId, userId))
     .orderBy(desc(week.createdAt))
     .limit(1);
-  if (!latest) return [];
+  // A reviewed week with no newer week means there is no week.
+  if (!latest || latest.reviewedAt) return [];
   const current = await getWeek(db, userId, latest.id);
   if (!current?.items.length) return [];
   return withStates(db, userId, current.items, today);
@@ -234,6 +243,163 @@ async function withStates(
       flagged: not.length >= 2,
       letGoToday: !!today && not.some((r) => r.day === today),
     };
+  });
+}
+
+/** The newest week when its review is due today and not yet answered, with each thing's state. */
+export async function dueWeekReview(
+  db: Reader,
+  userId: string,
+  today: string,
+): Promise<{ week: WeekView; things: ThingState[] } | null> {
+  const [latest] = await db
+    .select({ id: week.id })
+    .from(week)
+    .where(eq(week.userId, userId))
+    .orderBy(desc(week.createdAt))
+    .limit(1);
+  if (!latest) return null;
+  const current = await getWeek(db, userId, latest.id);
+  if (!current || current.reviewedAt || !reviewDue(current, today)) return null;
+  return {
+    week: current,
+    things: await withStates(db, userId, current.items, today),
+  };
+}
+
+export type ReviewDecision = {
+  itemId: string;
+  choice: "keep" | "change" | "let_go";
+  title?: string;
+  when?: string;
+};
+export type WeekReview = {
+  weekId: string;
+  expectedVersion: number;
+  today: string;
+  decisions: ReviewDecision[];
+  /** The new week's id, chosen by the client so a retry saves once. */
+  createId: string;
+};
+
+/**
+ * Answers the newest week's review in one transaction: marks it reviewed and,
+ * unless everything is let go, starts a new week (today + 7) with the kept and
+ * changed things. Done things are never carried. Returns the new week or null.
+ */
+export async function reviewWeek(
+  db: Db,
+  userId: string,
+  input: WeekReview,
+): Promise<WeekView | null> {
+  const eatingConcern = !!(await getUserModel(db, userId))?.model.eatingConcern;
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(week)
+      .where(and(eq(week.id, input.weekId), eq(week.userId, userId)));
+    if (!current) throw new Error("Open this week again before saving.");
+    // A retry of a saved review returns what the first one saved.
+    if (current.approvalIds.includes(input.createId))
+      return getWeek(tx, userId, input.createId);
+    const [latest] = await tx
+      .select({ id: week.id })
+      .from(week)
+      .where(eq(week.userId, userId))
+      .orderBy(desc(week.createdAt))
+      .limit(1);
+    if (
+      latest?.id !== current.id ||
+      current.reviewedAt ||
+      current.version !== input.expectedVersion ||
+      !reviewDue(current, input.today)
+    )
+      throw new Error("This week changed. Open it again before saving.");
+    const view = (await getWeek(tx, userId, current.id))!;
+    const states = await withStates(tx, userId, view.items);
+    const openThings = states.filter((t) => !t.done);
+    const byId = new Map(input.decisions.map((d) => [d.itemId, d]));
+    if (
+      byId.size !== input.decisions.length ||
+      byId.size !== openThings.length ||
+      openThings.some((t) => !byId.has(t.id))
+    )
+      throw new Error("This week changed. Open it again before saving.");
+    const topics = await tx
+      .select({ id: weekItem.id, topic: weekItem.topic })
+      .from(weekItem)
+      .where(and(eq(weekItem.weekId, current.id), eq(weekItem.userId, userId)));
+    const carried: { captured: CapturedThing; topic: string | null }[] = [];
+    for (const thing of openThings) {
+      const decision = byId.get(thing.id)!;
+      const item = view.items.find((i) => i.id === thing.id)!;
+      if (decision.choice === "let_go") continue;
+      if (decision.choice === "keep") {
+        carried.push({
+          captured: item.captured,
+          topic: topics.find((t) => t.id === thing.id)?.topic ?? null,
+        });
+        continue;
+      }
+      const when = (decision.when ?? "").trim();
+      const title = tidyTitle(decision.title ?? "", when);
+      if (!title) throw new Error("Give it a few words.");
+      if (title.length > 60 || !safeInterviewText(title, eatingConcern))
+        throw new Error("Try different words for this one.");
+      if (when && !safeInterviewText(when, eatingConcern))
+        throw new Error("Try different words for this one.");
+      const same = title === item.captured.title;
+      carried.push({
+        captured: {
+          what: same ? item.captured.what : title,
+          when,
+          title,
+        },
+        // Unchanged words keep their Shelf topic; new words are classified again.
+        topic:
+          same && when === item.captured.when
+            ? (topics.find((t) => t.id === thing.id)?.topic ?? null)
+            : null,
+      });
+    }
+    const marked = await tx
+      .update(week)
+      .set({
+        reviewedAt: new Date(),
+        version: current.version + 1,
+        updatedAt: new Date(),
+        approvalIds: [...current.approvalIds, input.createId],
+      })
+      .where(
+        and(
+          eq(week.id, current.id),
+          eq(week.userId, userId),
+          eq(week.version, current.version),
+        ),
+      )
+      .returning({ id: week.id });
+    if (!marked.length)
+      throw new Error("This week changed. Open it again before saving.");
+    if (!carried.length) return null;
+    const saved = await saveWeekInTransaction(tx, userId, {
+      draft: { items: carried.map(({ captured }) => ({ captured })) },
+      today: input.today,
+      eatingConcern,
+      createId: input.createId,
+    });
+    for (const [order, item] of carried.entries())
+      if (item.topic)
+        await tx
+          .update(weekItem)
+          .set({ topic: item.topic })
+          .where(
+            and(
+              eq(weekItem.weekId, saved.id),
+              eq(weekItem.userId, userId),
+              eq(weekItem.order, order),
+            ),
+          );
+    return saved;
   });
 }
 
