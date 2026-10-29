@@ -20,17 +20,14 @@ import {
   subscriptionsFor,
 } from "./data/reminders";
 import { env } from "./env";
+import { isLocalAppUrl } from "./local-only";
 
 /**
  * A test setting: "on" records what would be sent instead of calling a push
  * service. Honoured only on a local server, so a stray flag on a hosted app
  * can't silently swallow real reminders.
  */
-const stubbed = () =>
-  process.env.KOE_PUSH_STUB === "on" &&
-  /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(
-    process.env.APP_URL ?? "http://127.0.0.1",
-  );
+const stubbed = () => process.env.KOE_PUSH_STUB === "on" && isLocalAppUrl();
 
 type Recorded = { endpoint: string; payload: string };
 const sentLog = () => {
