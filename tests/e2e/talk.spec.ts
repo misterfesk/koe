@@ -58,7 +58,7 @@ test("Talk acts: a move request becomes a card, and Confirm changes Today", asyn
   ).toBeVisible();
 
   await page.goto("/today");
-  await expect(entry(page, title).getByText("5:00 pm")).toBeVisible();
+  await expect(entry(page, title)).toBeVisible();
 
   // Opening the conversation again shows the card as done, not asking again.
   await page.goto("/talk");

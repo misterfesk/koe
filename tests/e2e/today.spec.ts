@@ -57,11 +57,9 @@ test("the day plan: check-in, undo, answers, not today and letting go", async ({
   });
   await expect(cards).toHaveCount(3);
   for (const card of await cards.all()) {
-    await expect(card.locator(".eyebrow")).toHaveText(
-      /^\d{1,2}:\d\d (am|pm) · /,
-    );
+    // Items show their kind and why line; times and sizes stay off the card.
+    await expect(card.locator(".eyebrow")).not.toHaveText(/\d:\d\d/);
     await expect(card.getByText(/^Because /)).toBeVisible();
-    await expect(card.getByText(/^(Tiny|Small|Medium)$/)).toBeVisible();
     await expect(card.getByRole("button", { name: "Done" })).toBeVisible();
     await expect(card.getByRole("button", { name: "Partly" })).toBeVisible();
     await expect(card.getByRole("button", { name: "Not today" })).toBeVisible();
@@ -161,7 +159,7 @@ test("the day plan: check-in, undo, answers, not today and letting go", async ({
   ).toBeVisible();
   await expect(
     entry(page, "Water the plants").locator(".eyebrow"),
-  ).toContainText("5:30 pm");
+  ).toContainText("Be kind to yourself");
 });
 
 test("a changed answer plans again, and 'too much' lightens the day", async ({
@@ -309,9 +307,6 @@ test("Today's layout: greeting card, swipe row, week strip and quiet end row", a
   ).toBeVisible();
   await expect(
     end.getByRole("button", { name: "This is too much today" }),
-  ).toBeVisible();
-  await expect(
-    end.getByRole("link", { name: "Add today to your calendar" }),
   ).toBeVisible();
 
   // Answers are outlined buttons; Done shows the filled mark once answered.

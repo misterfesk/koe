@@ -160,10 +160,8 @@ test("Talk panel layout, quick-action pre-fill, Just talk hierarchy, tablet side
     panelBox1440!.y + panelBox1440!.height - (inputBox!.y + inputBox!.height),
   ).toBeLessThanOrEqual(32);
 
-  const artifactDir =
-    "<local path>";
   await page.screenshot({
-    path: `${artifactDir}/talk-panel-desktop-1440.png`,
+    path: test.info().outputPath("talk-panel-desktop-1440.png"),
   });
 
   // Clicking "Plan a step" pre-fills the input with the template and lets the user keep typing
@@ -172,7 +170,7 @@ test("Talk panel layout, quick-action pre-fill, Just talk hierarchy, tablet side
     "Help me with planning the following work - ",
   );
   await page.screenshot({
-    path: `${artifactDir}/talk-panel-desktop-1440-prefilled.png`,
+    path: test.info().outputPath("talk-panel-desktop-1440-prefilled.png"),
   });
 
   // Reset back to "Just talk"
@@ -202,7 +200,7 @@ test("Talk panel layout, quick-action pre-fill, Just talk hierarchy, tablet side
     barBox768!.y + 1,
   );
   await page.screenshot({
-    path: `${artifactDir}/talk-panel-tablet-768.png`,
+    path: test.info().outputPath("talk-panel-tablet-768.png"),
   });
 
   // 3. Mobile (375): persistent bottom menu remains visible below the chat panel
@@ -226,7 +224,7 @@ test("Talk panel layout, quick-action pre-fill, Just talk hierarchy, tablet side
     barBox375!.y + 1,
   );
   await page.screenshot({
-    path: `${artifactDir}/talk-panel-mobile-375.png`,
+    path: test.info().outputPath("talk-panel-mobile-375.png"),
   });
 
   // Tapping Shelf in the persistent bottom menu on mobile closes Talk and navigates to /shelf

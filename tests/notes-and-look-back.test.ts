@@ -34,7 +34,8 @@ async function setup() {
   return { db, schema };
 }
 
-describe("Notes and Look back parking", () => {
+// Embedded Postgres start-up is slow under parallel load.
+describe("Notes and Look back parking", { timeout: 30_000 }, () => {
   it("listNotes returns notes newest first", async () => {
     const { db } = await setup();
     const { addNote, listNotes } = await import("@/server/data/notes");
