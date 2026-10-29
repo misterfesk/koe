@@ -166,7 +166,11 @@ test("welcome, four chat turns, reveal and Start my day land on Today", async ({
   // Today shows the three items with their times and reasons.
   const today = page.getByRole("heading", { level: 3 });
   await expect(today).toHaveCount(3);
-  await expect(page.getByText(/^Because/)).toHaveCount(3);
+  // Shelf picks on Today carry their own "Because you chose" lines.
+  const day = page.locator("section", {
+    has: page.getByRole("heading", { level: 2, name: "Your day" }),
+  });
+  await expect(day.getByText(/^Because/)).toHaveCount(3);
   await expect(
     page.getByRole("heading", { level: 3, name: swapped! }),
   ).toBeVisible();

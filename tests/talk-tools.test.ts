@@ -86,7 +86,7 @@ describe("buildResourceQuery", () => {
     expect(
       buildResourceQuery({ goal: "sleep", interest: "music", format: "video" }),
     ).toBe(
-      "tips for sleeping better when feeling low with music practical self-help guide for adults short video",
+      "tips for sleeping better when feeling low with music practical self-help guide for adults short video TED-Ed NHS Psych Hub Mind",
     );
   });
 });
