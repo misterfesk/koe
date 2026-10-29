@@ -32,16 +32,18 @@ export { mentionsContact };
 
 // Prompts are product behaviour: changes need the safety regression suite
 // (tests/eval/talk.eval.ts) re-run. Versioned so logs can say which ran.
-export const PROMPT_VERSION = "talk-2026-10-28.3";
+export const PROMPT_VERSION = "talk-2026-10-28.4";
 
 const persona = `${voice}
 
-You are Koe, an AI tool that helps adults going through low mood. You are not a person, a therapist, a doctor or a crisis service. Say so plainly if asked, or if it matters.
+You are Koe, an AI tool that helps adults going through low mood. You are not a person, a therapist, a doctor or a crisis service. Say so plainly if asked.
 If asked whether you are real, human, or a person, answer directly: "I'm an AI, not a person or a therapist." Always include "AI" in that answer. Calling yourself only a tool is not enough.
+The screen already shows "Koe is an AI, not a person or a therapist." Don't repeat it unless they ask what you are.
 
 How you talk:
 - Curious, specific and brief: usually 2 to 5 short sentences. You may say "I", but never "we" or "us" about you and the person, and never "together". Never claim feelings, a body, a life, or clinical training.
 - Listen first. Show you understood with one specific detail, without restating, judging or labelling what they said. Ask at most one question per reply. Never end with a menu of options (A, B or C); offer one, or ask.
+- Never list everything on their plan or their week. Name one thing by its title when it helps. On a hard day, use fewer words.
 - Never use em dashes (—); use a full stop or a comma. Never open with praise, a verdict or a mirror ("That's a common stuck point", "That's clear and reasonable", "It sounds like", "That's a great", "Absolutely", "Great question", "I hear you"). No signposting ("Here's", "Let's dive in") and no coach words (gently, gentle, journey, lean into, unlock, empower, mindful, hold space).
 - Don't rush to fix. No lectures, lists of tips or moralising. Never say "think positive", "at least" or "it could be worse".
 - When you understand what's going on and it fits, you may offer ONE small, concrete, ordinary action they could do soon: something enjoyable, something that gives a sense of getting something done, moving their body, contact with a person, or looking after basics. Small enough to start within five minutes on a low-energy day. Offer it as an option, never an instruction. If they say no, accept it and keep listening.
@@ -215,6 +217,30 @@ const RETELL =
 /** The deterministic fallback for a reply that still has em dashes. */
 export const withoutDashes = (text: string) => text.replace(/\s*—\s*/g, ", ");
 
+/** Said when every sentence of a reply was cut as an AI tell. */
+export const PLAIN_LINE = "Tell me a bit more about that.";
+const disclaimer =
+  /\b(i['’]?m|i am|koe is) (just |only )?an ai\b|\bnot a (real )?(person|therapist)\b/i;
+const asksWhatKoeIs =
+  /\b(real|human|person|robot|bot|ai|chatgpt|therapist|who are you|what are you)\b/i;
+const sentences = (text: string) =>
+  text.match(/[^.?!\n]+(?:[.?!]+["'’”)]*|(?=\n)|$)[ \t]*|\n+/g) ?? [];
+
+/**
+ * The deterministic pass after the one retry (UX-AND-COPY 2b): em dashes become
+ * commas, sentences with any other tell are cut, and the on-screen AI line is
+ * cut unless the person asked what Koe is. Nothing left: a plain fixed line.
+ */
+export function plainReply(text: string, lastUser = "") {
+  const keepDisclaimer = asksWhatKoeIs.test(lastUser);
+  const kept = sentences(withoutDashes(text))
+    .filter((s) => !hasAiTell(s) && (keepDisclaimer || !disclaimer.test(s)))
+    .join("")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+  return /[a-z]/i.test(kept) ? kept : PLAIN_LINE;
+}
+
 export type TalkReply = {
   text: string;
   proposals: Proposals;
@@ -261,7 +287,7 @@ export async function reply(
             vetCall(call.name as ToolName, call.args, context.vet) !== null,
         });
   let out = await ask();
-  // AI tells (UX-AND-COPY 2b): one retry, then em dashes are rewritten below.
+  // AI tells (UX-AND-COPY 2b): one retry, then plainReply cuts what is left.
   if (out.content && hasAiTell(out.content)) {
     const again = await ask([
       { role: "assistant", content: out.content },
@@ -272,7 +298,8 @@ export async function reply(
   const calls = out.toolCalls.filter((c) => offered.has(c.name));
   if (!out.content && !calls.length) throw new AiUnavailable("empty reply");
   let text = out.content ?? LEAD_IN;
-  if (hasAiTell(text)) text = withoutDashes(text);
+  const lastUser = [...history].reverse().find((m) => m.role === "user");
+  text = plainReply(text, lastUser?.content);
   let risky = detectRisk(text) !== "none";
   if (mentionsContact(text)) {
     text =

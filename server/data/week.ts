@@ -10,7 +10,7 @@ import {
   type WeekDraft,
   type WeekView,
 } from "@/domain/week";
-import { safeInterviewText } from "@/domain/interview-text";
+import { safeInterviewText, titleProblem } from "@/domain/interview-text";
 import { seal, open } from "../crypto";
 import type { Db } from "../db";
 import { step, stepReport, week, weekItem } from "../db/schema";
@@ -344,9 +344,15 @@ export async function reviewWeek(
       const when = (decision.when ?? "").trim();
       const title = tidyTitle(decision.title ?? "", when);
       if (!title) throw new Error("Give it a few words.");
-      if (title.length > 60 || !safeInterviewText(title, eatingConcern))
-        throw new Error("Try different words for this one.");
-      if (when && !safeInterviewText(when, eatingConcern))
+      const problem =
+        titleProblem(title, eatingConcern) ??
+        (when ? titleProblem(when, eatingConcern) : null);
+      if (problem) throw new Error(problem);
+      // Risk words are screened by the action first; this is the last guard.
+      if (
+        !safeInterviewText(title, eatingConcern) ||
+        (when && !safeInterviewText(when, eatingConcern))
+      )
         throw new Error("Try different words for this one.");
       const same = title === item.captured.title;
       carried.push({

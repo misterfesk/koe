@@ -26,6 +26,20 @@ export function safeInterviewText(text: string, eatingConcern = false) {
     (!eatingConcern || eatingSafe(text))
   );
 }
+/**
+ * Why a title the person typed can't be used, or null when it can. Risk words
+ * are not a reason here: they go to the safety check instead.
+ */
+export function titleProblem(text: string, eatingConcern = false) {
+  if (text.length > 60) return "Keep it under 60 characters.";
+  if (/\b(we|us|together|let['’]?s)\b/i.test(normalise(text)))
+    return "Try it without we, us or together.";
+  if (eatingConcern && !eatingSafe(text))
+    return "Try it without food, exercise or weight words.";
+  if (detectRisk(text) === "none" && !safeInterviewText(text, eatingConcern))
+    return "Try different words for this one.";
+  return null;
+}
 /** No food, exercise, weight or diet words; for the eating-concern rule. */
 export function eatingSafe(text: string) {
   return (

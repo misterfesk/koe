@@ -67,6 +67,11 @@
   text-align: left;
   font-weight: 500;
 }
+/* A date never breaks mid-word ("Toda / y"). */
+.when {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 @media (max-width: 1023px) {
   .opener {
     display: none;

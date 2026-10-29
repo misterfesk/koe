@@ -161,7 +161,7 @@ export const introTones = ["calm", "expressive", "plain"] as const;
 export type IntroTone = (typeof introTones)[number];
 export const toneChoices: { value: IntroTone; label: string; hint: string }[] =
   [
-    { value: "calm", label: "Gentle", hint: "Quiet and unhurried" },
+    { value: "calm", label: "Calm", hint: "Quiet and unhurried" },
     { value: "expressive", label: "Upbeat", hint: "Warm and encouraging" },
     { value: "plain", label: "Straight-talking", hint: "Short and plain" },
   ];
@@ -335,6 +335,8 @@ function capitalise(text: string) {
 export type MemoryProposal = {
   kind: "helps" | "hard" | "people" | "preference";
   text: string;
+  /** false: offered unticked, because the person never chose it. */
+  keep?: false;
 };
 
 /** Memory proposals made without a model: only things the person ticked. */
@@ -353,11 +355,13 @@ export function templateMemories(model: IntakeModel): MemoryProposal[] {
     });
   if (model.puttingOff)
     out.push({ kind: "hard", text: "There's one thing you keep putting off." });
+  // Intake never asks for a tone (it starts as calm), so this card is unticked.
   if (model.tone)
     out.push({
       kind: "preference",
+      keep: false,
       text: {
-        calm: "You prefer a gentle, quiet tone.",
+        calm: "You prefer a calm, unhurried tone.",
         expressive: "You prefer an upbeat, warm tone.",
         plain: "You prefer short, straight-talking wording.",
       }[model.tone],

@@ -3,13 +3,17 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { WeekView } from "@/domain/week";
 import { reviewWeek } from "../data/week";
+import { interviewSafety } from "../interview-state";
 import { redraftToday } from "../llm/planner";
 import { allow } from "../rate-limit";
 import { startShelfAfterSave } from "../search/shelf";
 import { requireViewer } from "../viewer";
 
 export type WeekReviewResult =
-  { ok: true; week: WeekView | null } | { ok: false; error: string };
+  | { ok: true; week: WeekView | null }
+  | { ok: false; error: string }
+  /** Coaching is paused, or the new words matched a risk: show the safety check. */
+  | { ok: false; safety: true };
 
 const reviewInput = z.object({
   weekId: z.string().min(1).max(64),
@@ -33,7 +37,8 @@ export async function submitWeekReview(
 ): Promise<WeekReviewResult> {
   const v = await requireViewer();
   const parsed = reviewInput.safeParse(raw);
-  if (!parsed.success || v.profile.coachingPausedAt)
+  if (v.profile.coachingPausedAt) return { ok: false, safety: true };
+  if (!parsed.success)
     return {
       ok: false,
       error: "This week changed. Open it again before saving.",
@@ -42,6 +47,19 @@ export async function submitWeekReview(
     return {
       ok: false,
       error: "Too many tries. Wait a minute and try again.",
+    };
+  // The same check the interview runs on new words (rules, then the model).
+  const gate = await interviewSafety(
+    v,
+    parsed.data.decisions
+      .filter((d) => d.choice === "change")
+      .flatMap((d) => [d.title ?? "", d.when ?? ""]),
+  );
+  if (gate.safety !== "none") return { ok: false, safety: true };
+  if (gate.unavailable)
+    return {
+      ok: false,
+      error: "Your answer couldn't be checked. Try again. Your draft is kept.",
     };
   try {
     const week = await reviewWeek(v.db, v.user.id, {
@@ -60,7 +78,7 @@ export async function submitWeekReview(
       ok: false,
       error:
         error instanceof Error &&
-        /^(Open this week again|This week changed|Give it a few words\.|Try different words for this one\.|Check the titles before saving)/.test(
+        /^(Open this week again|This week changed|Give it a few words\.|Try different words for this one\.|Check the titles before saving|Keep it under 60|Try it without)/.test(
           error.message,
         )
           ? error.message

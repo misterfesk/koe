@@ -17,6 +17,9 @@ vi.mock("@/server/actions/week", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: mocks.refresh }),
 }));
+vi.mock("@/features/safety/safety-check", () => ({
+  SafetyCheck: () => <h1>Safety check</h1>,
+}));
 import { reviewHiddenKey, WeekReview } from "@/features/today/week-review";
 
 const review = {
@@ -97,6 +100,9 @@ it("edits in place on Change it, checks the words and cancels back", async () =>
   fireEvent.change(title, { target: { value: "Lose weight" } });
   fireEvent.click(screen.getByRole("button", { name: "Start this week" }));
   expect(screen.getByText("Try different words for this one.")).toBeVisible();
+  fireEvent.change(title, { target: { value: "Plan the trip with us" } });
+  fireEvent.click(screen.getByRole("button", { name: "Start this week" }));
+  expect(screen.getByText("Try it without we, us or together.")).toBeVisible();
   expect(mocks.submitWeekReview).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(screen.queryByLabelText("What it is")).toBeNull();
@@ -173,4 +179,19 @@ it("keeps the set line once the page drops the review, and shows server errors",
   expect(
     screen.getByRole("link", { name: /Add something for this week/ }),
   ).toBeVisible();
+});
+
+it("sends risk words to the server and shows the safety check", async () => {
+  mocks.submitWeekReview.mockResolvedValue({ ok: false, safety: true });
+  view();
+  pick("Email the landlord", "Let it go");
+  pick("Repot the plants", "Change it");
+  fireEvent.change(screen.getByLabelText("What it is"), {
+    target: { value: "I want to kill myself" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Start this week" }));
+  expect(
+    await screen.findByRole("heading", { name: "Safety check" }),
+  ).toBeVisible();
+  expect(mocks.submitWeekReview).toHaveBeenCalled();
 });

@@ -257,6 +257,7 @@ export default async function Page({
       <WeekReview
         owner={v.user.id}
         today={v.today}
+        region={p.region}
         review={
           due && {
             weekId: due.week.id,

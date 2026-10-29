@@ -339,11 +339,14 @@ function CardRow({ entries, push }: { entries: Entry[]; push: PushState }) {
   }, [measure, count]);
 
   // A focused control brings its card into view sideways only, so a tap
-  // never moves the page under the pointer.
+  // never moves the page under the pointer. Keyboard focus only: scrolling
+  // between a press and its release would move the button away and lose the
+  // click on a partly hidden card.
   const revealCard = (e: FocusEvent<HTMLUListElement>) => {
     const el = list.current;
-    const card = (e.target as HTMLElement).closest("li");
-    if (!el || !card) return;
+    const target = e.target as HTMLElement;
+    const card = target.closest("li");
+    if (!el || !card || !target.matches(":focus-visible")) return;
     const box = el.getBoundingClientRect();
     const at = card.getBoundingClientRect();
     if (at.left < box.left) el.scrollBy({ left: at.left - box.left });

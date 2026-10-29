@@ -106,7 +106,7 @@ function HistoryRow({ row, onOpen }: { row: Row; onOpen: () => void }) {
       <button type="button" className={styles.row} onClick={onOpen}>
         <span>{row.title}</span>
         {row.takeaway && <span className="meta">{row.takeaway}</span>}
-        <span className="meta">{row.when}</span>
+        <span className={`meta ${styles.when}`}>{row.when}</span>
       </button>
     </li>
   );

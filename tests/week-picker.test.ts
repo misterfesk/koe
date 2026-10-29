@@ -72,6 +72,16 @@ describe("thingWhy", () => {
       'Because you said "Update my CV before Friday"',
     );
   });
+  it("quotes only the first clause, at most eight words", () => {
+    expect(
+      thingWhy(
+        "Update my CV. I open it, then close it again because the gap year looks bad",
+      ),
+    ).toBe('Because you said "Update my CV"');
+    expect(
+      thingWhy("Sort out the spare room so my sister can stay over next month"),
+    ).toBe('Because you said "Sort out the spare room so my sister…"');
+  });
   it("cuts long words at a word boundary, inside the quotes, within 120", () => {
     const long = Array.from({ length: 40 }, (_, i) => "word" + i).join(" ");
     const why = thingWhy(long);

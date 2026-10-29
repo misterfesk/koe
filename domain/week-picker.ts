@@ -58,9 +58,23 @@ export function pickThings(
 const WHY_MAX = 120;
 const WHY_START = 'Because you said "';
 
-/** `Because you said "{what}"`, cut at a word so the line is at most 120 characters. */
+const WHY_WORDS = 8;
+
+/**
+ * `Because you said "{phrase}"`: the first clause of what they said, at most
+ * eight words, cut at a word so the line is at most 120 characters.
+ */
 export function thingWhy(what: string): string {
-  const words = what.replace(/\s+/g, " ").trim();
+  const said = what.replace(/\s+/g, " ").trim();
+  const clause = said.split(/[.!?;:](?:\s|$)|,\s|\s[—–-]\s/u)[0].trim() || said;
+  const all = clause.split(" ");
+  const words =
+    all.length > WHY_WORDS
+      ? all
+          .slice(0, WHY_WORDS)
+          .join(" ")
+          .replace(/[\s.,;:!?…—–-]+$/u, "") + "…"
+      : clause;
   const room = WHY_MAX - WHY_START.length - 1;
   if (words.length <= room) return `${WHY_START}${words}"`;
   const head = words.slice(0, room);

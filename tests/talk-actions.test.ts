@@ -923,6 +923,41 @@ describe("Talk replies without AI tells", { timeout: 40_000 }, () => {
     await say("fine", r.conversationId);
     expect(fake.calls).toBe(1);
   });
+
+  it("cuts an opener tell and the repeated AI line after the retry", async () => {
+    const s = await setup();
+    const { getConversation } = await import("@/server/data/talk");
+    fake.reply = async () => ({
+      content:
+        "I'm an AI, not a person or a therapist. I hear you. Heavy day. Today can be really small.",
+      toolCalls: [],
+    });
+    const r = await say("Today is heavy. I can't face anything.");
+    expect(fake.calls).toBe(2);
+    const last = async (id: string) =>
+      (await getConversation(s.db, "a", id))!.messages.at(-1)!.content;
+    expect(await last(r.conversationId!)).toBe(
+      "Heavy day. Today can be really small.",
+    );
+
+    fake.reply = async () => ({
+      content: "It sounds like a lot.",
+      toolCalls: [],
+    });
+    const again = await say("so much going on", r.conversationId);
+    expect(await last(again.conversationId!)).toBe(
+      "Tell me a bit more about that.",
+    );
+
+    fake.reply = async () => ({
+      content: "I'm an AI, not a person or a therapist.",
+      toolCalls: [],
+    });
+    const asked = await say("Are you a real person?", r.conversationId);
+    expect(await last(asked.conversationId!)).toBe(
+      "I'm an AI, not a person or a therapist.",
+    );
+  });
 });
 
 describe("Takeaways", { timeout: 40_000 }, () => {

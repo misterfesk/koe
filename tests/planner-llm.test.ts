@@ -537,9 +537,7 @@ describe("the planner with This week things", { timeout: 60_000 }, () => {
       "Update my CV",
       "Email the landlord",
     ]);
-    expect(things[0].why).toBe(
-      'Because you said "Update my CV. I open it, then close it again."',
-    );
+    expect(things[0].why).toBe('Because you said "Update my CV"');
     expect(plan.items.filter((i) => !i.weekItemId)).toHaveLength(1);
     // The link is stored on the step.
     const schema = await import("@/server/db/schema");

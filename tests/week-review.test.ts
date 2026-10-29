@@ -264,6 +264,9 @@ describe("week review", () => {
     await expect(review("Lose weight before Friday")).rejects.toThrow(
       "Try different words for this one.",
     );
+    await expect(review("Plan the trip with us")).rejects.toThrow(
+      "Try it without we, us or together.",
+    );
     const next = await review("ring the landlord about the boiler.");
     expect(next?.items[0].captured.title).toBe(
       "Ring the landlord about the boiler",

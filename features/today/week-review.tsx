@@ -11,9 +11,10 @@ import {
 } from "react";
 import { AskCard } from "@/components/chat";
 import type { ChatAsk } from "@/domain/chat-turn";
-import { safeInterviewText } from "@/domain/interview-text";
+import { titleProblem } from "@/domain/interview-text";
 import { tidyTitle } from "@/domain/week";
 import { submitWeekReview } from "@/server/actions/week";
+import { SafetyCheck } from "../safety/safety-check";
 import { weekMeta } from "./greeting-copy";
 import styles from "./today.module.css";
 
@@ -73,10 +74,12 @@ export function WeekReview({
   owner,
   today,
   review,
+  region,
 }: {
   owner: string;
   today: string;
   review: DueReview | null;
+  region?: string | null;
 }) {
   const router = useRouter();
   const key = reviewHiddenKey(owner, today);
@@ -89,6 +92,7 @@ export function WeekReview({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<{ count: number } | null>(null);
+  const [flagged, setFlagged] = useState(false);
   const [pending, startTransition] = useTransition();
   const [createId] = useState(() => crypto.randomUUID());
   const status = useRef<HTMLParagraphElement>(null);
@@ -121,6 +125,16 @@ export function WeekReview({
         )}
       </section>
     );
+  if (flagged)
+    return (
+      <SafetyCheck
+        region={region ?? null}
+        onResume={() => {
+          setFlagged(false);
+          router.refresh();
+        }}
+      />
+    );
   if (hidden || !review) return null;
   const { weekId, version } = review;
 
@@ -130,13 +144,11 @@ export function WeekReview({
       const a = answer(t);
       if (a.choice !== "change") continue;
       const title = tidyTitle(a.title, a.when);
-      if (!title) errors[t.id] = "Give it a few words.";
-      else if (
-        title.length > 60 ||
-        !safeInterviewText(title) ||
-        (a.when.trim() && !safeInterviewText(a.when))
-      )
-        errors[t.id] = "Try different words for this one.";
+      // Risk words are not a field error: the server shows the safety check.
+      const problem = title
+        ? (titleProblem(title) ?? (a.when.trim() && titleProblem(a.when)))
+        : "Give it a few words.";
+      if (problem) errors[t.id] = problem;
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length) return;
@@ -154,7 +166,11 @@ export function WeekReview({
         }),
       });
       if (!result.ok) {
-        setError(result.error);
+        if ("safety" in result) {
+          // Words that tripped the safety check are not shown again.
+          setAnswers({});
+          setFlagged(true);
+        } else setError(result.error);
         return;
       }
       setSaved({ count: result.week?.items.length ?? 0 });

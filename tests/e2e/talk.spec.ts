@@ -110,11 +110,10 @@ test("a search card shows the exact words it would use", async ({ page }) => {
   await expect(card.getByText(/^Koe would search for:/)).toHaveCount(0);
   await card.getByRole("link", { name: "Open Shelf" }).click();
   await expect(page).toHaveURL(/\/shelf$/);
-  await expect(
-    page
-      .getByRole("region", { name: "This week's picks" })
-      .getByRole("listitem"),
-  ).toHaveCount(3);
+  // The A6 Shelf: current picks sit in the busy-marked list, not a named region.
+  await expect(page.locator("[aria-busy]").getByRole("listitem")).toHaveCount(
+    3,
+  );
 });
 
 test("a rough morning is listened to, with no card", async ({ page }) => {

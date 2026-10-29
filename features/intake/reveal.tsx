@@ -22,7 +22,7 @@ import {
 import { WeekReveal } from "./week-reveal";
 import styles from "./intake.module.css";
 
-type Card = Reveal["memories"][number] & { keep: boolean };
+type Card = Omit<Reveal["memories"][number], "keep"> & { keep: boolean };
 
 /**
  * The reveal: what Koe understood (editable), what it could remember, and
@@ -52,7 +52,7 @@ export function RevealScreen({
   const clock = (m: number) => formatClock(m, hour12);
   const [summary, setSummary] = useState(reveal.summary);
   const [cards, setCards] = useState<Card[]>(
-    reveal.memories.map((m) => ({ ...m, keep: true })),
+    reveal.memories.map((m) => ({ ...m, keep: m.keep ?? true })),
   );
   const [save, setSave] = useState(
     reveal.model.names.map((n) => ({ ...n, name: n.name })),
@@ -179,7 +179,9 @@ export function RevealScreen({
         onResume={() => {
           // Back to what Koe wrote, so the flagged words are not saved.
           setSummary(reveal.summary);
-          setCards(reveal.memories.map((m) => ({ ...m, keep: true })));
+          setCards(
+            reveal.memories.map((m) => ({ ...m, keep: m.keep ?? true })),
+          );
           setFlagged(false);
         }}
       />
