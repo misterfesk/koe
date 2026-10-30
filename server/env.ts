@@ -22,7 +22,7 @@ const schema = z.object({
   KOE_FAST_MODEL: z.string().default("nvidia/Nemotron-3_5-Lightning"),
   KOE_SAFETY_MODEL: z.string().default("nvidia/Nemotron-3_5-Lightning"),
   // One retry here when the primary model errors, times out or is rate limited.
-  KOE_FALLBACK_MODEL: z.string().default("nvidia/nemotron-3-super-120b-a12b"),
+  KOE_FALLBACK_MODEL: z.string().default("nvidia/Nemotron-3_5-Lightning"),
   // Operator kill switch: "off" keeps Help, history and manual steps working.
   KOE_AI: z.enum(["on", "off"]).default("on"),
   // Per person per UTC day, counted from the agent_run log. Search calls count.

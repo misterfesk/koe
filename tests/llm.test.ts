@@ -25,7 +25,7 @@ vi.mock("@tavily/core", () => ({ tavily: () => ({ search }) }));
 
 const ULTRA = "nvidia/Nemotron-3-Ultra-550b-a55b";
 const CHAT = "nvidia/Nemotron-3.5-Super-VL";
-const SUPER = "nvidia/nemotron-3-super-120b-a12b";
+const SUPER = "nvidia/Nemotron-3_5-Lightning";
 const NANO = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B";
 
 type Db = Awaited<ReturnType<typeof import("@/server/db").openDb>>;
