@@ -94,7 +94,7 @@ All user-owned tables reference `user` with `ON DELETE CASCADE`. Guest data move
 
 | Role | Default model | Why |
 |---|---|---|
-| Intake synthesis, day planning, Talk | `nvidia/Nemotron-3.5-Super-VL` | The best judgement for personal plans and conversation; fast with reasoning off. |
+| Intake synthesis, day planning, Talk | `nvidia/Nemotron-3-Ultra-550b-a55b` | The best judgement for personal plans and conversation; fast with reasoning off. |
 | Safety classifier, small rewrites, resource screening | `nvidia/Nemotron-3_5-Lightning` | Cheap and quick for narrow yes/no and one-line jobs. |
 | Fallback | `nvidia/Nemotron-3_5-Lightning` | Used once when the primary fails with a network error, timeout, 5xx or 429. It shares the caller's time budget. |
 

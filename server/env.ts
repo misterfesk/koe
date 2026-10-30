@@ -17,7 +17,7 @@ const schema = z.object({
   APP_URL: z.url().default("http://127.0.0.1:3100"),
   // Model routing is configuration, not code: swap without a release.
   // Talk and anything the person reads as Koe's voice.
-  KOE_CHAT_MODEL: z.string().default("nvidia/Nemotron-3.5-Super-VL"),
+  KOE_CHAT_MODEL: z.string().default("nvidia/Nemotron-3-Ultra-550b-a55b"),
   // Short, cheap, high-volume calls: suggestions, drafts, screening.
   KOE_FAST_MODEL: z.string().default("nvidia/Nemotron-3_5-Lightning"),
   KOE_SAFETY_MODEL: z.string().default("nvidia/Nemotron-3_5-Lightning"),

@@ -24,7 +24,7 @@ All model calls go through Nebius Token Factory to open NVIDIA Nemotron models. 
 
 | Role | Model | Used for |
 |---|---|---|
-| Chat | `nvidia/Nemotron-3.5-Super-VL` | Talk replies, intake summary, the weekly-things interview, planning a whole day |
+| Chat | `nvidia/Nemotron-3-Ultra-550b-a55b` | Talk replies, intake summary, the weekly-things interview, planning a whole day |
 | Fast and safety | `nvidia/Nemotron-3_5-Lightning` | Safety classification on every Talk turn, Shelf search intents, resource screening, appointment lookup, week topics, swapping or shrinking one entry, short summaries |
 | Fallback | `nvidia/Nemotron-3_5-Lightning` | One retry when the primary call fails on a network error, timeout, 5xx or 429 |
 

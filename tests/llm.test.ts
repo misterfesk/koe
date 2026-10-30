@@ -24,7 +24,7 @@ const search = vi.hoisted(() => vi.fn());
 vi.mock("@tavily/core", () => ({ tavily: () => ({ search }) }));
 
 const ULTRA = "nvidia/Nemotron-3-Ultra-550b-a55b";
-const CHAT = "nvidia/Nemotron-3.5-Super-VL";
+const CHAT = ULTRA;
 const SUPER = "nvidia/Nemotron-3_5-Lightning";
 const NANO = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B";
 
@@ -436,8 +436,8 @@ describe("usage log", () => {
       ok: true,
       fellBack: false,
     });
-    // 1000 in at $0.30/M plus 500 out at $0.90/M.
-    expect(Number(row.estCostUsd)).toBeCloseTo(0.00075, 6);
+    // 1000 in at $1/M plus 500 out at $3/M.
+    expect(Number(row.estCostUsd)).toBeCloseTo(0.0025, 6);
     expect(row.latencyMs).toBeGreaterThanOrEqual(0);
     expect(Object.keys(getTableColumns(schema.agentRun)).sort()).toEqual(
       [
