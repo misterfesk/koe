@@ -2,7 +2,7 @@
 
 Koe is an AI companion web app for adults living with depression. It helps plan a small, realistic day, adjusts that day when energy drops, finds a few trustworthy things to read or watch, and is there to talk. It supports human care and does not replace it.
 
-**Live demo:** <!-- REPLACE: live demo URL --> https://koe.onrender.com
+**Live demo:**  https://koe-6jwd.onrender.com/
 
 Early public preview. Koe is not a medical device and is not for emergencies. If you are in danger, contact local emergency services or a crisis line. The app's Help page lists verified lines by region.
 
